@@ -1,0 +1,7 @@
+interface:
+  display_name: "Brain"
+  short_description: "Use the brain CLI for PARA vault operations, retrieval, and safe note workflows."
+  default_prompt: "Use the brain skill and prefer brain CLI commands over direct vault file edits."
+
+policy:
+  allow_implicit_invocation: true

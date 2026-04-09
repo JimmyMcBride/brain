@@ -1,0 +1,86 @@
+---
+name: brain
+description: Use this skill when working with a local knowledge vault managed by the `brain` CLI, especially for PARA-structured Obsidian markdown workflows, retrieval, capture, content packaging, and safe note edits. Do not use it for unrelated code tasks or for direct vault file edits when the `brain` command can perform the action.
+---
+
+# Brain
+
+Use `brain` as the primary interface for working with the knowledge vault.
+
+## Goals
+
+- Treat the Obsidian markdown vault as the source of truth.
+- Preserve PARA at the top level only:
+  - `Projects/`
+  - `Areas/`
+  - `Resources/`
+  - `Archives/`
+- Prefer `brain` commands over direct file edits so backups, history, and undo remain usable.
+- Reindex deliberately when retrieval quality depends on newly added or edited notes.
+
+## First checks
+
+When starting work with a vault:
+
+1. Run `brain doctor` to confirm config, vault, sqlite, and embedding setup.
+2. If search appears stale or empty, run `brain reindex`.
+3. Use `brain find` for path, metadata, or lightweight content lookup.
+4. Use `brain search "query"` for hybrid lexical plus semantic retrieval.
+
+## Command guide
+
+Use these commands by default:
+
+- `brain init`
+  - Create config, vault scaffolding, sqlite DB, and data directories.
+- `brain add "Title" --section ... --type ...`
+  - Create a note from a template.
+- `brain capture "Title" --body "..."`
+  - Fast capture into `Resources/Captures/...`.
+- `brain daily [YYYY-MM-DD]`
+  - Create or open a daily note.
+- `brain read <path>`
+  - Read a note cleanly.
+- `brain edit <path> ...`
+  - Update title, metadata, or body.
+- `brain move <path> <destination>`
+  - Move a note while preserving history and backups.
+- `brain find [query]`
+  - Search by path, metadata, title, or note content directly from the vault.
+- `brain search "query"`
+  - Run hybrid retrieval over indexed note chunks.
+- `brain content seed|gather|outline|publish`
+  - Promote notes into a content workflow.
+- `brain history`
+  - Inspect tracked operations.
+- `brain undo`
+  - Revert the last tracked change.
+
+## Operating rules
+
+- Do not create new top-level folders outside PARA unless explicitly asked.
+- Prefer stable, readable note names.
+- Prefer `brain add`, `brain edit`, `brain move`, and `brain capture` over manual file mutation.
+- Use `brain organize` as a dry run first; do not apply archive-like moves unless the user clearly wants them.
+- When notes are created or edited outside `brain`, run `brain reindex` before relying on `brain search`.
+
+## Retrieval workflow
+
+Use this sequence when gathering context for a task:
+
+1. `brain find <keyword>` for quick narrowing.
+2. `brain search "<task or concept>"` for ranked context.
+3. `brain read <path>` for the winning notes.
+4. If the user is shaping publishable material, use `brain content gather` or `brain content outline`.
+
+## Output and safety
+
+- Prefer human output unless the task clearly needs machine-readable results; then use `--json`.
+- For multi-step note changes, keep `brain history` and `brain undo` in mind.
+- If search returns no results and the vault should contain relevant material, tell the user to reindex or run it yourself.
+
+## When not to use this skill
+
+- Pure software engineering tasks unrelated to the knowledge vault.
+- Cases where the user explicitly wants raw filesystem operations instead of `brain`.
+- Situations where `brain` is unavailable or not configured and the task is blocked on broader setup outside the vault workflow.

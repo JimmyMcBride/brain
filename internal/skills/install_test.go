@@ -1,0 +1,71 @@
+package skills
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestResolveTargetsGlobalAndLocal(t *testing.T) {
+	installer := NewInstaller("/home/tester")
+	targets, err := installer.ResolveTargets(InstallRequest{
+		Scope:      ScopeBoth,
+		Agents:     []string{"codex", "zed"},
+		ProjectDir: "/tmp/project",
+		Mode:       ModeCopy,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{
+		"/home/tester/.codex/skills/brain": true,
+		"/home/tester/.zed/skills/brain":   true,
+		"/tmp/project/.codex/skills/brain": true,
+		"/tmp/project/.zed/skills/brain":   true,
+	}
+	if len(targets) != len(want) {
+		t.Fatalf("expected %d targets, got %d", len(want), len(targets))
+	}
+	for _, target := range targets {
+		if !want[target.Path] {
+			t.Fatalf("unexpected target: %+v", target)
+		}
+	}
+}
+
+func TestInstallCopiesSkillBundle(t *testing.T) {
+	repoRoot := t.TempDir()
+	source := filepath.Join(repoRoot, "skills", "brain", "agents")
+	if err := os.MkdirAll(source, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoRoot, "skills", "brain", "SKILL.md"), []byte("skill"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "openai.yaml"), []byte("name: brain"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	home := t.TempDir()
+	installer := NewInstaller(home)
+	results, err := installer.Install(InstallRequest{
+		Mode:     ModeCopy,
+		Scope:    ScopeGlobal,
+		Agents:   []string{"codex"},
+		RepoRoot: repoRoot,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	skillFile := filepath.Join(home, ".codex", "skills", "brain", "SKILL.md")
+	if _, err := os.Stat(skillFile); err != nil {
+		t.Fatalf("expected skill file: %v", err)
+	}
+	metaFile := filepath.Join(home, ".codex", "skills", "brain", "agents", "openai.yaml")
+	if _, err := os.Stat(metaFile); err != nil {
+		t.Fatalf("expected metadata file: %v", err)
+	}
+}
