@@ -26,6 +26,8 @@ func TestCoreCommandGoldens(t *testing.T) {
 		{"read.json.golden", []string{"--config", env.config, "--json", "read", "Resources/golden-note.md"}},
 		{"skills-targets.human.golden", []string{"skills", "targets", "--scope", "both", "-a", "codex", "--project", env.project, "--skill-root", env.custom}},
 		{"skills-targets.json.golden", []string{"--json", "skills", "targets", "--scope", "both", "-a", "codex", "--project", env.project, "--skill-root", env.custom}},
+		{"context-install.human.golden", []string{"context", "install", "--project", env.project, "--agent", "codex", "--dry-run"}},
+		{"context-install.json.golden", []string{"--json", "context", "install", "--project", env.project, "--agent", "codex", "--dry-run"}},
 	}
 
 	for _, tc := range cases {

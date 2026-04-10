@@ -11,7 +11,17 @@
 - `internal/search`: hybrid search that merges FTS and embedding similarity.
 - `internal/history` and `internal/backup`: append-only logs, pre-change backups, undo.
 - `internal/content`: simple seed, gather, outline, and publish workflow.
+- `internal/projectcontext`: generates repo-local `AGENTS.md`, `.brain/context/*`, and agent wrapper files.
 - `internal/skills`: installs canonical and wrapper skill docs into agent directories.
+
+## Project Context
+
+`brain` also supports repo-local context engineering for coding agents:
+
+1. `brain context install` creates a root `AGENTS.md`.
+2. It generates a modular `.brain/context` bundle for overview, architecture, standards, workflows, memory policy, and current state.
+3. It can generate thin agent-specific wrappers such as `.codex/AGENTS.md` or `.claude/CLAUDE.md`.
+4. `brain context refresh` updates brain-managed sections while preserving user-authored content outside managed blocks.
 
 ## Hybrid RAG
 
@@ -36,4 +46,3 @@ The default embedding provider is `localhash`, which keeps the tool usable witho
 - `Archives/`: inactive material retained for history.
 
 Richer structure belongs below those folders, not beside them.
-

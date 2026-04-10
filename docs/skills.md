@@ -37,3 +37,24 @@ Known agents use conventional roots:
 Use `--skill-root` for nonstandard tools. Use `--mode copy` when symlinks are undesirable. Symlinks are preferable during local development because changes in the repo propagate immediately to the installed skill files.
 
 OpenClaw note: OpenClaw's managed skill loader expects a real directory under `~/.openclaw/skills`, so `brain skills install --agent openclaw` uses copy mode even if `--mode symlink` is requested.
+
+## Project Context
+
+Use the context commands when you want a repository to carry its own agent contract instead of relying only on a global skill:
+
+```bash
+brain context install --project . --agent codex --agent openclaw
+brain context refresh --project .
+```
+
+This creates:
+
+- `AGENTS.md`
+- `.brain/context/overview.md`
+- `.brain/context/architecture.md`
+- `.brain/context/standards.md`
+- `.brain/context/workflows.md`
+- `.brain/context/memory-policy.md`
+- `.brain/context/current-state.md`
+
+If an agent wrapper is requested, `brain` also generates a thin wrapper such as `.codex/AGENTS.md` or `.claude/CLAUDE.md` that points back to the root project contract.

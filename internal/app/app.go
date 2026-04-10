@@ -13,6 +13,7 @@ import (
 	"brain/internal/index"
 	"brain/internal/notes"
 	"brain/internal/output"
+	"brain/internal/projectcontext"
 	"brain/internal/search"
 	"brain/internal/skills"
 	"brain/internal/templates"
@@ -33,6 +34,7 @@ type App struct {
 	Search    *search.Engine
 	Content   *content.Manager
 	Skills    *skills.Installer
+	Context   *projectcontext.Manager
 	Output    *output.Printer
 }
 
@@ -87,6 +89,7 @@ func New(configPath string, jsonOutput bool, opts Options) (*App, error) {
 		Search:    searchEngine,
 		Content:   contentManager,
 		Skills:    skills.NewInstaller(userHome),
+		Context:   projectcontext.New(userHome),
 		Output:    output.New(cfg.OutputMode, opts.Stdout),
 	}, nil
 }

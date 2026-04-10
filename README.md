@@ -7,6 +7,7 @@
 - PARA at the top level
 - Hybrid retrieval with SQLite FTS5 plus embeddings
 - Agent-friendly commands
+- Project-local context bundles for coding agents
 - Backups, history, undo, and diffable organize workflows
 
 ## Install
@@ -88,9 +89,13 @@ brain skills install --scope local --agent codex --project .
 brain skills install --scope both --agent codex --agent claude --project .
 brain skills install --scope global --agent openclaw
 brain skills install --skill-root /path/to/custom/skills --mode copy
+brain context install --project . --agent codex --agent openclaw
+brain context refresh --project .
 ```
 
 OpenClaw installs are copied into `~/.openclaw/skills/brain` because OpenClaw's managed skill loader does not currently detect symlinked skill directories.
+
+`brain context install` creates a root `AGENTS.md`, a modular `.brain/context` bundle, and thin agent-specific wrappers so coding agents can follow a consistent project contract.
 
 ## Example vault structure
 

@@ -61,3 +61,11 @@ brain skills install --scope local --agent codex --project .
 brain skills install --scope both --agent codex --agent zed --project .
 brain skills install --skill-root /path/to/custom/skills --mode copy
 ```
+
+## Project context
+
+```bash
+brain context install --project . --agent codex --agent openclaw
+brain context refresh --project .
+brain context refresh --project . --dry-run
+```

@@ -1,0 +1,74 @@
+[
+  {
+    "path": ".brain/context/architecture.md",
+    "kind": "context",
+    "action": "created",
+    "preserved_user_content": false,
+    "managed_blocks": [
+      "context-architecture"
+    ]
+  },
+  {
+    "path": ".brain/context/current-state.md",
+    "kind": "context",
+    "action": "created",
+    "preserved_user_content": false,
+    "managed_blocks": [
+      "context-current-state"
+    ]
+  },
+  {
+    "path": ".brain/context/memory-policy.md",
+    "kind": "context",
+    "action": "created",
+    "preserved_user_content": false,
+    "managed_blocks": [
+      "context-memory-policy"
+    ]
+  },
+  {
+    "path": ".brain/context/overview.md",
+    "kind": "context",
+    "action": "created",
+    "preserved_user_content": false,
+    "managed_blocks": [
+      "context-overview"
+    ]
+  },
+  {
+    "path": ".brain/context/standards.md",
+    "kind": "context",
+    "action": "created",
+    "preserved_user_content": false,
+    "managed_blocks": [
+      "context-standards"
+    ]
+  },
+  {
+    "path": ".brain/context/workflows.md",
+    "kind": "context",
+    "action": "created",
+    "preserved_user_content": false,
+    "managed_blocks": [
+      "context-workflows"
+    ]
+  },
+  {
+    "path": ".codex/AGENTS.md",
+    "kind": "wrapper",
+    "action": "created",
+    "preserved_user_content": false,
+    "managed_blocks": [
+      "agent-wrapper-codex"
+    ]
+  },
+  {
+    "path": "AGENTS.md",
+    "kind": "contract",
+    "action": "created",
+    "preserved_user_content": false,
+    "managed_blocks": [
+      "agents-contract"
+    ]
+  }
+]

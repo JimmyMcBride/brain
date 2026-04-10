@@ -235,6 +235,10 @@ func knownAgents() []string {
 	return []string{"codex", "claude", "openclaw", "pi", "ai"}
 }
 
+func KnownAgents() []string {
+	return append([]string(nil), knownAgents()...)
+}
+
 func knownGlobalSkillRoot(home, agent string) string {
 	switch agent {
 	case "codex":
@@ -250,6 +254,10 @@ func knownGlobalSkillRoot(home, agent string) string {
 	default:
 		return filepath.Join(home, "."+agent, "skills")
 	}
+}
+
+func GlobalSkillRoot(home, agent string) string {
+	return knownGlobalSkillRoot(home, agent)
 }
 
 func normalizeAgents(agents []string) []string {

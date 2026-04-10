@@ -210,3 +210,46 @@ func TestCLISkillsCommands(t *testing.T) {
 		t.Fatalf("expected global skill install: %v", err)
 	}
 }
+
+func TestCLIContextCommands(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "context", "install", "--project", env.project, "--agent", "codex"))
+
+	for _, path := range []string{
+		filepath.Join(env.project, "AGENTS.md"),
+		filepath.Join(env.project, ".brain", "context", "overview.md"),
+		filepath.Join(env.project, ".codex", "AGENTS.md"),
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("expected context file %s: %v", path, err)
+		}
+	}
+
+	overviewPath := filepath.Join(env.project, ".brain", "context", "overview.md")
+	overviewData, err := os.ReadFile(overviewPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	overviewData = append(overviewData, []byte("\nProject note: keep this.\n")...)
+	if err := os.WriteFile(overviewPath, overviewData, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	refreshOutput := requireOK(t, env.run(t, "", "context", "refresh", "--project", env.project, "--agent", "codex"))
+	if !strings.Contains(refreshOutput, "updated   context  .brain/context/overview.md preserve-user") {
+		t.Fatalf("unexpected refresh output:\n%s", refreshOutput)
+	}
+
+	refreshed, err := os.ReadFile(overviewPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(refreshed), "Project note: keep this.") {
+		t.Fatalf("expected preserved local note:\n%s", string(refreshed))
+	}
+
+	dryRun := requireOK(t, env.run(t, "", "context", "refresh", "--project", env.project, "--agent", "codex", "--dry-run"))
+	if !strings.Contains(dryRun, "unchanged") {
+		t.Fatalf("expected unchanged dry-run output:\n%s", dryRun)
+	}
+}

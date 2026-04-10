@@ -12,6 +12,15 @@ args:
 
 Use `brain` as the primary interface for working with the knowledge vault.
 
+## Project-first behavior
+
+If the current repository has a project contract, read it before relying on the generic skill text:
+
+1. Read `AGENTS.md` at the repo root if it exists.
+2. Read the linked `.brain/context/*.md` files needed for the task.
+3. Use the `brain` CLI as the operational interface for project memory and vault work.
+4. Fall back to this skill's generic guidance only when project-local context is absent.
+
 ## Goals
 
 - Treat the Obsidian markdown vault as the source of truth.
@@ -31,6 +40,12 @@ When starting work with a vault:
 2. If search appears stale or empty, run `brain reindex`.
 3. Use `brain find` for path, metadata, or lightweight content lookup.
 4. Use `brain search "query"` for hybrid lexical plus semantic retrieval.
+
+When starting work in a code repository that uses `brain` project context:
+
+1. Read the project `AGENTS.md`.
+2. Read `.brain/context/overview.md`, `.brain/context/architecture.md`, `.brain/context/workflows.md`, and `.brain/context/memory-policy.md`.
+3. Retrieve any relevant durable notes before making large changes.
 
 ## OpenClaw usage
 
@@ -75,6 +90,10 @@ Use these commands by default:
   - Inspect tracked operations.
 - `brain undo`
   - Revert the last tracked change.
+- `brain context install --project .`
+  - Create a repo-local `AGENTS.md` plus a modular `.brain/context` bundle.
+- `brain context refresh --project .`
+  - Refresh brain-managed project context files without overwriting user notes outside managed blocks.
 
 ## Operating rules
 
