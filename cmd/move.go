@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
+func addMoveCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoader) {
 	var title string
 
 	cmd := &cobra.Command{
@@ -42,5 +42,5 @@ func init() {
 	}
 
 	cmd.Flags().StringVar(&title, "title", "", "rename the note after moving it")
-	rootCmd.AddCommand(cmd)
+	root.AddCommand(cmd)
 }

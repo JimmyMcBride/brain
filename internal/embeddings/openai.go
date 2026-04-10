@@ -11,9 +11,10 @@ import (
 )
 
 type OpenAIProvider struct {
-	model  string
-	apiKey string
-	client *http.Client
+	model   string
+	apiKey  string
+	client  *http.Client
+	baseURL string
 }
 
 type openAIEmbeddingRequest struct {
@@ -37,9 +38,10 @@ func NewOpenAIProvider(model string) (*OpenAIProvider, error) {
 		return nil, fmt.Errorf("OPENAI_API_KEY is not set")
 	}
 	return &OpenAIProvider{
-		model:  model,
-		apiKey: key,
-		client: &http.Client{Timeout: 45 * time.Second},
+		model:   model,
+		apiKey:  key,
+		client:  &http.Client{Timeout: 45 * time.Second},
+		baseURL: "https://api.openai.com/v1",
 	}, nil
 }
 
@@ -54,7 +56,7 @@ func (p *OpenAIProvider) Embed(ctx context.Context, texts []string) ([][]float32
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.openai.com/v1/embeddings", bytes.NewReader(reqBody))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.baseURL+"/embeddings", bytes.NewReader(reqBody))
 	if err != nil {
 		return nil, err
 	}

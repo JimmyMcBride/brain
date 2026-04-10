@@ -12,29 +12,83 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var rootFlags struct {
+type rootOptions struct {
+	in      io.Reader
+	out     io.Writer
+	errOut  io.Writer
+	appLoad func(configPath string, jsonOutput bool, out io.Writer, errOut io.Writer) (*app.App, error)
+}
+
+type rootFlagsState struct {
 	configPath string
 	jsonOutput bool
 }
 
-var rootCmd = &cobra.Command{
-	Use:           "brain",
-	Short:         "Local-first knowledge CLI for PARA-style markdown vaults",
-	SilenceUsage:  true,
-	SilenceErrors: true,
-}
+type appLoader func() (*app.App, error)
+
+var rootCmd = newRootCommand(rootOptions{})
 
 func Execute() error {
 	return rootCmd.Execute()
 }
 
-func init() {
-	rootCmd.PersistentFlags().StringVar(&rootFlags.configPath, "config", "", "config file path")
-	rootCmd.PersistentFlags().BoolVar(&rootFlags.jsonOutput, "json", false, "render output as JSON")
+func newRootCommand(opts rootOptions) *cobra.Command {
+	if opts.in == nil {
+		opts.in = os.Stdin
+	}
+	if opts.out == nil {
+		opts.out = os.Stdout
+	}
+	if opts.errOut == nil {
+		opts.errOut = os.Stderr
+	}
+	if opts.appLoad == nil {
+		opts.appLoad = func(configPath string, jsonOutput bool, out io.Writer, errOut io.Writer) (*app.App, error) {
+			return app.New(configPath, jsonOutput, app.Options{
+				Stdout: out,
+				Stderr: errOut,
+			})
+		}
+	}
+
+	flags := &rootFlagsState{}
+	cmd := &cobra.Command{
+		Use:           "brain",
+		Short:         "Local-first knowledge CLI for PARA-style markdown vaults",
+		SilenceUsage:  true,
+		SilenceErrors: true,
+	}
+	cmd.SetIn(opts.in)
+	cmd.SetOut(opts.out)
+	cmd.SetErr(opts.errOut)
+	cmd.PersistentFlags().StringVar(&flags.configPath, "config", "", "config file path")
+	cmd.PersistentFlags().BoolVar(&flags.jsonOutput, "json", false, "render output as JSON")
+
+	loadApp := func() (*app.App, error) {
+		return opts.appLoad(flags.configPath, flags.jsonOutput, cmd.OutOrStdout(), cmd.ErrOrStderr())
+	}
+
+	addCommands(cmd, flags, loadApp)
+	return cmd
 }
 
-func loadApp() (*app.App, error) {
-	return app.New(rootFlags.configPath, rootFlags.jsonOutput)
+func addCommands(root *cobra.Command, flags *rootFlagsState, loadApp appLoader) {
+	addInitCommand(root, flags)
+	addDoctorCommand(root, flags)
+	addAddCommand(root, flags, loadApp)
+	addReadCommand(root, flags, loadApp)
+	addEditCommand(root, flags, loadApp)
+	addFindCommand(root, flags, loadApp)
+	addSearchCommand(root, flags, loadApp)
+	addMoveCommand(root, flags, loadApp)
+	addOrganizeCommand(root, flags, loadApp)
+	addCaptureCommand(root, flags, loadApp)
+	addContentCommand(root, flags, loadApp)
+	addDailyCommand(root, flags, loadApp)
+	addReindexCommand(root, flags, loadApp)
+	addHistoryCommand(root, flags, loadApp)
+	addUndoCommand(root, flags, loadApp)
+	addSkillsCommand(root, flags, loadApp)
 }
 
 func parseMeta(entries []string) (map[string]any, error) {
@@ -49,14 +103,14 @@ func parseMeta(entries []string) (map[string]any, error) {
 	return meta, nil
 }
 
-func readBody(flagValue string, fromStdin bool) (string, error) {
+func readBody(in io.Reader, flagValue string, fromStdin bool) (string, error) {
 	if flagValue != "" {
 		return flagValue, nil
 	}
 	if !fromStdin {
 		return "", nil
 	}
-	data, err := io.ReadAll(os.Stdin)
+	data, err := io.ReadAll(in)
 	if err != nil {
 		return "", err
 	}
@@ -74,8 +128,8 @@ func repoRoot() string {
 	return filepath.Dir(exe)
 }
 
-func modeFromFlag(configMode string) string {
-	if rootFlags.jsonOutput {
+func modeFromFlag(flags *rootFlagsState, configMode string) string {
+	if flags != nil && flags.jsonOutput {
 		return "json"
 	}
 	if configMode == "" {

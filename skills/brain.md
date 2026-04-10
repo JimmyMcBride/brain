@@ -1,3 +1,13 @@
+---
+name: brain
+description: Use this skill when working with a local knowledge vault managed by the `brain` CLI, especially for PARA-structured Obsidian markdown workflows, retrieval, capture, content packaging, and safe note edits.
+user-invocable: true
+args:
+  - name: task
+    description: The vault, project memory, retrieval, capture, or content workflow task to perform with brain.
+    required: false
+---
+
 # Brain Skill
 
 Use this skill when the working source of truth is an Obsidian-style markdown vault managed by `brain`.
@@ -35,4 +45,3 @@ Use this skill when the working source of truth is an Obsidian-style markdown va
 - Treat `Archives/` as explicit, not automatic, unless the user asks for archiving.
 - Keep filenames stable and human-readable.
 - Avoid creating new top-level folders outside PARA.
-

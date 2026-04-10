@@ -15,7 +15,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
+func addInitCommand(root *cobra.Command, flags *rootFlagsState) {
 	var vaultPath string
 	var dataPath string
 	var provider string
@@ -25,7 +25,7 @@ func init() {
 		Use:   "init",
 		Short: "Initialize config, vault structure, and local index",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, paths, err := config.LoadOrCreate(rootFlags.configPath)
+			cfg, paths, err := config.LoadOrCreate(flags.configPath)
 			if err != nil {
 				return err
 			}
@@ -61,7 +61,7 @@ func init() {
 			}
 			defer store.Close()
 
-			printer := output.New(modeFromFlag(cfg.OutputMode), os.Stdout)
+			printer := output.New(modeFromFlag(flags, cfg.OutputMode), cmd.OutOrStdout())
 			payload := map[string]any{
 				"config_file": cfgPaths.ConfigFile,
 				"vault_path":  cfg.VaultPath,
@@ -92,5 +92,5 @@ func init() {
 	cmd.Flags().StringVar(&dataPath, "data", "", "data path for sqlite, logs, and backups")
 	cmd.Flags().StringVar(&provider, "embedding-provider", "", "embedding provider (localhash, openai, none)")
 	cmd.Flags().StringVar(&model, "embedding-model", "", "embedding model name")
-	rootCmd.AddCommand(cmd)
+	root.AddCommand(cmd)
 }

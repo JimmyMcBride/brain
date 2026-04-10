@@ -69,3 +69,35 @@ func TestInstallCopiesSkillBundle(t *testing.T) {
 		t.Fatalf("expected metadata file: %v", err)
 	}
 }
+
+func TestInstallForcesCopyForOpenClaw(t *testing.T) {
+	repoRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repoRoot, "skills", "brain"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoRoot, "skills", "brain", "SKILL.md"), []byte("skill"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	home := t.TempDir()
+	installer := NewInstaller(home)
+	results, err := installer.Install(InstallRequest{
+		Mode:     ModeSymlink,
+		Scope:    ScopeGlobal,
+		Agents:   []string{"openclaw"},
+		RepoRoot: repoRoot,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].Method != string(ModeCopy) {
+		t.Fatalf("expected forced copy result, got %+v", results)
+	}
+	info, err := os.Lstat(filepath.Join(home, ".openclaw", "skills", "brain"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		t.Fatal("expected OpenClaw install to be a directory copy, not a symlink")
+	}
+}

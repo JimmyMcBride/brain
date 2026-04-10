@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
+func addFindCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoader) {
 	var noteType string
 	var pathFilter string
 	var limit int
@@ -51,5 +51,5 @@ func init() {
 	cmd.Flags().StringVarP(&noteType, "type", "t", "", "filter by note type")
 	cmd.Flags().StringVarP(&pathFilter, "path", "p", "", "filter by path fragment")
 	cmd.Flags().IntVarP(&limit, "limit", "n", 25, "maximum results")
-	rootCmd.AddCommand(cmd)
+	root.AddCommand(cmd)
 }

@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
+func addCaptureCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoader) {
 	var meta []string
 	var bodyFlag string
 	var fromStdin bool
@@ -36,7 +36,7 @@ func init() {
 			if err != nil {
 				return err
 			}
-			body, err := readBody(bodyFlag, fromStdin)
+			body, err := readBody(cmd.InOrStdin(), bodyFlag, fromStdin)
 			if err != nil {
 				return err
 			}
@@ -62,5 +62,5 @@ func init() {
 	cmd.Flags().StringArrayVarP(&meta, "meta", "m", nil, "metadata key=value")
 	cmd.Flags().StringVarP(&bodyFlag, "body", "b", "", "body content")
 	cmd.Flags().BoolVar(&fromStdin, "stdin", false, "read body from stdin")
-	rootCmd.AddCommand(cmd)
+	root.AddCommand(cmd)
 }

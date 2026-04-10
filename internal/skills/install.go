@@ -73,7 +73,8 @@ func (i *Installer) Install(req InstallRequest) ([]InstallResult, error) {
 		if err := os.MkdirAll(target.Root, 0o755); err != nil {
 			return nil, fmt.Errorf("create skill root %s: %w", target.Root, err)
 		}
-		if err := installPath(req.Mode, source, target.Path); err != nil {
+		mode := effectiveMode(req.Mode, target)
+		if err := installPath(mode, source, target.Path); err != nil {
 			return nil, err
 		}
 		results = append(results, InstallResult{
@@ -81,7 +82,7 @@ func (i *Installer) Install(req InstallRequest) ([]InstallResult, error) {
 			Scope:  target.Scope,
 			Root:   target.Root,
 			Path:   target.Path,
-			Method: string(req.Mode),
+			Method: string(mode),
 		})
 	}
 	return results, nil
@@ -163,6 +164,18 @@ func validateSkillSource(source string) error {
 		return fmt.Errorf("skill source missing SKILL.md: %w", err)
 	}
 	return nil
+}
+
+func effectiveMode(mode InstallMode, target Target) InstallMode {
+	if mode == "" {
+		mode = ModeSymlink
+	}
+	// OpenClaw's managed skill loader currently ignores symlinked skill
+	// directories, so copy is the only discoverable install mode for it.
+	if target.Agent == "openclaw" && target.Scope != "custom" {
+		return ModeCopy
+	}
+	return mode
 }
 
 func installPath(mode InstallMode, source, target string) error {

@@ -14,12 +14,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
+func addDoctorCommand(root *cobra.Command, flags *rootFlagsState) {
 	cmd := &cobra.Command{
 		Use:   "doctor",
 		Short: "Validate config, vault, index, and embedding setup",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, paths, err := config.LoadOrCreate(rootFlags.configPath)
+			cfg, paths, err := config.LoadOrCreate(flags.configPath)
 			if err != nil {
 				return err
 			}
@@ -49,7 +49,7 @@ func init() {
 				}
 			}
 
-			printer := output.New(modeFromFlag(cfg.OutputMode), os.Stdout)
+			printer := output.New(modeFromFlag(flags, cfg.OutputMode), cmd.OutOrStdout())
 			return printer.Print(checks, func(w io.Writer) error {
 				for _, item := range checks {
 					status := "ok"
@@ -64,7 +64,7 @@ func init() {
 			})
 		},
 	}
-	rootCmd.AddCommand(cmd)
+	root.AddCommand(cmd)
 }
 
 func check(name string, ok bool) map[string]any {

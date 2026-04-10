@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
+func addContentCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoader) {
 	contentCmd := &cobra.Command{
 		Use:   "content",
 		Short: "Content-seed and outline workflow",
@@ -125,5 +125,5 @@ func init() {
 	publishCmd.Flags().StringVar(&repurpose, "repurpose", "", "repurpose target")
 
 	contentCmd.AddCommand(seedCmd, gatherCmd, outlineCmd, publishCmd)
-	rootCmd.AddCommand(contentCmd)
+	root.AddCommand(contentCmd)
 }

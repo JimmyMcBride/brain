@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
+func addDailyCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoader) {
 	cmd := &cobra.Command{
 		Use:   "daily [yyyy-mm-dd]",
 		Short: "Create or open a daily note",
@@ -65,5 +65,5 @@ func init() {
 			})
 		},
 	}
-	rootCmd.AddCommand(cmd)
+	root.AddCommand(cmd)
 }

@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
+func addSearchCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoader) {
 	var limit int
 
 	cmd := &cobra.Command{
@@ -53,5 +53,5 @@ func init() {
 	}
 
 	cmd.Flags().IntVarP(&limit, "limit", "n", 10, "maximum results")
-	rootCmd.AddCommand(cmd)
+	root.AddCommand(cmd)
 }

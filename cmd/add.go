@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
+func addAddCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoader) {
 	var section string
 	var templateName string
 	var noteType string
@@ -36,7 +36,7 @@ func init() {
 			if err != nil {
 				return err
 			}
-			body, err := readBody(bodyFlag, fromStdin)
+			body, err := readBody(cmd.InOrStdin(), bodyFlag, fromStdin)
 			if err != nil {
 				return err
 			}
@@ -70,5 +70,5 @@ func init() {
 	cmd.Flags().StringVarP(&bodyFlag, "body", "b", "", "body content")
 	cmd.Flags().BoolVar(&fromStdin, "stdin", false, "read body from stdin")
 	cmd.Flags().BoolVar(&overwrite, "overwrite", false, "overwrite existing note if present")
-	rootCmd.AddCommand(cmd)
+	root.AddCommand(cmd)
 }

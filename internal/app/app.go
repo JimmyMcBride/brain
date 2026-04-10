@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"brain/internal/backup"
@@ -35,13 +36,24 @@ type App struct {
 	Output    *output.Printer
 }
 
-func New(configPath string, jsonOutput bool) (*App, error) {
+type Options struct {
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
+func New(configPath string, jsonOutput bool, opts Options) (*App, error) {
 	cfg, paths, err := config.LoadOrCreate(configPath)
 	if err != nil {
 		return nil, err
 	}
 	if jsonOutput {
 		cfg.OutputMode = "json"
+	}
+	if opts.Stdout == nil {
+		opts.Stdout = os.Stdout
+	}
+	if opts.Stderr == nil {
+		opts.Stderr = os.Stderr
 	}
 
 	vaultSvc := vault.New(cfg)
@@ -75,7 +87,7 @@ func New(configPath string, jsonOutput bool) (*App, error) {
 		Search:    searchEngine,
 		Content:   contentManager,
 		Skills:    skills.NewInstaller(userHome),
-		Output:    output.New(cfg.OutputMode, os.Stdout),
+		Output:    output.New(cfg.OutputMode, opts.Stdout),
 	}, nil
 }
 

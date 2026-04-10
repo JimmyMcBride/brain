@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
+func addHistoryCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoader) {
 	var limit int
 
 	cmd := &cobra.Command{
@@ -48,5 +48,5 @@ func init() {
 	}
 
 	cmd.Flags().IntVarP(&limit, "limit", "n", 20, "maximum entries")
-	rootCmd.AddCommand(cmd)
+	root.AddCommand(cmd)
 }

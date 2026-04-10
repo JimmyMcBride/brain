@@ -1,0 +1,42 @@
+[
+  {
+    "details": "present",
+    "name": "config",
+    "ok": true
+  },
+  {
+    "details": "present",
+    "name": "vault",
+    "ok": true
+  },
+  {
+    "details": "present",
+    "name": "sqlite",
+    "ok": true
+  },
+  {
+    "details": "present",
+    "name": "index_dir",
+    "ok": true
+  },
+  {
+    "details": "localhash/hash-v1",
+    "name": "embedding",
+    "ok": true
+  },
+  {
+    "details": "1",
+    "name": "notes",
+    "ok": true
+  },
+  {
+    "details": "1",
+    "name": "chunks",
+    "ok": true
+  },
+  {
+    "details": "1",
+    "name": "embeddings",
+    "ok": true
+  }
+]

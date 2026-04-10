@@ -1,6 +1,11 @@
 ---
 name: brain
 description: Use this skill when working with a local knowledge vault managed by the `brain` CLI, especially for PARA-structured Obsidian markdown workflows, retrieval, capture, content packaging, and safe note edits. Do not use it for unrelated code tasks or for direct vault file edits when the `brain` command can perform the action.
+user-invocable: true
+args:
+  - name: task
+    description: The vault, project memory, retrieval, capture, or content workflow task to perform with brain.
+    required: false
 ---
 
 # Brain
@@ -26,6 +31,21 @@ When starting work with a vault:
 2. If search appears stale or empty, run `brain reindex`.
 3. Use `brain find` for path, metadata, or lightweight content lookup.
 4. Use `brain search "query"` for hybrid lexical plus semantic retrieval.
+
+## OpenClaw usage
+
+OpenClaw should use this skill when the user asks it to remember project context, search an Obsidian/PARA vault, capture discoveries, maintain project memory, or prepare content from notes.
+
+For OpenClaw installs, this skill should live at:
+
+- Global: `~/.openclaw/skills/brain/SKILL.md`
+- Project-local: `<project>/.openclaw/skills/brain/SKILL.md`
+
+Validate discovery with:
+
+```bash
+openclaw skills list --json
+```
 
 ## Command guide
 

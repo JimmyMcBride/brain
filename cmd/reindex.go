@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
+func addReindexCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoader) {
 	cmd := &cobra.Command{
 		Use:   "reindex",
 		Short: "Rebuild the SQLite FTS and embedding index from the vault",
@@ -30,5 +30,5 @@ func init() {
 			})
 		},
 	}
-	rootCmd.AddCommand(cmd)
+	root.AddCommand(cmd)
 }

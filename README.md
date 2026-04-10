@@ -86,8 +86,11 @@ brain content publish Projects/client-migration.md --channel blog --repurpose th
 brain skills install --scope global --agent codex
 brain skills install --scope local --agent codex --project .
 brain skills install --scope both --agent codex --agent claude --project .
+brain skills install --scope global --agent openclaw
 brain skills install --skill-root /path/to/custom/skills --mode copy
 ```
+
+OpenClaw installs are copied into `~/.openclaw/skills/brain` because OpenClaw's managed skill loader does not currently detect symlinked skill directories.
 
 ## Example vault structure
 

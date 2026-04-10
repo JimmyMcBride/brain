@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
+func addOrganizeCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoader) {
 	var apply bool
 	var allowArchive bool
 
@@ -85,7 +85,7 @@ func init() {
 
 	cmd.Flags().BoolVar(&apply, "apply", false, "apply the suggested moves")
 	cmd.Flags().BoolVar(&allowArchive, "archive", false, "allow moving archived notes into Archives")
-	rootCmd.AddCommand(cmd)
+	root.AddCommand(cmd)
 }
 
 func recommendedSection(noteType string) string {

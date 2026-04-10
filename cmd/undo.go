@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
+func addUndoCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoader) {
 	cmd := &cobra.Command{
 		Use:   "undo",
 		Short: "Revert the last tracked file operation",
@@ -27,5 +27,5 @@ func init() {
 			})
 		},
 	}
-	rootCmd.AddCommand(cmd)
+	root.AddCommand(cmd)
 }

@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
+func addReadCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoader) {
 	cmd := &cobra.Command{
 		Use:   "read <path>",
 		Short: "Read a note",
@@ -34,5 +34,5 @@ func init() {
 			})
 		},
 	}
-	rootCmd.AddCommand(cmd)
+	root.AddCommand(cmd)
 }

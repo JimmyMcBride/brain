@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
+func addSkillsCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoader) {
 	var mode string
 	var scope string
 	var agents []string
@@ -107,5 +107,5 @@ You can also target nonstandard tools directly with --skill-root.
 `)
 
 	skillsCmd.AddCommand(installCmd, targetsCmd)
-	rootCmd.AddCommand(skillsCmd)
+	root.AddCommand(skillsCmd)
 }

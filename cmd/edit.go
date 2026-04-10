@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
+func addEditCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoader) {
 	var title string
 	var bodyFlag string
 	var fromStdin bool
@@ -46,7 +46,7 @@ func init() {
 			if err != nil {
 				return err
 			}
-			body, err := readBody(bodyFlag, fromStdin)
+			body, err := readBody(cmd.InOrStdin(), bodyFlag, fromStdin)
 			if err != nil {
 				return err
 			}
@@ -76,5 +76,5 @@ func init() {
 	cmd.Flags().BoolVar(&fromStdin, "stdin", false, "read body from stdin")
 	cmd.Flags().StringArrayVarP(&meta, "set", "m", nil, "metadata key=value")
 	cmd.Flags().StringVar(&editor, "editor", "", "editor to launch when no direct edits are supplied")
-	rootCmd.AddCommand(cmd)
+	root.AddCommand(cmd)
 }

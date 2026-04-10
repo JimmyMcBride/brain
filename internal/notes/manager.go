@@ -43,6 +43,7 @@ type Manager struct {
 	templates *templates.Manager
 	backups   *backup.Manager
 	history   *history.Logger
+	editorRun func(editor, path string) error
 }
 
 func New(vaultSvc *vault.Service, tpl *templates.Manager, backups *backup.Manager, historyLog *history.Logger) *Manager {
@@ -51,6 +52,7 @@ func New(vaultSvc *vault.Service, tpl *templates.Manager, backups *backup.Manage
 		templates: tpl,
 		backups:   backups,
 		history:   historyLog,
+		editorRun: runEditor,
 	}
 }
 
@@ -219,11 +221,7 @@ func (m *Manager) EditInEditor(path, editor string) (*Note, error) {
 	if editor == "" {
 		editor = "vi"
 	}
-	cmd := exec.Command(editor, abs)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	if err := m.editorRun(editor, abs); err != nil {
 		return nil, fmt.Errorf("run editor: %w", err)
 	}
 	after, err := os.ReadFile(abs)
@@ -397,6 +395,14 @@ func stringValue(v any) string {
 		return s
 	}
 	return fmt.Sprint(v)
+}
+
+func runEditor(editor, path string) error {
+	cmd := exec.Command(editor, path)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 func matchesFindQuery(note *Note, query string) bool {
