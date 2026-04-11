@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-11T06:20:04Z"
+updated: "2026-04-11T06:53:22Z"
 ---
 # Current State
 
@@ -34,3 +34,4 @@ Add repo-specific notes here. `brain context refresh` preserves content outside 
 
 - 2026-04-11: Added the repo-owned `googleworkspace-cli` skill bundle, installed it to `~/.codex/skills/googleworkspace-cli`, and documented the one-line install path via `scripts/install.sh`.
 - 2026-04-11: Hardened note updates to normalize full-note stdin/frontmatter safely and made `brain skills` install repo-owned skills as a bundle by default.
+- 2026-04-11: Installed the updated global `brain` binary from commit `93e71a6` and pushed the note-integrity plus multi-skill install changes to `main`.
