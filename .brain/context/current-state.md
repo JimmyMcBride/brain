@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-11T21:20:10Z"
+updated: "2026-04-11T21:21:56Z"
 ---
 # Current State
 
@@ -55,3 +55,5 @@ Add repo-specific notes here. `brain context refresh` preserves content outside 
 - 2026-04-11: Added first-class Copilot and Pi skill targets based on their documented roots. Copilot now installs globally to `~/.copilot/skills` and locally to `.github/skills`; Pi now installs globally to `~/.pi/agent/skills` and locally to `.pi/skills`.
 
 - 2026-04-11: Simplified `brain skills` so it now installs only the Brain skill, removed the repo-owned `googleworkspace-cli` bundle, and rewrote the README/usage docs around adding the Brain skill globally or locally.
+
+- 2026-04-11: Updated `scripts/refresh-global-brain.sh` to match the new Brain-only `brain skills install` CLI so maintainer refreshes no longer rely on the removed `--skill` flag.

@@ -41,7 +41,7 @@ go build \
 VERSION_OUTPUT="$("${BIN_PATH}" version)"
 printf '%s\n' "${VERSION_OUTPUT}" | grep -F "commit:  ${COMMIT}" >/dev/null 2>&1 || die "installed binary commit does not match ${COMMIT}"
 
-"${BIN_PATH}" skills install --scope global --agent codex --skill brain --mode copy --project "${REPO_ROOT}" >/dev/null
+"${BIN_PATH}" skills install --scope global --agent codex --mode copy --project "${REPO_ROOT}" >/dev/null
 
 [ -d "${GLOBAL_SKILL_PATH}" ] || die "global Codex brain skill was not installed"
 diff -qr "${REPO_SKILL_PATH}" "${GLOBAL_SKILL_PATH}" >/dev/null 2>&1 || die "global Codex brain skill does not match repo copy"
