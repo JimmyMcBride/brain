@@ -113,16 +113,17 @@ type RunResult struct {
 }
 
 type ValidationResult struct {
-	OK              bool     `json:"ok"`
-	Stage           string   `json:"stage"`
-	SessionID       string   `json:"session_id,omitempty"`
-	Task            string   `json:"task,omitempty"`
-	RepoChanged     bool     `json:"repo_changed"`
-	NotesChanged    bool     `json:"notes_changed"`
-	MissingCommands []string `json:"missing_commands,omitempty"`
-	Obligations     []string `json:"obligations,omitempty"`
-	Remediation     []string `json:"remediation,omitempty"`
-	Checks          []Check  `json:"checks,omitempty"`
+	OK                bool     `json:"ok"`
+	Stage             string   `json:"stage"`
+	SessionID         string   `json:"session_id,omitempty"`
+	Task              string   `json:"task,omitempty"`
+	RepoChanged       bool     `json:"repo_changed"`
+	NotesChanged      bool     `json:"notes_changed"`
+	MemorySatisfiedBy string   `json:"memory_satisfied_by,omitempty"`
+	MissingCommands   []string `json:"missing_commands,omitempty"`
+	Obligations       []string `json:"obligations,omitempty"`
+	Remediation       []string `json:"remediation,omitempty"`
+	Checks            []Check  `json:"checks,omitempty"`
 }
 
 type FinishResult struct {
@@ -478,11 +479,24 @@ func (m *Manager) evaluateFinish(ctx context.Context, policy *projectcontext.Pol
 	}
 	qualifyingNotes, _ := filterHistoryEntries(entries, policy.Closeout.AcceptableHistoryOperations, policy.Project.Memory.AcceptedNoteGlobs)
 	result.NotesChanged = len(qualifyingNotes) != 0
+	if result.NotesChanged {
+		result.MemorySatisfiedBy = "history"
+	}
 
-	if result.RepoChanged && policy.Closeout.RequireMemoryUpdateOnRepoChange && !result.NotesChanged {
+	committedNotes, err := committedDurableNotes(ctx, active.ProjectDir, active.GitBaseline, currentGit, policy.Project.Memory.AcceptedNoteGlobs)
+	if err != nil {
+		return nil, err
+	}
+	if result.MemorySatisfiedBy == "" && len(committedNotes) != 0 {
+		result.MemorySatisfiedBy = "git_committed_notes"
+	}
+
+	if result.RepoChanged && policy.Closeout.RequireMemoryUpdateOnRepoChange && result.MemorySatisfiedBy == "" {
 		result.OK = false
 		result.Obligations = append(result.Obligations, "durable note update required for repo changes")
 		result.Remediation = append(result.Remediation, fmt.Sprintf("run `brain edit AGENTS.md ...` or update docs/.brain notes for %s", policy.Project.Name))
+	} else if result.MemorySatisfiedBy == "git_committed_notes" {
+		result.Remediation = append(result.Remediation, "durable notes were already committed in the session commit range")
 	}
 	if result.RepoChanged {
 		for _, profile := range policy.Closeout.VerificationProfiles {
@@ -707,6 +721,7 @@ func snapshotGit(ctx context.Context, projectDir string) GitSnapshot {
 	}
 	head := strings.TrimSpace(runGit(ctx, projectDir, "rev-parse", "HEAD"))
 	status := splitNonEmpty(strings.TrimSpace(runGit(ctx, projectDir, "status", "--porcelain=v1")))
+	status = filterVolatileGitStatusLines(status)
 	sort.Strings(status)
 	return GitSnapshot{
 		Available: true,
@@ -750,6 +765,13 @@ func repoChanged(base, current GitSnapshot) bool {
 	return false
 }
 
+func worktreeClean(snapshot GitSnapshot) bool {
+	if !snapshot.Available {
+		return false
+	}
+	return len(snapshot.Status) == 0
+}
+
 func splitNonEmpty(s string) []string {
 	if strings.TrimSpace(s) == "" {
 		return nil
@@ -763,6 +785,46 @@ func splitNonEmpty(s string) []string {
 		}
 	}
 	return out
+}
+
+func filterVolatileGitStatusLines(lines []string) []string {
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if isVolatileGitStatusLine(line) {
+			continue
+		}
+		out = append(out, line)
+	}
+	return out
+}
+
+func isVolatileGitStatusLine(line string) bool {
+	path := gitStatusPath(line)
+	switch {
+	case path == ".brain/session.json":
+		return true
+	case strings.HasPrefix(path, ".brain/sessions/"):
+		return true
+	case strings.HasPrefix(path, ".brain/state/"):
+		return true
+	default:
+		return false
+	}
+}
+
+func gitStatusPath(line string) string {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return ""
+	}
+	if strings.Contains(line, " -> ") {
+		parts := strings.Split(line, " -> ")
+		return filepath.ToSlash(strings.TrimSpace(parts[len(parts)-1]))
+	}
+	if idx := strings.IndexByte(line, ' '); idx >= 0 {
+		return filepath.ToSlash(strings.TrimSpace(line[idx+1:]))
+	}
+	return filepath.ToSlash(line)
 }
 
 func filterHistoryEntries(entries []history.Entry, acceptableOps, globs []string) ([]history.Entry, []int) {
@@ -782,6 +844,41 @@ func filterHistoryEntries(entries []history.Entry, acceptableOps, globs []string
 		}
 	}
 	return out, indexes
+}
+
+func committedDurableNotes(ctx context.Context, projectDir string, base, current GitSnapshot, globs []string) ([]string, error) {
+	if !base.Available || !current.Available {
+		return nil, nil
+	}
+	if base.Head == "" || current.Head == "" || base.Head == current.Head {
+		return nil, nil
+	}
+	if !worktreeClean(current) {
+		return nil, nil
+	}
+	paths, err := gitChangedPathsBetween(ctx, projectDir, base.Head, current.Head)
+	if err != nil {
+		return nil, err
+	}
+	var matched []string
+	for _, path := range paths {
+		if pathMatchesAny(path, globs) {
+			matched = append(matched, path)
+		}
+	}
+	return matched, nil
+}
+
+func gitChangedPathsBetween(ctx context.Context, dir, baseHead, currentHead string) ([]string, error) {
+	cmd := exec.CommandContext(ctx, "git", "diff", "--name-only", baseHead, currentHead)
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git diff changed paths: %w", err)
+	}
+	lines := splitNonEmpty(string(out))
+	sort.Strings(lines)
+	return lines, nil
 }
 
 func commandProfileSatisfied(profile projectcontext.VerificationProfile, runs []CommandRun) bool {

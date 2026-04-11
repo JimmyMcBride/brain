@@ -40,6 +40,40 @@ func TestCommandProfileSatisfied(t *testing.T) {
 	}
 }
 
+func TestSnapshotGitIgnoresVolatileBrainRuntimeFiles(t *testing.T) {
+	project := makeSessionProject(t, sessionPolicyYAML(t, nil, false))
+	mustInitGitRepo(t, project)
+
+	for rel := range map[string]string{
+		".brain/session.json":            "{}\n",
+		".brain/sessions/ledger.json":    "{}\n",
+		".brain/state/brain.sqlite3-wal": "",
+		".brain/state/brain.sqlite3-shm": "",
+		".brain/state/history.jsonl":     "",
+	} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(project, rel)), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", rel, err)
+		}
+		if err := os.WriteFile(filepath.Join(project, rel), []byte(map[string]string{
+			".brain/session.json":            "{}\n",
+			".brain/sessions/ledger.json":    "{}\n",
+			".brain/state/brain.sqlite3-wal": "",
+			".brain/state/brain.sqlite3-shm": "",
+			".brain/state/history.jsonl":     "",
+		}[rel]), 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+
+	snapshot := snapshotGit(context.Background(), project)
+	if !snapshot.Available {
+		t.Fatal("expected git snapshot to be available")
+	}
+	if len(snapshot.Status) != 0 {
+		t.Fatalf("expected volatile brain runtime files to be ignored, got %v", snapshot.Status)
+	}
+}
+
 func TestRunCommandConcurrentRecordsAll(t *testing.T) {
 	project := makeSessionProject(t, sessionPolicyYAML(t, nil, false))
 	manager := New(nil)
@@ -176,6 +210,124 @@ func TestRunCommandAfterAbortDoesNotRecreateActiveSession(t *testing.T) {
 	}
 }
 
+func TestValidateFinishUsesCommittedDurableNotesFromSessionCommitRange(t *testing.T) {
+	verifyCmd := helperCommand("sleep-ms", "10", "verify")
+	project := makeSessionProject(t, sessionPolicyYAML(t, []string{strings.Join(verifyCmd, " ")}, true))
+	mustInitGitRepo(t, project)
+
+	if err := os.WriteFile(filepath.Join(project, "main.go"), []byte("package main\nfunc main() { println(\"published\") }\n"), 0o644); err != nil {
+		t.Fatalf("write code change: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "AGENTS.md"), []byte("# contract\n\nCommitted durable note.\n"), 0o644); err != nil {
+		t.Fatalf("write note change: %v", err)
+	}
+
+	manager := New(nil)
+	if _, err := manager.Start(context.Background(), StartRequest{ProjectDir: project, Task: "publish"}); err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+	if _, err := manager.RunCommand(context.Background(), RunRequest{
+		ProjectDir:    project,
+		Argv:          verifyCmd,
+		CaptureOutput: true,
+	}, nil, nil); err != nil {
+		t.Fatalf("run verification: %v", err)
+	}
+
+	mustRunGit(t, project, "add", ".")
+	mustRunGit(t, project, "commit", "-m", "publish changes")
+
+	result, err := manager.Validate(context.Background(), ValidateRequest{ProjectDir: project, Stage: "finish"})
+	if err != nil {
+		t.Fatalf("validate finish: %v", err)
+	}
+	if !result.OK {
+		t.Fatalf("expected finish validation ok, got obligations=%v remediation=%v", result.Obligations, result.Remediation)
+	}
+	if result.MemorySatisfiedBy != "git_committed_notes" {
+		t.Fatalf("expected git_committed_notes, got %q", result.MemorySatisfiedBy)
+	}
+}
+
+func TestValidateFinishStillBlocksCommittedCodeOnlyPublishSession(t *testing.T) {
+	verifyCmd := helperCommand("sleep-ms", "10", "verify")
+	project := makeSessionProject(t, sessionPolicyYAML(t, []string{strings.Join(verifyCmd, " ")}, true))
+	mustInitGitRepo(t, project)
+
+	if err := os.WriteFile(filepath.Join(project, "main.go"), []byte("package main\nfunc main() { println(\"published\") }\n"), 0o644); err != nil {
+		t.Fatalf("write code change: %v", err)
+	}
+
+	manager := New(nil)
+	if _, err := manager.Start(context.Background(), StartRequest{ProjectDir: project, Task: "publish"}); err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+	if _, err := manager.RunCommand(context.Background(), RunRequest{
+		ProjectDir:    project,
+		Argv:          verifyCmd,
+		CaptureOutput: true,
+	}, nil, nil); err != nil {
+		t.Fatalf("run verification: %v", err)
+	}
+
+	mustRunGit(t, project, "add", ".")
+	mustRunGit(t, project, "commit", "-m", "publish code only")
+
+	result, err := manager.Validate(context.Background(), ValidateRequest{ProjectDir: project, Stage: "finish"})
+	if err != nil {
+		t.Fatalf("validate finish: %v", err)
+	}
+	if result.OK {
+		t.Fatalf("expected finish validation to fail without committed durable note, got %+v", result)
+	}
+	if result.MemorySatisfiedBy != "" {
+		t.Fatalf("expected no memory satisfaction source, got %q", result.MemorySatisfiedBy)
+	}
+}
+
+func TestValidateFinishDoesNotUseCommittedDurableNotesWhenWorktreeDirty(t *testing.T) {
+	verifyCmd := helperCommand("sleep-ms", "10", "verify")
+	project := makeSessionProject(t, sessionPolicyYAML(t, []string{strings.Join(verifyCmd, " ")}, true))
+	mustInitGitRepo(t, project)
+
+	if err := os.WriteFile(filepath.Join(project, "main.go"), []byte("package main\nfunc main() { println(\"published\") }\n"), 0o644); err != nil {
+		t.Fatalf("write code change: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "AGENTS.md"), []byte("# contract\n\nCommitted durable note.\n"), 0o644); err != nil {
+		t.Fatalf("write note change: %v", err)
+	}
+
+	manager := New(nil)
+	if _, err := manager.Start(context.Background(), StartRequest{ProjectDir: project, Task: "publish"}); err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+	if _, err := manager.RunCommand(context.Background(), RunRequest{
+		ProjectDir:    project,
+		Argv:          verifyCmd,
+		CaptureOutput: true,
+	}, nil, nil); err != nil {
+		t.Fatalf("run verification: %v", err)
+	}
+
+	mustRunGit(t, project, "add", ".")
+	mustRunGit(t, project, "commit", "-m", "publish changes")
+
+	if err := os.WriteFile(filepath.Join(project, "README.md"), []byte("# still dirty\n"), 0o644); err != nil {
+		t.Fatalf("write dirty change: %v", err)
+	}
+
+	result, err := manager.Validate(context.Background(), ValidateRequest{ProjectDir: project, Stage: "finish"})
+	if err != nil {
+		t.Fatalf("validate finish: %v", err)
+	}
+	if result.OK {
+		t.Fatalf("expected finish validation to fail when worktree is dirty, got %+v", result)
+	}
+	if result.MemorySatisfiedBy != "" {
+		t.Fatalf("expected no memory satisfaction source for dirty worktree, got %q", result.MemorySatisfiedBy)
+	}
+}
+
 func TestSessionCommandHelper(t *testing.T) {
 	idx := -1
 	for i, arg := range os.Args {
@@ -303,10 +455,15 @@ func mustInitGitRepo(t *testing.T, dir string) {
 		{"git", "commit", "-m", "initial"},
 	}
 	for _, argv := range commands {
-		cmd := exec.Command(argv[0], argv[1:]...)
-		cmd.Dir = dir
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("%s failed: %v\n%s", strings.Join(argv, " "), err, out)
-		}
+		mustRunGit(t, dir, argv[1:]...)
+	}
+}
+
+func mustRunGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, out)
 	}
 }

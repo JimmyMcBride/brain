@@ -414,6 +414,39 @@ func TestCLISessionWorkflow(t *testing.T) {
 	}
 }
 
+func TestCLISessionPublishWorkflowUsesCommittedDurableNotes(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	initGitProject(t, env.project)
+
+	if err := os.WriteFile(filepath.Join(env.project, "main.go"), []byte("package main\nfunc main() { println(\"release\") }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(env.project, "AGENTS.md"), []byte("# Project Agent Contract\n\nCommitted durable note before publish.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	startOutput := requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "publish main release"))
+	if !strings.Contains(startOutput, "Started session") {
+		t.Fatalf("unexpected session start output:\n%s", startOutput)
+	}
+
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "run", "--project", env.project, "--", "go", "test", "./..."))
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "run", "--project", env.project, "--", "go", "build", "./..."))
+	runGitCommand(t, env.project, "add", ".")
+	runGitCommand(t, env.project, "commit", "-q", "-m", "publish changes")
+
+	validateOutput := requireOK(t, env.run(t, "", "--config", env.config, "session", "validate", "--project", env.project, "--stage", "finish"))
+	if !strings.Contains(validateOutput, "Memory: git_committed_notes") {
+		t.Fatalf("expected git-backed memory satisfaction in validate output:\n%s", validateOutput)
+	}
+
+	finishOutput := requireOK(t, env.run(t, "", "--config", env.config, "session", "finish", "--project", env.project, "--summary", "publish complete"))
+	if !strings.Contains(finishOutput, "finished") || !strings.Contains(finishOutput, "Memory: git_committed_notes") {
+		t.Fatalf("unexpected finish output:\n%s", finishOutput)
+	}
+}
+
 func TestCLIVersionCommand(t *testing.T) {
 	env := newCLIEnv(t)
 	restore := setCLICommandBuildInfo("v1.2.3", "abc123", "2026-04-10T00:00:00Z")

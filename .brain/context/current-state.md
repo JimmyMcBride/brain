@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-11T22:10:20Z"
+updated: "2026-04-11T22:41:48Z"
 ---
 # Current State
 
@@ -60,3 +60,4 @@ Add repo-specific notes here. `brain context refresh` preserves content outside 
 - 2026-04-11: Replaced the old paradigm-based planning model with an opinionated epic-only spec-driven workflow. `brain plan` now centers on brainstorm -> epic -> spec -> stories, removes milestone/cycle support, auto-creates one canonical draft spec per epic, gates new stories on approved specs, and migrates legacy epic projects by backfilling spec notes and story metadata.
 - 2026-04-11: Removed the final legacy planning compatibility path from `.brain/project.yaml` so Brain now accepts only `planning_model: epic_spec_v1`, and rewrote the README flow so install is followed immediately by adding the Brain skill and then by the brainstorm -> epic -> spec -> story execution workflow.
 - 2026-04-11: Added automatic stable release tagging from `main` so each push creates the next patch semver tag, triggers the existing GitHub release packaging flow, and makes installers plus `brain update` target the latest stable release from `main` by default.
+- 2026-04-11: Fixed publish-only session closeout so finish validation can treat accepted durable notes committed in the session commit range as satisfying the memory rule, and ignore volatile `.brain/state` plus session runtime files when checking meaningful git cleanliness.

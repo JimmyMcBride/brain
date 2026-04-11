@@ -91,6 +91,11 @@ func addSessionCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLo
 						return err
 					}
 				}
+				if result.MemorySatisfiedBy != "" {
+					if _, err := fmt.Fprintf(w, "Memory: %s\n", result.MemorySatisfiedBy); err != nil {
+						return err
+					}
+				}
 				for _, obligation := range result.Obligations {
 					if _, err := fmt.Fprintf(w, "Need: %s\n", obligation); err != nil {
 						return err
@@ -138,6 +143,11 @@ func addSessionCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLo
 			printErr := appCtx.Output.Print(result, func(w io.Writer) error {
 				if _, err := fmt.Fprintf(w, "Session %s: %s\n", result.SessionID, result.Status); err != nil {
 					return err
+				}
+				if result.Validation.MemorySatisfiedBy != "" {
+					if _, err := fmt.Fprintf(w, "Memory: %s\n", result.Validation.MemorySatisfiedBy); err != nil {
+						return err
+					}
 				}
 				for _, obligation := range result.Validation.Obligations {
 					if _, err := fmt.Fprintf(w, "Need: %s\n", obligation); err != nil {
