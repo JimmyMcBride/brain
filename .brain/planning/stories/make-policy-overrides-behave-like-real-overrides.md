@@ -1,11 +1,13 @@
 ---
 container: core-product-tightening-and-simplification
 created: "2026-04-11T14:49:34Z"
+epic: core-product-tightening-and-simplification
 project: brain
+spec: core-product-tightening-and-simplification
 status: done
 title: Make Policy Overrides Behave Like Real Overrides
 type: story
-updated: "2026-04-11T15:01:26Z"
+updated: "2026-04-11T21:53:09Z"
 ---
 # Make Policy Overrides Behave Like Real Overrides
 
@@ -27,6 +29,8 @@ Fix .brain/policy.override.yaml semantics so booleans can be turned both on and 
 
 - internal/projectcontext/policy.go
 - internal/session/manager.go
+- [[.brain/planning/specs/core-product-tightening-and-simplification.md]]
+
 
 
 

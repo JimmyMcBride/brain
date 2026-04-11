@@ -36,7 +36,7 @@ func setupTestManagers(t *testing.T) *testManagers {
 		history.New(filepath.Join(stateDir, "history.jsonl")),
 	)
 	pm := project.New(nm, workspaceSvc)
-	if _, err := pm.Init("epics"); err != nil {
+	if _, err := pm.Init(); err != nil {
 		t.Fatal(err)
 	}
 	return &testManagers{
@@ -47,72 +47,66 @@ func setupTestManagers(t *testing.T) *testManagers {
 	}
 }
 
-func TestCreateItemIncludesDescriptionCriteriaAndResources(t *testing.T) {
+func TestCreateEpicCreatesDraftSpec(t *testing.T) {
 	mgrs := setupTestManagers(t)
 
-	container, err := mgrs.plan.CreateContainer("Auth System")
+	bundle, err := mgrs.plan.CreateEpic("Auth System", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if container.Path != ".brain/planning/epics/auth-system.md" {
-		t.Fatalf("unexpected container path: %s", container.Path)
+	if bundle.Epic.Path != ".brain/planning/epics/auth-system.md" {
+		t.Fatalf("unexpected epic path: %s", bundle.Epic.Path)
 	}
+	if bundle.Spec.Path != ".brain/planning/specs/auth-system.md" {
+		t.Fatalf("unexpected spec path: %s", bundle.Spec.Path)
+	}
+	if got := bundle.Epic.Metadata["spec"]; got != "auth-system" {
+		t.Fatalf("unexpected spec metadata on epic: %v", got)
+	}
+	if got := bundle.Spec.Metadata["status"]; got != "draft" {
+		t.Fatalf("unexpected spec status: %v", got)
+	}
+}
 
-	item, err := mgrs.plan.CreateItem(
+func TestCreateStoryRequiresApprovedSpec(t *testing.T) {
+	mgrs := setupTestManagers(t)
+	if _, err := mgrs.plan.CreateEpic("Auth System", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mgrs.plan.CreateStory("auth-system", "Login Flow", "", nil, nil); err == nil {
+		t.Fatal("expected story creation to fail for draft spec")
+	}
+	if _, err := mgrs.plan.SetSpecStatus("auth-system", "approved"); err != nil {
+		t.Fatal(err)
+	}
+	story, err := mgrs.plan.CreateStory(
+		"auth-system",
 		"Login Flow",
-		"Auth System",
 		"Support email and password sign-in.",
 		[]string{"Validate email format", "Hash passwords"},
-		[]string{"[[.brain/brainstorms/auth-ideas.md]]"},
+		[]string{"[[docs/project-overview.md]]"},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if item.Path != ".brain/planning/stories/login-flow.md" {
-		t.Fatalf("unexpected item path: %s", item.Path)
+	if story.Path != ".brain/planning/stories/login-flow.md" {
+		t.Fatalf("unexpected story path: %s", story.Path)
 	}
-	if got := item.Metadata["container"]; got != "auth-system" {
-		t.Fatalf("unexpected container metadata: %v", got)
+	if got := story.Metadata["epic"]; got != "auth-system" {
+		t.Fatalf("unexpected epic metadata: %v", got)
 	}
-	if !strings.Contains(item.Content, "Support email and password sign-in.") {
-		t.Fatalf("expected description in content:\n%s", item.Content)
+	if got := story.Metadata["spec"]; got != "auth-system" {
+		t.Fatalf("unexpected spec metadata: %v", got)
 	}
-	if !strings.Contains(item.Content, "- [ ] Validate email format") {
-		t.Fatalf("expected criterion in content:\n%s", item.Content)
+	if !strings.Contains(story.Content, "- [ ] Validate email format") {
+		t.Fatalf("expected criterion in story:\n%s", story.Content)
 	}
-	if !strings.Contains(item.Content, "- [[.brain/brainstorms/auth-ideas.md]]") {
-		t.Fatalf("expected resource in content:\n%s", item.Content)
-	}
-}
-
-func TestStatusAggregatesWorkByContainer(t *testing.T) {
-	mgrs := setupTestManagers(t)
-	if _, err := mgrs.plan.CreateContainer("Auth System"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := mgrs.plan.CreateItem("Login Flow", "Auth System", "", nil, nil); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := mgrs.plan.CreateItem("Signup Flow", "Auth System", "", nil, nil); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := mgrs.plan.UpdateItem("login-flow", ItemChanges{Status: "done"}); err != nil {
-		t.Fatal(err)
-	}
-
-	status, err := mgrs.plan.Status()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if status.TotalItems != 2 || status.DoneItems != 1 {
-		t.Fatalf("unexpected totals: %+v", status)
-	}
-	if len(status.Containers) != 1 || status.Containers[0].DoneItems != 1 {
-		t.Fatalf("unexpected containers: %+v", status.Containers)
+	if !strings.Contains(story.Content, "- [[.brain/planning/specs/auth-system.md]]") {
+		t.Fatalf("expected canonical spec link in story resources:\n%s", story.Content)
 	}
 }
 
-func TestPromoteCreatesItemsWithBrainstormResource(t *testing.T) {
+func TestPromoteBrainstormCreatesEpicAndSeededSpec(t *testing.T) {
 	mgrs := setupTestManagers(t)
 	if _, err := mgrs.notes.Create(notes.CreateInput{
 		Title:    "Auth Ideas",
@@ -122,34 +116,112 @@ func TestPromoteCreatesItemsWithBrainstormResource(t *testing.T) {
 		Subdir:   "brainstorms",
 		Body: `# Brainstorm: Auth Ideas
 
+## Focus Question
+
+How should auth work?
+
 ## Ideas
 
-- **10:00** Login flow
-- **10:05** Signup flow
+- **10:00** Email and password sign-in
+- **10:05** Invite-based onboarding
 `,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	items, err := mgrs.plan.Promote("auth-ideas")
+
+	bundle, err := mgrs.plan.PromoteBrainstorm("auth-ideas")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(items) != 2 {
-		t.Fatalf("expected 2 items, got %d", len(items))
+	if got := bundle.Epic.Metadata["source_brainstorm"]; got != ".brain/brainstorms/auth-ideas.md" {
+		t.Fatalf("unexpected brainstorm metadata on epic: %v", got)
 	}
-	login, err := os.ReadFile(filepath.Join(mgrs.root, ".brain", "planning", "stories", "login-flow.md"))
-	if err != nil {
-		t.Fatal(err)
+	if !strings.Contains(bundle.Spec.Content, "How should auth work?") {
+		t.Fatalf("expected brainstorm focus question in spec:\n%s", bundle.Spec.Content)
 	}
-	if !strings.Contains(string(login), "- [[.brain/brainstorms/auth-ideas.md]]") {
-		t.Fatalf("expected brainstorm link in promoted item:\n%s", string(login))
+	if !strings.Contains(bundle.Spec.Content, "- Email and password sign-in") {
+		t.Fatalf("expected brainstorm ideas in spec goals:\n%s", bundle.Spec.Content)
+	}
+	if !strings.Contains(bundle.Spec.Content, "- [[.brain/brainstorms/auth-ideas.md]]") {
+		t.Fatalf("expected brainstorm resource link in spec:\n%s", bundle.Spec.Content)
 	}
 }
 
-func TestExtractIdeas_Timestamped(t *testing.T) {
-	content := "## Ideas\n\n- **10:00** build the thing\n- **10:05** test the thing\n"
-	ideas := extractIdeas(content)
-	if len(ideas) != 2 || ideas[0] != "build the thing" {
-		t.Fatalf("unexpected ideas: %+v", ideas)
+func TestLegacyEpicStoriesGetSpecMetadataBackfilled(t *testing.T) {
+	mgrs := setupTestManagers(t)
+	if err := os.WriteFile(filepath.Join(mgrs.root, ".brain", "project.yaml"), []byte("name: test\nplanning_model: epic_spec_v1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mgrs.notes.Create(notes.CreateInput{
+		Title:    "Auth System",
+		NoteType: "epic",
+		Template: "epic.md",
+		Section:  ".brain",
+		Subdir:   "planning/epics",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mgrs.notes.Create(notes.CreateInput{
+		Title:    "Login Flow",
+		NoteType: "story",
+		Template: "story.md",
+		Section:  ".brain",
+		Subdir:   "planning/stories",
+		Metadata: map[string]any{
+			"container": "auth-system",
+			"status":    "done",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	status, err := mgrs.plan.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(status.Epics) != 1 {
+		t.Fatalf("expected 1 epic after migration, got %d", len(status.Epics))
+	}
+	story, err := mgrs.notes.Read(".brain/planning/stories/login-flow.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if story.Metadata["epic"] != "auth-system" || story.Metadata["spec"] != "auth-system" {
+		t.Fatalf("expected story metadata to be backfilled, got %+v", story.Metadata)
+	}
+	if _, err := os.Stat(filepath.Join(mgrs.root, ".brain", "planning", "specs", "auth-system.md")); err != nil {
+		t.Fatalf("expected canonical spec to be created: %v", err)
+	}
+}
+
+func TestStatusAggregatesEpicAndStoryCounts(t *testing.T) {
+	mgrs := setupTestManagers(t)
+	if _, err := mgrs.plan.CreateEpic("Auth System", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mgrs.plan.SetSpecStatus("auth-system", "approved"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mgrs.plan.CreateStory("auth-system", "Login Flow", "", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mgrs.plan.CreateStory("auth-system", "Signup Flow", "", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mgrs.plan.UpdateStory("login-flow", StoryChanges{Status: "done"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mgrs.plan.UpdateStory("signup-flow", StoryChanges{Status: "blocked"}); err != nil {
+		t.Fatal(err)
+	}
+
+	status, err := mgrs.plan.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.TotalStories != 2 || status.DoneStories != 1 || status.BlockedStories != 1 {
+		t.Fatalf("unexpected status totals: %+v", status)
+	}
+	if len(status.Epics) != 1 || status.Epics[0].SpecStatus != "approved" {
+		t.Fatalf("unexpected epic summary: %+v", status.Epics)
 	}
 }

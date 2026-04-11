@@ -1,11 +1,13 @@
 ---
 container: project-local-brain-cleanup
 created: "2026-04-11T05:10:54Z"
+epic: project-local-brain-cleanup
 project: brain
+spec: project-local-brain-cleanup
 status: todo
 title: Project-Local Brain Cleanup Current State And Next Actions
 type: story
-updated: "2026-04-11T05:10:54Z"
+updated: "2026-04-11T21:53:09Z"
 ---
 # Project-Local Brain Cleanup Current State And Next Actions
 
@@ -27,6 +29,8 @@ Track the remaining cleanup work around project-local terminology, workspace bou
 
 - [[.brain/resources/references/architecture-and-code-map.md]]
 - [[.brain/resources/changes/project-scoped-planning-and-brainstorming.md]]
+- [[.brain/planning/specs/project-local-brain-cleanup.md]]
+
 
 
 

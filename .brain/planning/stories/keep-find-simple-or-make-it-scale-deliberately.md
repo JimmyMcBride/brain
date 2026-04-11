@@ -1,11 +1,13 @@
 ---
 container: core-product-tightening-and-simplification
 created: "2026-04-11T14:49:34Z"
+epic: core-product-tightening-and-simplification
 project: brain
+spec: core-product-tightening-and-simplification
 status: todo
 title: Keep Find Simple Or Make It Scale Deliberately
 type: story
-updated: "2026-04-11T14:49:34Z"
+updated: "2026-04-11T21:53:09Z"
 ---
 # Keep Find Simple Or Make It Scale Deliberately
 
@@ -27,6 +29,8 @@ Decide whether find should remain a simple filesystem scan for small repos or ga
 
 - cmd/find.go
 - internal/notes/manager.go
+- [[.brain/planning/specs/core-product-tightening-and-simplification.md]]
+
 
 
 

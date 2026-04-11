@@ -1,11 +1,13 @@
 ---
 container: core-product-tightening-and-simplification
 created: "2026-04-11T14:49:34Z"
+epic: core-product-tightening-and-simplification
 project: brain
+spec: core-product-tightening-and-simplification
 status: done
 title: Build A First-Class Migration And Adoption Workflow
 type: story
-updated: "2026-04-11T16:43:05Z"
+updated: "2026-04-11T21:53:09Z"
 ---
 # Build A First-Class Migration And Adoption Workflow
 
@@ -30,6 +32,8 @@ Add a guided path for taking an existing repo with docs and notes into the Brain
 - cmd/context.go
 - internal/projectcontext/manager.go
 - docs/usage.md
+- [[.brain/planning/specs/core-product-tightening-and-simplification.md]]
+
 
 
 

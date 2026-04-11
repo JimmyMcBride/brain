@@ -12,23 +12,23 @@ import (
 )
 
 type ProjectInfo struct {
-	Name           string    `json:"name"`
-	Dir            string    `json:"dir"`
-	MetaPath       string    `json:"meta_path"`
-	BrainDir       string    `json:"brain_dir"`
-	BrainstormsDir string    `json:"brainstorms_dir"`
-	PlanningDir    string    `json:"planning_dir"`
-	ResourcesDir   string    `json:"resources_dir"`
-	Paradigm       *Paradigm `json:"paradigm,omitempty"`
+	Name               string `json:"name"`
+	Dir                string `json:"dir"`
+	MetaPath           string `json:"meta_path"`
+	BrainDir           string `json:"brain_dir"`
+	BrainstormsDir     string `json:"brainstorms_dir"`
+	PlanningDir        string `json:"planning_dir"`
+	EpicsDir           string `json:"epics_dir"`
+	SpecsDir           string `json:"specs_dir"`
+	StoriesDir         string `json:"stories_dir"`
+	ResourcesDir       string `json:"resources_dir"`
+	PlanningInitialized bool   `json:"planning_initialized"`
+	PlanningModel      string `json:"planning_model,omitempty"`
 }
 
 type projectFile struct {
-	Name            string `yaml:"name"`
-	Paradigm        string `yaml:"paradigm,omitempty"`
-	ContainerType   string `yaml:"container_type,omitempty"`
-	ContainerPlural string `yaml:"container_plural,omitempty"`
-	ItemType        string `yaml:"item_type,omitempty"`
-	ItemPlural      string `yaml:"item_plural,omitempty"`
+	Name          string `yaml:"name"`
+	PlanningModel string `yaml:"planning_model,omitempty"`
 }
 
 type Manager struct {
@@ -40,40 +40,20 @@ func New(notesManager *notes.Manager, workspaceSvc *workspace.Service) *Manager 
 	return &Manager{notes: notesManager, workspace: workspaceSvc}
 }
 
-func (m *Manager) Init(paradigmName string) (*ProjectInfo, error) {
+func (m *Manager) Init() (*ProjectInfo, error) {
 	info, err := m.Resolve()
 	if err != nil {
 		return nil, err
 	}
-	if info.Paradigm != nil {
+	if info.PlanningInitialized {
 		return nil, fmt.Errorf("project management is already initialized")
 	}
-	p, err := LookupParadigm(paradigmName)
-	if err != nil {
+	if err := m.ensureLayout(info); err != nil {
 		return nil, err
 	}
-
-	for _, dir := range []string{
-		info.BrainstormsDir,
-		filepath.ToSlash(filepath.Join(info.PlanningDir, p.ContainerPlural)),
-		filepath.ToSlash(filepath.Join(info.PlanningDir, p.ItemPlural)),
-		info.ResourcesDir,
-		filepath.ToSlash(filepath.Join(info.ResourcesDir, "captures")),
-		filepath.ToSlash(filepath.Join(info.ResourcesDir, "changes")),
-		filepath.ToSlash(filepath.Join(info.ResourcesDir, "references")),
-	} {
-		if err := os.MkdirAll(m.workspace.Abs(dir), 0o755); err != nil {
-			return nil, err
-		}
-	}
-
 	payload := projectFile{
-		Name:            info.Name,
-		Paradigm:        p.Name,
-		ContainerType:   p.ContainerType,
-		ContainerPlural: p.ContainerPlural,
-		ItemType:        p.ItemType,
-		ItemPlural:      p.ItemPlural,
+		Name:          info.Name,
+		PlanningModel: "epic_spec_v1",
 	}
 	raw, err := yaml.Marshal(&payload)
 	if err != nil {
@@ -82,7 +62,8 @@ func (m *Manager) Init(paradigmName string) (*ProjectInfo, error) {
 	if err := os.WriteFile(m.workspace.Abs(info.MetaPath), raw, 0o644); err != nil {
 		return nil, err
 	}
-	info.Paradigm = p
+	info.PlanningInitialized = true
+	info.PlanningModel = payload.PlanningModel
 	return info, nil
 }
 
@@ -92,13 +73,16 @@ func (m *Manager) Resolve() (*ProjectInfo, error) {
 	}
 	name := filepath.Base(m.workspace.Root)
 	info := &ProjectInfo{
-		Name:           name,
-		Dir:            ".",
-		MetaPath:       ".brain/project.yaml",
-		BrainDir:       ".brain",
-		BrainstormsDir: ".brain/brainstorms",
-		PlanningDir:    ".brain/planning",
-		ResourcesDir:   ".brain/resources",
+		Name:               name,
+		Dir:                ".",
+		MetaPath:           ".brain/project.yaml",
+		BrainDir:           ".brain",
+		BrainstormsDir:     ".brain/brainstorms",
+		PlanningDir:        ".brain/planning",
+		EpicsDir:           ".brain/planning/epics",
+		SpecsDir:           ".brain/planning/specs",
+		StoriesDir:         ".brain/planning/stories",
+		ResourcesDir:       ".brain/resources",
 	}
 
 	raw, err := os.ReadFile(m.workspace.Abs(info.MetaPath))
@@ -115,12 +99,12 @@ func (m *Manager) Resolve() (*ProjectInfo, error) {
 	if cfg.Name != "" {
 		info.Name = cfg.Name
 	}
-	if cfg.Paradigm != "" {
-		p, err := LookupParadigm(cfg.Paradigm)
-		if err != nil {
-			return nil, err
-		}
-		info.Paradigm = p
+	switch {
+	case cfg.PlanningModel == "epic_spec_v1":
+		info.PlanningInitialized = true
+		info.PlanningModel = cfg.PlanningModel
+	case cfg.PlanningModel != "":
+		return nil, fmt.Errorf("unsupported planning model %q", cfg.PlanningModel)
 	}
 	return info, nil
 }
@@ -131,4 +115,36 @@ func (m *Manager) List() ([]ProjectInfo, error) {
 		return nil, err
 	}
 	return []ProjectInfo{*info}, nil
+}
+
+func (m *Manager) EnsurePlanningLayout() (*ProjectInfo, error) {
+	info, err := m.Resolve()
+	if err != nil {
+		return nil, err
+	}
+	if !info.PlanningInitialized {
+		return nil, fmt.Errorf("project planning is not initialized; run `brain plan init`")
+	}
+	if err := m.ensureLayout(info); err != nil {
+		return nil, err
+	}
+	return info, nil
+}
+
+func (m *Manager) ensureLayout(info *ProjectInfo) error {
+	for _, dir := range []string{
+		info.BrainstormsDir,
+		info.EpicsDir,
+		info.SpecsDir,
+		info.StoriesDir,
+		info.ResourcesDir,
+		filepath.ToSlash(filepath.Join(info.ResourcesDir, "captures")),
+		filepath.ToSlash(filepath.Join(info.ResourcesDir, "changes")),
+		filepath.ToSlash(filepath.Join(info.ResourcesDir, "references")),
+	} {
+		if err := os.MkdirAll(m.workspace.Abs(dir), 0o755); err != nil {
+			return err
+		}
+	}
+	return nil
 }

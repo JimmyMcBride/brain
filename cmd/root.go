@@ -169,10 +169,12 @@ func chooseTemplate(noteType, templateName string) string {
 	switch noteType {
 	case "brainstorm", "brainstorm_distill":
 		return "brainstorm.md"
-	case "epic", "milestone", "cycle":
-		return "container.md"
-	case "story", "task":
-		return "work_item.md"
+	case "epic":
+		return "epic.md"
+	case "spec":
+		return "spec.md"
+	case "story":
+		return "story.md"
 	default:
 		return "resource.md"
 	}

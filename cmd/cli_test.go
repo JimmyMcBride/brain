@@ -253,15 +253,16 @@ func TestCLIProjectPlanningWorkflow(t *testing.T) {
 	env := newCLIEnv(t)
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
 
-	initOutput := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "plan", "init", "--paradigm", "epics"))
-	if !strings.Contains(initOutput, "Initialized planning with epics paradigm") {
+	initOutput := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "plan", "init"))
+	if !strings.Contains(initOutput, "Initialized epic-only planning") {
 		t.Fatalf("unexpected plan init output:\n%s", initOutput)
 	}
 
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "brainstorm", "start", "Auth Ideas"))
-	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "plan", "group", "create", "Auth System"))
-	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "plan", "item", "create", "Login Flow", "--group", "Auth System", "-b", "Support email and password login.", "--criteria", "Validate email format", "--resource", "[[.brain/brainstorms/auth-ideas.md]]"))
-	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "plan", "item", "update", "login-flow", "--status", "done", "--criteria", "Hash passwords"))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "plan", "epic", "promote", "auth-ideas"))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "plan", "spec", "status", "auth-ideas", "--set", "approved"))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "plan", "story", "create", "auth-ideas", "Login Flow", "-b", "Support email and password login.", "--criteria", "Validate email format", "--resource", "[[.brain/brainstorms/auth-ideas.md]]"))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "plan", "story", "update", "login-flow", "--status", "done", "--criteria", "Hash passwords"))
 
 	storyPath := filepath.Join(env.project, ".brain", "planning", "stories", "login-flow.md")
 	storyRaw, err := os.ReadFile(storyPath)
@@ -272,9 +273,12 @@ func TestCLIProjectPlanningWorkflow(t *testing.T) {
 	if !strings.Contains(story, "Support email and password login.") || !strings.Contains(story, "- [ ] Hash passwords") {
 		t.Fatalf("unexpected story contents:\n%s", story)
 	}
+	if !strings.Contains(story, "spec: auth-ideas") {
+		t.Fatalf("expected story to reference canonical spec:\n%s", story)
+	}
 
 	statusOutput := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "plan", "status"))
-	if !strings.Contains(statusOutput, "epics") || !strings.Contains(statusOutput, "Stories: 1 total, 1 done, 0 remaining") {
+	if !strings.Contains(statusOutput, "epic_spec_v1") || !strings.Contains(statusOutput, "Stories: 1 total, 1 done, 0 in progress, 0 blocked, 0 remaining") || !strings.Contains(statusOutput, "Epic Auth Ideas [approved]: 1/1 stories done") {
 		t.Fatalf("unexpected status output:\n%s", statusOutput)
 	}
 }

@@ -1,11 +1,13 @@
 ---
 container: context-and-session-workflow
 created: "2026-04-11T05:10:54Z"
+epic: context-and-session-workflow
 project: brain
+spec: context-and-session-workflow
 status: todo
 title: Context And Session Workflow Current State And Next Actions
 type: story
-updated: "2026-04-11T05:10:54Z"
+updated: "2026-04-11T21:53:09Z"
 ---
 # Context And Session Workflow Current State And Next Actions
 
@@ -27,6 +29,8 @@ Track the generated contract, policy, wrappers, and session enforcement flow.
 
 - [[.brain/resources/references/skills-and-context-engineering.md]]
 - [[.brain/resources/changes/session-enforcement-and-policy-engine.md]]
+- [[.brain/planning/specs/context-and-session-workflow.md]]
+
 
 
 

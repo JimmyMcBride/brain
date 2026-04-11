@@ -9,7 +9,7 @@
 - `skills/brain/agents/openclaw.yaml`
 - `skills/wrappers/*.md`
 
-The Brain skill is the generic fallback for project-local Brain workflows, memory, planning, brainstorming, context, and sessions.
+The Brain skill is the generic fallback for project-local Brain workflows, memory, epic/spec/story planning, brainstorming, context, and sessions.
 
 ## Install Targets
 

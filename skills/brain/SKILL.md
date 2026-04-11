@@ -65,7 +65,7 @@ Use these commands by default:
 - `brain brainstorm ...`
   - Manage project-local brainstorming notes.
 - `brain plan ...`
-  - Manage project-local planning groups and work items.
+  - Manage project-local epics, specs, and stories with a spec-driven workflow.
 - `brain context install --project .`
   - Create or adopt the root contract plus `.brain/context`.
 - `brain context refresh --project .`

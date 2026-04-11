@@ -33,7 +33,7 @@ my-project/
 - `AGENTS.md` is the root contract for humans and agents.
 - `docs/` is the human-readable project documentation layer.
 - `.brain/context/` is the generated modular context bundle.
-- `.brain/planning/` holds epics/stories or other planning structures.
+- `.brain/planning/` holds epics, specs, and stories.
 - `.brain/brainstorms/` holds project-local ideation notes.
 - `.brain/resources/` holds durable references, captures, and change history.
 - `.brain/state/` holds SQLite, history logs, backups, and other local state.
@@ -107,53 +107,6 @@ go run . --help
 
 Use `go run .` when working on the CLI itself before replacing the installed binary.
 
-## Quick Start
-
-In any project directory:
-
-```bash
-brain init --project .
-brain doctor --project .
-brain context install --project .
-brain plan init --project . --paradigm epics
-brain brainstorm start --project . "Initial ideas"
-brain search --project . "architecture"
-```
-
-For an existing repo with its own docs or unmanaged `AGENTS.md`, use `brain adopt --project .` instead of `brain init --project .`.
-
-## Main Commands
-
-- `brain init`: bootstrap a project-local Brain workspace
-- `brain adopt`: adopt an existing repo into the Brain managed context model
-- `brain doctor`: validate local Brain setup
-- `brain read`, `brain edit`: inspect and update managed markdown
-- `brain find`, `brain search`: project-local retrieval
-- `brain brainstorm ...`: project-local brainstorming
-- `brain plan ...`: project-local planning and work tracking
-- `brain context ...`: install or refresh project context files
-- `brain session ...`: enforce workflow and verification rules
-- `brain skills ...`: install the Brain skill for agent runtimes
-- `brain history`, `brain undo`: inspect and revert tracked note changes
-- `brain version`, `brain update`: inspect or update the CLI
-
-## Search Model
-
-`brain` indexes project-managed markdown only:
-
-- `AGENTS.md`
-- `docs/**/*.md`
-- `.brain/**/*.md`
-
-It excludes local runtime state such as:
-
-- `.brain/state/**`
-- `.brain/sessions/**`
-
-This keeps retrieval focused on durable project knowledge instead of transient internals.
-
-By default, `brain` uses the built-in `localhash` provider. That gives you strong local lexical search plus lightweight semantic hinting without any network dependency. If you want stronger semantic retrieval, switch the embedding provider to `openai`.
-
 ## Install The Brain Skill
 
 Add the Brain skill to your machine:
@@ -180,6 +133,80 @@ brain skills targets --scope both --agent codex --agent claude --agent copilot -
 ```
 
 `brain skills` installs only the Brain skill from this repo.
+
+## Brainstorm To Planning To Execution
+
+Brain is intentionally opinionated here:
+
+1. brainstorm the high-level what and why
+2. promote the brainstorm into an epic
+3. build and approve the epic's canonical spec
+4. break the approved spec into execution stories
+5. complete stories while keeping the spec as the source of truth
+
+In a project directory:
+
+```bash
+brain init --project .
+brain doctor --project .
+brain context install --project .
+brain plan init --project .
+
+brain brainstorm start --project . "Newsletter system"
+brain plan epic promote --project . newsletter-system
+brain plan spec show --project . newsletter-system
+brain plan spec status --project . newsletter-system --set approved
+brain plan story create --project . newsletter-system "Template editor"
+brain plan story update --project . template-editor --status in_progress
+brain plan status --project .
+```
+
+Use `brain adopt --project .` instead of `brain init --project .` when the repo already has docs or an unmanaged `AGENTS.md`.
+
+## Quick Start
+
+In any project directory:
+
+```bash
+brain init --project .
+brain doctor --project .
+brain context install --project .
+brain plan init --project .
+brain brainstorm start --project . "Initial ideas"
+brain search --project . "architecture"
+```
+
+## Main Commands
+
+- `brain init`: bootstrap a project-local Brain workspace
+- `brain adopt`: adopt an existing repo into the Brain managed context model
+- `brain doctor`: validate local Brain setup
+- `brain read`, `brain edit`: inspect and update managed markdown
+- `brain find`, `brain search`: project-local retrieval
+- `brain brainstorm ...`: project-local brainstorming
+- `brain plan ...`: project-local epic/spec/story planning
+- `brain context ...`: install or refresh project context files
+- `brain session ...`: enforce workflow and verification rules
+- `brain skills ...`: install the Brain skill for agent runtimes
+- `brain history`, `brain undo`: inspect and revert tracked note changes
+- `brain version`, `brain update`: inspect or update the CLI
+
+## Search Model
+
+`brain` indexes project-managed markdown only:
+
+- `AGENTS.md`
+- `docs/**/*.md`
+- `.brain/**/*.md`
+
+It excludes local runtime state such as:
+
+- `.brain/state/**`
+- `.brain/sessions/**`
+
+This keeps retrieval focused on durable project knowledge instead of transient internals.
+
+By default, `brain` uses the built-in `localhash` provider. That gives you strong local lexical search plus lightweight semantic hinting without any network dependency. If you want stronger semantic retrieval, switch the embedding provider to `openai`.
 
 ## Config
 

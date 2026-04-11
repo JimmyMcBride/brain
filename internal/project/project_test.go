@@ -29,16 +29,6 @@ func setupProjectManager(t *testing.T) (*Manager, string) {
 	return New(nm, workspaceSvc), root
 }
 
-func TestLookupParadigm(t *testing.T) {
-	p, err := LookupParadigm("epics")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if p.ContainerType != "epic" || p.ItemType != "story" {
-		t.Fatalf("unexpected paradigm: %+v", p)
-	}
-}
-
 func TestResolveWithoutPlanningInit(t *testing.T) {
 	mgr, root := setupProjectManager(t)
 	info, err := mgr.Resolve()
@@ -48,24 +38,25 @@ func TestResolveWithoutPlanningInit(t *testing.T) {
 	if info.Name != filepath.Base(root) {
 		t.Fatalf("unexpected project name: %s", info.Name)
 	}
-	if info.Paradigm != nil {
-		t.Fatal("expected nil paradigm before plan init")
+	if info.PlanningInitialized {
+		t.Fatal("expected planning to be uninitialized before plan init")
 	}
 }
 
 func TestInitWritesProjectConfig(t *testing.T) {
 	mgr, root := setupProjectManager(t)
-	info, err := mgr.Init("epics")
+	info, err := mgr.Init()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Paradigm == nil || info.Paradigm.Name != "epics" {
-		t.Fatalf("unexpected paradigm: %+v", info.Paradigm)
+	if !info.PlanningInitialized || info.PlanningModel != "epic_spec_v1" {
+		t.Fatalf("unexpected planning state: %+v", info)
 	}
 	for _, rel := range []string{
 		".brain/project.yaml",
 		".brain/brainstorms",
 		".brain/planning/epics",
+		".brain/planning/specs",
 		".brain/planning/stories",
 		".brain/resources/captures",
 	} {
@@ -77,10 +68,20 @@ func TestInitWritesProjectConfig(t *testing.T) {
 
 func TestInitTwiceFails(t *testing.T) {
 	mgr, _ := setupProjectManager(t)
-	if _, err := mgr.Init("epics"); err != nil {
+	if _, err := mgr.Init(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := mgr.Init("cycles"); err == nil {
+	if _, err := mgr.Init(); err == nil {
 		t.Fatal("expected second init to fail")
+	}
+}
+
+func TestResolveRejectsUnknownPlanningModel(t *testing.T) {
+	mgr, root := setupProjectManager(t)
+	if err := os.WriteFile(filepath.Join(root, ".brain", "project.yaml"), []byte("name: test\nplanning_model: unknown\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mgr.Resolve(); err == nil {
+		t.Fatal("expected unknown planning model to fail")
 	}
 }

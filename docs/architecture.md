@@ -34,8 +34,8 @@ The index is local to each project under `.brain/state/brain.sqlite3`.
 
 - `internal/projectcontext` generates and refreshes `AGENTS.md`, `.brain/context/*`, `.brain/policy.yaml`, and agent wrappers
 - `internal/session` enforces preflight and closeout workflow rules
-- `internal/project` owns `.brain/project.yaml` and planning paradigm metadata
-- `internal/plan` owns group/item planning behavior
+- `internal/project` owns `.brain/project.yaml` and the fixed epic-spec planning model
+- `internal/plan` owns epic/spec/story planning behavior plus legacy epic migration
 - `internal/brainstorm` owns project-local brainstorming flows
 - `internal/skills` installs the Brain skill into agent runtimes
 - `internal/update` owns version/update behavior

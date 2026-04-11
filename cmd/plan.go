@@ -3,8 +3,8 @@ package cmd
 import (
 	"fmt"
 	"io"
-	"strings"
 
+	"brain/internal/notes"
 	"brain/internal/plan"
 
 	"github.com/spf13/cobra"
@@ -13,39 +13,37 @@ import (
 func addPlanCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoader) {
 	planCmd := &cobra.Command{
 		Use:   "plan",
-		Short: "Project-local planning and work tracking",
+		Short: "Epic-only spec-driven planning",
 	}
 
-	var paradigmFlag string
 	initCmd := &cobra.Command{
 		Use:   "init",
-		Short: "Initialize project management for the current project",
+		Short: "Initialize epic/spec/story planning for the current project",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appCtx, err := loadApp()
 			if err != nil {
 				return err
 			}
 			defer appCtx.Close()
-			info, err := appCtx.Project.Init(paradigmFlag)
+			info, err := appCtx.Project.Init()
 			if err != nil {
 				return err
 			}
 			return appCtx.Output.Print(info, func(w io.Writer) error {
-				_, err := fmt.Fprintf(w, "Initialized planning with %s paradigm at %s\n", info.Paradigm.Name, info.MetaPath)
+				_, err := fmt.Fprintf(w, "Initialized epic-only planning at %s\n", info.MetaPath)
 				return err
 			})
 		},
 	}
-	initCmd.Flags().StringVar(&paradigmFlag, "paradigm", "", "PM paradigm (epics, milestones, cycles)")
-	_ = initCmd.MarkFlagRequired("paradigm")
 
-	groupCmd := &cobra.Command{
-		Use:   "group",
-		Short: "Manage containers (epics, milestones, or cycles)",
+	epicCmd := &cobra.Command{
+		Use:   "epic",
+		Short: "Manage epics",
 	}
-	groupCreateCmd := &cobra.Command{
+
+	epicCreateCmd := &cobra.Command{
 		Use:   "create <title>",
-		Short: "Create a new container",
+		Short: "Create an epic and its primary draft spec",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appCtx, err := loadApp()
@@ -53,49 +51,43 @@ func addPlanCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoade
 				return err
 			}
 			defer appCtx.Close()
-			note, err := appCtx.Plan.CreateContainer(args[0])
+			bundle, err := appCtx.Plan.CreateEpic(args[0], "")
 			if err != nil {
 				return err
 			}
-			info, _ := appCtx.Project.Resolve()
-			label := "group"
-			if info != nil && info.Paradigm != nil {
-				label = info.Paradigm.ContainerType
-			}
-			return appCtx.Output.Print(note, func(w io.Writer) error {
-				_, err := fmt.Fprintf(w, "Created %s %s at %s\n", label, note.Title, note.Path)
+			return appCtx.Output.Print(bundle, func(w io.Writer) error {
+				if _, err := fmt.Fprintf(w, "Created epic %s at %s\n", bundle.Epic.Title, bundle.Epic.Path); err != nil {
+					return err
+				}
+				_, err := fmt.Fprintf(w, "Created draft spec %s at %s\n", bundle.Spec.Title, bundle.Spec.Path)
 				return err
 			})
 		},
 	}
-	groupListCmd := &cobra.Command{
+
+	epicListCmd := &cobra.Command{
 		Use:   "list",
-		Short: "List containers in the current project",
+		Short: "List epics in the current project",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appCtx, err := loadApp()
 			if err != nil {
 				return err
 			}
 			defer appCtx.Close()
-			containers, err := appCtx.Plan.ListContainers()
+			epics, err := appCtx.Plan.ListEpics()
 			if err != nil {
 				return err
 			}
-			info, _ := appCtx.Project.Resolve()
-			label := "Groups"
-			if info != nil && info.Paradigm != nil {
-				label = strings.Title(info.Paradigm.ContainerPlural)
-			}
-			return appCtx.Output.Print(containers, func(w io.Writer) error {
-				if len(containers) == 0 {
-					_, err := fmt.Fprintf(w, "No %s found.\n", strings.ToLower(label))
+			return appCtx.Output.Print(epics, func(w io.Writer) error {
+				if len(epics) == 0 {
+					_, err := fmt.Fprintln(w, "No epics found.")
 					return err
 				}
-				if _, err := fmt.Fprintf(w, "%s:\n", label); err != nil {
+				if _, err := fmt.Fprintln(w, "Epics:"); err != nil {
 					return err
 				}
-				for _, c := range containers {
-					if _, err := fmt.Fprintf(w, "  %s (%d/%d done)\n", c.Title, c.DoneItems, c.TotalItems); err != nil {
+				for _, epic := range epics {
+					if _, err := fmt.Fprintf(w, "  %s [%s] (%d/%d stories done)\n", epic.Title, epic.SpecStatus, epic.DoneStories, epic.TotalStories); err != nil {
 						return err
 					}
 				}
@@ -103,19 +95,10 @@ func addPlanCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoade
 			})
 		},
 	}
-	groupCmd.AddCommand(groupCreateCmd, groupListCmd)
 
-	itemCmd := &cobra.Command{
-		Use:   "item",
-		Short: "Manage work items (stories or tasks)",
-	}
-	var itemGroup string
-	var itemBody string
-	var itemCriteria []string
-	var itemResources []string
-	itemCreateCmd := &cobra.Command{
-		Use:   "create <title>",
-		Short: "Create a new work item",
+	epicShowCmd := &cobra.Command{
+		Use:   "show <epic-slug>",
+		Short: "Show an epic note",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appCtx, err := loadApp()
@@ -123,32 +106,20 @@ func addPlanCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoade
 				return err
 			}
 			defer appCtx.Close()
-			note, err := appCtx.Plan.CreateItem(args[0], itemGroup, itemBody, itemCriteria, itemResources)
+			note, err := appCtx.Plan.ReadEpic(args[0])
 			if err != nil {
 				return err
 			}
-			info, _ := appCtx.Project.Resolve()
-			label := "item"
-			if info != nil && info.Paradigm != nil {
-				label = info.Paradigm.ItemType
-			}
 			return appCtx.Output.Print(note, func(w io.Writer) error {
-				_, err := fmt.Fprintf(w, "Created %s %s at %s\n", label, note.Title, note.Path)
+				_, err := fmt.Fprintf(w, "%s\n\n%s", note.Path, note.Content)
 				return err
 			})
 		},
 	}
-	itemCreateCmd.Flags().StringVar(&itemGroup, "group", "", "container to assign this item to")
-	itemCreateCmd.Flags().StringVarP(&itemBody, "body", "b", "", "description")
-	itemCreateCmd.Flags().StringArrayVar(&itemCriteria, "criteria", nil, "acceptance criterion; repeatable")
-	itemCreateCmd.Flags().StringArrayVar(&itemResources, "resource", nil, "resource reference; repeatable")
 
-	var updateStatus string
-	var updateCriteria []string
-	var updateResources []string
-	itemUpdateCmd := &cobra.Command{
-		Use:   "update <item-slug>",
-		Short: "Update a work item",
+	epicPromoteCmd := &cobra.Command{
+		Use:   "promote <brainstorm-slug>",
+		Short: "Promote a brainstorm into an epic and seeded draft spec",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appCtx, err := loadApp()
@@ -156,10 +127,186 @@ func addPlanCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoade
 				return err
 			}
 			defer appCtx.Close()
-			note, err := appCtx.Plan.UpdateItem(args[0], plan.ItemChanges{
-				Status:       updateStatus,
-				AddCriteria:  updateCriteria,
-				AddResources: updateResources,
+			bundle, err := appCtx.Plan.PromoteBrainstorm(args[0])
+			if err != nil {
+				return err
+			}
+			return appCtx.Output.Print(bundle, func(w io.Writer) error {
+				if _, err := fmt.Fprintf(w, "Created epic %s at %s\n", bundle.Epic.Title, bundle.Epic.Path); err != nil {
+					return err
+				}
+				_, err := fmt.Fprintf(w, "Created seeded draft spec %s at %s\n", bundle.Spec.Title, bundle.Spec.Path)
+				return err
+			})
+		},
+	}
+	epicCmd.AddCommand(epicCreateCmd, epicListCmd, epicShowCmd, epicPromoteCmd)
+
+	specCmd := &cobra.Command{
+		Use:   "spec",
+		Short: "Manage epic specs",
+	}
+
+	specShowCmd := &cobra.Command{
+		Use:   "show <epic-slug>",
+		Short: "Show the canonical spec for an epic",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			appCtx, err := loadApp()
+			if err != nil {
+				return err
+			}
+			defer appCtx.Close()
+			note, err := appCtx.Plan.ReadSpec(args[0])
+			if err != nil {
+				return err
+			}
+			return appCtx.Output.Print(note, func(w io.Writer) error {
+				_, err := fmt.Fprintf(w, "%s\n\n%s", note.Path, note.Content)
+				return err
+			})
+		},
+	}
+
+	var specTitle string
+	var specBody string
+	var specFromStdin bool
+	var specMeta []string
+	var specEditor string
+	specUpdateCmd := &cobra.Command{
+		Use:   "update <epic-slug>",
+		Short: "Update an epic spec using flags, stdin, or your editor",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			appCtx, err := loadApp()
+			if err != nil {
+				return err
+			}
+			defer appCtx.Close()
+			if specTitle == "" && specBody == "" && !specFromStdin && len(specMeta) == 0 {
+				note, err := appCtx.Plan.ReadSpec(args[0])
+				if err != nil {
+					return err
+				}
+				edited, err := appCtx.Notes.EditInEditor(note.Path, specEditor)
+				if err != nil {
+					return err
+				}
+				return appCtx.Output.Print(edited, func(w io.Writer) error {
+					_, err := fmt.Fprintf(w, "Edited %s\n", edited.Path)
+					return err
+				})
+			}
+
+			metadata, err := parseMeta(specMeta)
+			if err != nil {
+				return err
+			}
+			body, err := readBody(cmd.InOrStdin(), specBody, specFromStdin)
+			if err != nil {
+				return err
+			}
+			update := notes.UpdateInput{
+				Metadata: metadata,
+				Summary:  "updated spec via CLI",
+			}
+			if specTitle != "" {
+				update.Title = &specTitle
+			}
+			if body != "" || specFromStdin {
+				update.Body = &body
+			}
+			note, err := appCtx.Plan.UpdateSpec(args[0], update)
+			if err != nil {
+				return err
+			}
+			return appCtx.Output.Print(note, func(w io.Writer) error {
+				_, err := fmt.Fprintf(w, "Updated %s\n", note.Path)
+				return err
+			})
+		},
+	}
+	specUpdateCmd.Flags().StringVarP(&specTitle, "title", "t", "", "update the spec title")
+	specUpdateCmd.Flags().StringVarP(&specBody, "body", "b", "", "replace body content")
+	specUpdateCmd.Flags().BoolVar(&specFromStdin, "stdin", false, "read body from stdin")
+	specUpdateCmd.Flags().StringArrayVarP(&specMeta, "set", "m", nil, "metadata key=value")
+	specUpdateCmd.Flags().StringVar(&specEditor, "editor", "", "editor to launch when no direct edits are supplied")
+
+	var specStatus string
+	specStatusCmd := &cobra.Command{
+		Use:   "status <epic-slug>",
+		Short: "Set the status of an epic spec",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			appCtx, err := loadApp()
+			if err != nil {
+				return err
+			}
+			defer appCtx.Close()
+			note, err := appCtx.Plan.SetSpecStatus(args[0], specStatus)
+			if err != nil {
+				return err
+			}
+			return appCtx.Output.Print(note, func(w io.Writer) error {
+				_, err := fmt.Fprintf(w, "Set spec %s to %s\n", note.Path, specStatus)
+				return err
+			})
+		},
+	}
+	specStatusCmd.Flags().StringVar(&specStatus, "set", "", "new spec status (draft, approved, implementing, done)")
+	_ = specStatusCmd.MarkFlagRequired("set")
+
+	specCmd.AddCommand(specShowCmd, specUpdateCmd, specStatusCmd)
+
+	storyCmd := &cobra.Command{
+		Use:   "story",
+		Short: "Manage execution stories",
+	}
+
+	var storyBody string
+	var storyCriteria []string
+	var storyResources []string
+	storyCreateCmd := &cobra.Command{
+		Use:   "create <epic-slug> <title>",
+		Short: "Create a story from an approved epic spec",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			appCtx, err := loadApp()
+			if err != nil {
+				return err
+			}
+			defer appCtx.Close()
+			note, err := appCtx.Plan.CreateStory(args[0], args[1], storyBody, storyCriteria, storyResources)
+			if err != nil {
+				return err
+			}
+			return appCtx.Output.Print(note, func(w io.Writer) error {
+				_, err := fmt.Fprintf(w, "Created story %s at %s\n", note.Title, note.Path)
+				return err
+			})
+		},
+	}
+	storyCreateCmd.Flags().StringVarP(&storyBody, "body", "b", "", "description")
+	storyCreateCmd.Flags().StringArrayVar(&storyCriteria, "criteria", nil, "acceptance criterion; repeatable")
+	storyCreateCmd.Flags().StringArrayVar(&storyResources, "resource", nil, "resource reference; repeatable")
+
+	var storyStatus string
+	var storyUpdateCriteria []string
+	var storyUpdateResources []string
+	storyUpdateCmd := &cobra.Command{
+		Use:   "update <story-slug>",
+		Short: "Update a story",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			appCtx, err := loadApp()
+			if err != nil {
+				return err
+			}
+			defer appCtx.Close()
+			note, err := appCtx.Plan.UpdateStory(args[0], plan.StoryChanges{
+				Status:       storyStatus,
+				AddCriteria:  storyUpdateCriteria,
+				AddResources: storyUpdateResources,
 			})
 			if err != nil {
 				return err
@@ -170,42 +317,37 @@ func addPlanCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoade
 			})
 		},
 	}
-	itemUpdateCmd.Flags().StringVar(&updateStatus, "status", "", "new status (todo, in_progress, done)")
-	itemUpdateCmd.Flags().StringArrayVar(&updateCriteria, "criteria", nil, "acceptance criterion to add; repeatable")
-	itemUpdateCmd.Flags().StringArrayVar(&updateResources, "resource", nil, "resource reference to add; repeatable")
+	storyUpdateCmd.Flags().StringVar(&storyStatus, "status", "", "new story status (todo, in_progress, blocked, done)")
+	storyUpdateCmd.Flags().StringArrayVar(&storyUpdateCriteria, "criteria", nil, "acceptance criterion to add; repeatable")
+	storyUpdateCmd.Flags().StringArrayVar(&storyUpdateResources, "resource", nil, "resource reference to add; repeatable")
 
-	var listGroup string
+	var listEpic string
 	var listStatus string
-	itemListCmd := &cobra.Command{
+	storyListCmd := &cobra.Command{
 		Use:   "list",
-		Short: "List work items in the current project",
+		Short: "List stories in the current project",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appCtx, err := loadApp()
 			if err != nil {
 				return err
 			}
 			defer appCtx.Close()
-			items, err := appCtx.Plan.ListItems(listGroup, listStatus)
+			stories, err := appCtx.Plan.ListStories(listEpic, listStatus)
 			if err != nil {
 				return err
 			}
-			info, _ := appCtx.Project.Resolve()
-			label := "Items"
-			if info != nil && info.Paradigm != nil {
-				label = strings.Title(info.Paradigm.ItemPlural)
-			}
-			return appCtx.Output.Print(items, func(w io.Writer) error {
-				if len(items) == 0 {
-					_, err := fmt.Fprintf(w, "No %s found.\n", strings.ToLower(label))
+			return appCtx.Output.Print(stories, func(w io.Writer) error {
+				if len(stories) == 0 {
+					_, err := fmt.Fprintln(w, "No stories found.")
 					return err
 				}
-				if _, err := fmt.Fprintf(w, "%s:\n", label); err != nil {
+				if _, err := fmt.Fprintln(w, "Stories:"); err != nil {
 					return err
 				}
-				for _, item := range items {
-					line := fmt.Sprintf("  %s %s", statusIcon(item.Status), item.Title)
-					if item.Container != "" {
-						line += fmt.Sprintf(" [%s]", item.Container)
+				for _, story := range stories {
+					line := fmt.Sprintf("  %s %s", statusIcon(story.Status), story.Title)
+					if story.Epic != "" {
+						line += fmt.Sprintf(" [%s]", story.Epic)
 					}
 					if _, err := fmt.Fprintln(w, line); err != nil {
 						return err
@@ -215,13 +357,14 @@ func addPlanCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoade
 			})
 		},
 	}
-	itemListCmd.Flags().StringVar(&listGroup, "group", "", "filter by container")
-	itemListCmd.Flags().StringVar(&listStatus, "status", "", "filter by status (todo, in_progress, done)")
-	itemCmd.AddCommand(itemCreateCmd, itemUpdateCmd, itemListCmd)
+	storyListCmd.Flags().StringVar(&listEpic, "epic", "", "filter by epic")
+	storyListCmd.Flags().StringVar(&listStatus, "status", "", "filter by status (todo, in_progress, blocked, done)")
+
+	storyCmd.AddCommand(storyCreateCmd, storyUpdateCmd, storyListCmd)
 
 	statusCmd := &cobra.Command{
 		Use:   "status",
-		Short: "Show project planning status",
+		Short: "Show epic/spec/story planning status",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appCtx, err := loadApp()
 			if err != nil {
@@ -233,15 +376,15 @@ func addPlanCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoade
 				return err
 			}
 			return appCtx.Output.Print(status, func(w io.Writer) error {
-				if _, err := fmt.Fprintf(w, "%s (%s)\n", status.Project, status.ParadigmName); err != nil {
+				if _, err := fmt.Fprintf(w, "%s (%s)\n", status.Project, status.PlanningModel); err != nil {
 					return err
 				}
-				remaining := status.TotalItems - status.DoneItems
-				if _, err := fmt.Fprintf(w, "  %s: %d total, %d done, %d remaining\n", strings.Title(status.ItemPlural), status.TotalItems, status.DoneItems, remaining); err != nil {
+				remaining := status.TotalStories - status.DoneStories
+				if _, err := fmt.Fprintf(w, "  Stories: %d total, %d done, %d in progress, %d blocked, %d remaining\n", status.TotalStories, status.DoneStories, status.InProgressStories, status.BlockedStories, remaining); err != nil {
 					return err
 				}
-				for _, c := range status.Containers {
-					if _, err := fmt.Fprintf(w, "  %s %s: %d/%d done\n", strings.Title(status.ContainerType), c.Title, c.DoneItems, c.TotalItems); err != nil {
+				for _, epic := range status.Epics {
+					if _, err := fmt.Fprintf(w, "  Epic %s [%s]: %d/%d stories done\n", epic.Title, epic.SpecStatus, epic.DoneStories, epic.TotalStories); err != nil {
 						return err
 					}
 				}
@@ -250,33 +393,7 @@ func addPlanCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoade
 		},
 	}
 
-	promoteCmd := &cobra.Command{
-		Use:   "promote <brainstorm-slug>",
-		Short: "Promote brainstorm ideas into work items",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			appCtx, err := loadApp()
-			if err != nil {
-				return err
-			}
-			defer appCtx.Close()
-			items, err := appCtx.Plan.Promote(args[0])
-			if err != nil {
-				return err
-			}
-			info, _ := appCtx.Project.Resolve()
-			label := "items"
-			if info != nil && info.Paradigm != nil {
-				label = info.Paradigm.ItemPlural
-			}
-			return appCtx.Output.Print(items, func(w io.Writer) error {
-				_, err := fmt.Fprintf(w, "Created %d %s from brainstorm\n", len(items), label)
-				return err
-			})
-		},
-	}
-
-	planCmd.AddCommand(initCmd, groupCmd, itemCmd, statusCmd, promoteCmd)
+	planCmd.AddCommand(initCmd, epicCmd, specCmd, storyCmd, statusCmd)
 	root.AddCommand(planCmd)
 }
 
@@ -286,6 +403,8 @@ func statusIcon(status string) string {
 		return "[x]"
 	case "in_progress":
 		return "[~]"
+	case "blocked":
+		return "[!]"
 	default:
 		return "[ ]"
 	}

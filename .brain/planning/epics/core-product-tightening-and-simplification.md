@@ -1,9 +1,10 @@
 ---
 created: "2026-04-11T14:49:34Z"
 project: brain
+spec: core-product-tightening-and-simplification
 title: Core Product Tightening And Simplification
 type: epic
-updated: "2026-04-11T14:49:53Z"
+updated: "2026-04-11T21:53:09Z"
 ---
 # Core Product Tightening And Simplification
 
@@ -25,3 +26,7 @@ Bring the product surface back in line with the strongest parts of the implement
 ## Notes
 
 Suggested order: fix policy correctness first, then align retrieval truth with product language, then make adoption easier, then simplify context and session surfaces.
+
+## Spec
+
+- [[.brain/planning/specs/core-product-tightening-and-simplification.md]]

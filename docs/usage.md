@@ -33,7 +33,7 @@ For a new or mostly empty repo:
 brain init --project .
 brain doctor --project .
 brain context install --project .
-brain plan init --project . --paradigm epics
+brain plan init --project .
 ```
 
 For an existing repo that already has docs or an unmanaged `AGENTS.md`:
@@ -41,7 +41,7 @@ For an existing repo that already has docs or an unmanaged `AGENTS.md`:
 ```bash
 brain adopt --project .
 brain doctor --project .
-brain plan init --project . --paradigm epics
+brain plan init --project .
 ```
 
 This creates:
@@ -94,21 +94,30 @@ Brainstorms live in `.brain/brainstorms/`.
 Initialize once:
 
 ```bash
-brain plan init --project . --paradigm epics
+brain plan init --project .
 ```
 
-Create containers and items:
+Brainstorm -> epic -> spec -> stories:
 
 ```bash
-brain plan group create --project . "Forms API Hardening"
-brain plan item create --project . "Validate API keys" --group "Forms API Hardening" \
+brain brainstorm start --project . "Forms API Hardening"
+brain plan epic promote --project . forms-api-hardening
+brain plan spec status --project . forms-api-hardening --set approved
+brain plan story create --project . forms-api-hardening "Validate API keys" \
   --body "Harden external submissions before broader rollout." \
   --criteria "Reject malformed bearer tokens" \
   --criteria "Return stable 401 responses" \
   --resource "[[.brain/resources/changes/forms-api-rollout.md]]"
-brain plan item update --project . validate-api-keys --status in_progress
+brain plan story update --project . validate-api-keys --status in_progress
 brain plan status --project .
 ```
+
+Planning is intentionally opinionated:
+
+- brainstorms capture the high-level what and why
+- epics capture the feature or initiative
+- each epic gets one canonical spec
+- stories are created only after the spec is approved
 
 ## Context Management
 

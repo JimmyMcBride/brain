@@ -83,18 +83,6 @@ What are we exploring?
 
 ## Raw Notes
 `,
-	"plan.md": `# Plan: {{ .Title }}
-
-Created: {{ .Now }}
-
-## Goals
-
-## Milestones
-
-## Tasks
-
-## Notes
-`,
 	"project_meta.md": `# {{ .Title }}
 
 ## Outcome
@@ -103,17 +91,51 @@ Created: {{ .Now }}
 
 ## Notes
 `,
-	"container.md": `# {{ .Title }}
+	"epic.md": `# {{ .Title }}
 
 Created: {{ .Now }}
 
-## Description
+## Summary
 
-## Work Items
+## Why It Matters
+
+## Spec
+
+## Sources
+
+## Progress
 
 ## Notes
 `,
-	"work_item.md": `# {{ .Title }}
+	"spec.md": `# {{ .Title }}
+
+Created: {{ .Now }}
+
+## Why
+
+## Problem
+
+## Goals
+
+## Non-Goals
+
+## Requirements
+
+## UX / Flows
+
+## Data / Interfaces
+
+## Risks / Open Questions
+
+## Rollout
+
+## Story Breakdown
+
+## Resources
+
+## Notes
+`,
+	"story.md": `# {{ .Title }}
 
 Created: {{ .Now }}
 

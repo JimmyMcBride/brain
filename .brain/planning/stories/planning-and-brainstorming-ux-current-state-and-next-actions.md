@@ -1,11 +1,13 @@
 ---
 container: planning-and-brainstorming-ux
 created: "2026-04-11T05:10:54Z"
+epic: planning-and-brainstorming-ux
 project: brain
+spec: planning-and-brainstorming-ux
 status: todo
 title: Planning And Brainstorming UX Current State And Next Actions
 type: story
-updated: "2026-04-11T05:10:54Z"
+updated: "2026-04-11T21:53:09Z"
 ---
 # Planning And Brainstorming UX Current State And Next Actions
 
@@ -27,6 +29,8 @@ Track the current planning and brainstorming model and the next iteration points
 
 - [[.brain/resources/references/agent-workflow.md]]
 - [[.brain/resources/changes/brainstorm-recording-and-project-planning.md]]
+- [[.brain/planning/specs/planning-and-brainstorming-ux.md]]
+
 
 
 
