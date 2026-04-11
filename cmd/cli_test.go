@@ -281,12 +281,21 @@ func TestCLIProjectPlanningWorkflow(t *testing.T) {
 
 func TestCLISkillsCommands(t *testing.T) {
 	env := newCLIEnv(t)
-	targets := requireOK(t, env.run(t, "", "skills", "targets", "--scope", "both", "-a", "codex", "-a", "zed", "--project", env.project, "--skill-root", env.custom))
+	targets := requireOK(t, env.run(t, "", "skills", "targets", "--scope", "both", "-a", "codex", "-a", "copilot", "-a", "pi.dev", "-a", "zed", "--project", env.project))
 	if !strings.Contains(targets, "codex [global] brain <ROOT>/home/.codex/skills/brain") {
 		t.Fatalf("missing global codex target:\n%s", targets)
 	}
-	if !strings.Contains(targets, "codex [global] googleworkspace-cli <ROOT>/home/.codex/skills/googleworkspace-cli") {
-		t.Fatalf("missing global googleworkspace-cli target:\n%s", targets)
+	if !strings.Contains(targets, "copilot [global] brain <ROOT>/home/.copilot/skills/brain") {
+		t.Fatalf("missing global copilot target:\n%s", targets)
+	}
+	if !strings.Contains(targets, "copilot [local] brain <ROOT>/project/.github/skills/brain") {
+		t.Fatalf("missing local copilot target:\n%s", targets)
+	}
+	if !strings.Contains(targets, "pi [global] brain <ROOT>/home/.pi/agent/skills/brain") {
+		t.Fatalf("missing global pi target:\n%s", targets)
+	}
+	if !strings.Contains(targets, "pi [local] brain <ROOT>/project/.pi/skills/brain") {
+		t.Fatalf("missing local pi target:\n%s", targets)
 	}
 	if !strings.Contains(targets, "zed [local] brain <ROOT>/project/.zed/skills/brain") {
 		t.Fatalf("missing local zed target:\n%s", targets)
@@ -295,13 +304,13 @@ func TestCLISkillsCommands(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(env.project, ".codex", "skills", "brain", "SKILL.md")); err != nil {
 		t.Fatalf("expected local skill install: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(env.project, ".codex", "skills", "googleworkspace-cli", "SKILL.md")); err != nil {
-		t.Fatalf("expected local googleworkspace-cli install: %v", err)
+	if _, err := os.Stat(filepath.Join(env.project, ".codex", "skills", "googleworkspace-cli")); !os.IsNotExist(err) {
+		t.Fatalf("expected no non-brain skill installs, got err=%v", err)
 	}
 
-	filtered := requireOK(t, env.run(t, "", "skills", "targets", "--scope", "global", "-a", "codex", "--skill", "brain"))
-	if strings.Contains(filtered, "googleworkspace-cli") {
-		t.Fatalf("expected filtered targets to omit googleworkspace-cli:\n%s", filtered)
+	help := requireOK(t, env.run(t, "", "skills", "install", "--help"))
+	if strings.Contains(help, "--skill") || strings.Contains(help, "--skill-root") {
+		t.Fatalf("expected help to omit removed flags:\n%s", help)
 	}
 }
 

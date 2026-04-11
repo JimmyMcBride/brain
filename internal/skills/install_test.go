@@ -9,18 +9,16 @@ import (
 
 func TestResolveTargetsGlobalAndLocal(t *testing.T) {
 	repoRoot := t.TempDir()
-	for _, skill := range []string{"brain", "googleworkspace-cli"} {
-		if err := os.MkdirAll(filepath.Join(repoRoot, "skills", skill), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(repoRoot, "skills", skill, "SKILL.md"), []byte("skill"), 0o644); err != nil {
-			t.Fatal(err)
-		}
+	if err := os.MkdirAll(filepath.Join(repoRoot, "skills", "brain"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoRoot, "skills", "brain", "SKILL.md"), []byte("skill"), 0o644); err != nil {
+		t.Fatal(err)
 	}
 	installer := NewInstaller("/home/tester")
 	targets, err := installer.ResolveTargets(InstallRequest{
 		Scope:      ScopeBoth,
-		Agents:     []string{"codex", "zed"},
+		Agents:     []string{"codex", "copilot", "pi", "zed"},
 		ProjectDir: "/tmp/project",
 		Mode:       ModeCopy,
 		RepoRoot:   repoRoot,
@@ -29,14 +27,14 @@ func TestResolveTargetsGlobalAndLocal(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]bool{
-		filepath.Join("/home/tester", ".codex", "skills", "brain"):               true,
-		filepath.Join("/home/tester", ".codex", "skills", "googleworkspace-cli"): true,
-		filepath.Join("/home/tester", ".zed", "skills", "brain"):                 true,
-		filepath.Join("/home/tester", ".zed", "skills", "googleworkspace-cli"):   true,
-		filepath.Join("/tmp/project", ".codex", "skills", "brain"):               true,
-		filepath.Join("/tmp/project", ".codex", "skills", "googleworkspace-cli"): true,
-		filepath.Join("/tmp/project", ".zed", "skills", "brain"):                 true,
-		filepath.Join("/tmp/project", ".zed", "skills", "googleworkspace-cli"):   true,
+		filepath.Join("/home/tester", ".codex", "skills", "brain"):       true,
+		filepath.Join("/home/tester", ".copilot", "skills", "brain"):     true,
+		filepath.Join("/home/tester", ".pi", "agent", "skills", "brain"): true,
+		filepath.Join("/home/tester", ".zed", "skills", "brain"):         true,
+		filepath.Join("/tmp/project", ".codex", "skills", "brain"):       true,
+		filepath.Join("/tmp/project", ".github", "skills", "brain"):      true,
+		filepath.Join("/tmp/project", ".pi", "skills", "brain"):          true,
+		filepath.Join("/tmp/project", ".zed", "skills", "brain"):         true,
 	}
 	if len(targets) != len(want) {
 		t.Fatalf("expected %d targets, got %d", len(want), len(targets))
@@ -45,6 +43,14 @@ func TestResolveTargetsGlobalAndLocal(t *testing.T) {
 		if !want[target.Path] {
 			t.Fatalf("unexpected target: %+v", target)
 		}
+	}
+}
+
+func TestNormalizeAgentsSupportsAliases(t *testing.T) {
+	got := normalizeAgents([]string{"copilot", "github-copilot", "pi.dev", "pi", "  "})
+	want := []string{"copilot", "pi"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("unexpected normalized agents: got=%v want=%v", got, want)
 	}
 }
 
@@ -85,37 +91,21 @@ func TestInstallCopiesSkillBundle(t *testing.T) {
 	}
 }
 
-func TestInstallFiltersSpecificSkills(t *testing.T) {
+func TestResolveTargetsRequiresBrainSkillSource(t *testing.T) {
 	repoRoot := t.TempDir()
-	for _, skill := range []string{"brain", "googleworkspace-cli"} {
-		if err := os.MkdirAll(filepath.Join(repoRoot, "skills", skill), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(repoRoot, "skills", skill, "SKILL.md"), []byte("skill"), 0o644); err != nil {
-			t.Fatal(err)
-		}
+	if err := os.MkdirAll(filepath.Join(repoRoot, "skills"), 0o755); err != nil {
+		t.Fatal(err)
 	}
 
-	home := t.TempDir()
-	installer := NewInstaller(home)
-	results, err := installer.Install(InstallRequest{
+	installer := NewInstaller(t.TempDir())
+	_, err := installer.ResolveTargets(InstallRequest{
 		Mode:     ModeCopy,
 		Scope:    ScopeGlobal,
 		Agents:   []string{"codex"},
-		Skills:   []string{"googleworkspace-cli"},
 		RepoRoot: repoRoot,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(results) != 1 || results[0].Skill != "googleworkspace-cli" {
-		t.Fatalf("unexpected install results: %+v", results)
-	}
-	if _, err := os.Stat(filepath.Join(home, ".codex", "skills", "googleworkspace-cli", "SKILL.md")); err != nil {
-		t.Fatalf("expected googleworkspace-cli install: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(home, ".codex", "skills", "brain")); !os.IsNotExist(err) {
-		t.Fatalf("expected brain skill to be absent, got err=%v", err)
+	if err == nil || !strings.Contains(err.Error(), "skill source") {
+		t.Fatalf("expected missing brain skill source error, got %v", err)
 	}
 }
 
@@ -148,27 +138,5 @@ func TestInstallForcesCopyForOpenClaw(t *testing.T) {
 	}
 	if info.Mode()&os.ModeSymlink != 0 {
 		t.Fatal("expected OpenClaw install to be a directory copy, not a symlink")
-	}
-}
-
-func TestInstallRejectsUnknownSkill(t *testing.T) {
-	repoRoot := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(repoRoot, "skills", "brain"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(repoRoot, "skills", "brain", "SKILL.md"), []byte("skill"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	installer := NewInstaller(t.TempDir())
-	_, err := installer.ResolveTargets(InstallRequest{
-		Mode:     ModeCopy,
-		Scope:    ScopeGlobal,
-		Agents:   []string{"codex"},
-		Skills:   []string{"missing"},
-		RepoRoot: repoRoot,
-	})
-	if err == nil || !strings.Contains(err.Error(), "unknown skill(s): missing") {
-		t.Fatalf("expected unknown skill error, got %v", err)
 	}
 }

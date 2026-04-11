@@ -1,50 +1,51 @@
 # Skills
 
-`brain` ships canonical skill bundles for agent runtimes.
+`brain` installs one skill bundle: the Brain skill itself.
 
-## Bundle Layout
+## Brain Skill Bundle
 
 - `skills/brain/SKILL.md`
 - `skills/brain/agents/openai.yaml`
 - `skills/brain/agents/openclaw.yaml`
-- `skills/googleworkspace-cli/SKILL.md`
-- `skills/googleworkspace-cli/agents/openai.yaml`
-- `skills/googleworkspace-cli/references/*.md`
 - `skills/wrappers/*.md`
 
-## Included Skills
-
-- `brain`
-  - generic fallback for project-local Brain workflows, memory, planning, brainstorming, context, and sessions
-- `googleworkspace-cli`
-  - generic `gws` skill for Google Workspace terminal work across Drive, Gmail, Calendar, Sheets, Docs, Chat, and related APIs
+The Brain skill is the generic fallback for project-local Brain workflows, memory, planning, brainstorming, context, and sessions.
 
 ## Install Targets
 
 Preview install targets:
 
 ```bash
-brain skills targets --scope both --agent codex --agent claude --project .
-brain skills targets --scope global --agent codex --skill brain
+brain skills targets --scope both --agent codex --agent claude --agent copilot --agent pi --project .
 ```
 
 Install globally:
 
 ```bash
 brain skills install --scope global --agent codex
-brain skills install --scope global --agent codex --skill googleworkspace-cli
+brain skills install --scope global --agent claude
+brain skills install --scope global --agent copilot
+brain skills install --scope global --agent pi
 ```
 
 Install into a project:
 
 ```bash
 brain skills install --scope local --agent codex --project .
+brain skills install --scope local --agent copilot --project .
+brain skills install --scope local --agent pi --project .
 ```
 
 Use `--mode copy` when the target runtime does not support symlinked skill directories well. OpenClaw should generally use copy mode.
-When no `--skill` flag is provided, `brain` installs all repo-owned skills discovered under `./skills`.
 
-Global Codex install targets land under `~/.codex/skills/`.
+Default roots:
+
+- Codex global: `~/.codex/skills/`
+- Claude global: `~/.claude/skills/`
+- Copilot global: `~/.copilot/skills/`
+- Pi global: `~/.pi/agent/skills/`
+- Copilot local: `.github/skills/`
+- Pi local: `.pi/skills/`
 
 ## Relationship To Project Context
 

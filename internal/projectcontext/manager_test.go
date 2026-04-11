@@ -18,6 +18,9 @@ func TestWrapperFile(t *testing.T) {
 	if got := filepath.ToSlash(wrapperFile(project, "claude")); got != "/tmp/project/.claude/CLAUDE.md" {
 		t.Fatalf("unexpected claude wrapper path: %s", got)
 	}
+	if got := filepath.ToSlash(wrapperFile(project, "copilot")); got != "/tmp/project/.github/copilot-instructions.md" {
+		t.Fatalf("unexpected copilot wrapper path: %s", got)
+	}
 }
 
 func TestResolveAgentsFromInstalledSkills(t *testing.T) {

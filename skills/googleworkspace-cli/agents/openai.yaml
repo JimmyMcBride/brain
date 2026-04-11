@@ -1,7 +1,0 @@
-interface:
-  display_name: "Google Workspace CLI"
-  short_description: "Use the gws CLI for Google Workspace automation, schema discovery, and safe terminal workflows."
-  default_prompt: "Use the googleworkspace-cli skill when the user wants to use the gws CLI for Google Workspace APIs from the terminal."
-
-policy:
-  allow_implicit_invocation: true

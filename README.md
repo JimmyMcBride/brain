@@ -133,7 +133,7 @@ For an existing repo with its own docs or unmanaged `AGENTS.md`, use `brain adop
 - `brain plan ...`: project-local planning and work tracking
 - `brain context ...`: install or refresh project context files
 - `brain session ...`: enforce workflow and verification rules
-- `brain skills ...`: install the repo skill bundles for agent runtimes
+- `brain skills ...`: install the Brain skill for agent runtimes
 - `brain history`, `brain undo`: inspect and revert tracked note changes
 - `brain version`, `brain update`: inspect or update the CLI
 
@@ -153,6 +153,33 @@ It excludes local runtime state such as:
 This keeps retrieval focused on durable project knowledge instead of transient internals.
 
 By default, `brain` uses the built-in `localhash` provider. That gives you strong local lexical search plus lightweight semantic hinting without any network dependency. If you want stronger semantic retrieval, switch the embedding provider to `openai`.
+
+## Install The Brain Skill
+
+Add the Brain skill to your machine:
+
+```bash
+brain skills install --scope global --agent codex
+brain skills install --scope global --agent claude
+brain skills install --scope global --agent copilot
+brain skills install --scope global --agent pi
+```
+
+Add the Brain skill to the current project:
+
+```bash
+brain skills install --scope local --agent codex --project .
+brain skills install --scope local --agent copilot --project .
+brain skills install --scope local --agent pi --project .
+```
+
+Preview the target paths first:
+
+```bash
+brain skills targets --scope both --agent codex --agent claude --agent copilot --agent pi --project .
+```
+
+`brain skills` installs only the Brain skill from this repo.
 
 ## Config
 

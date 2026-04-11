@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-11T17:19:12Z"
+updated: "2026-04-11T21:20:10Z"
 ---
 # Current State
 
@@ -32,8 +32,7 @@ This file is a deterministic snapshot of the repository state at the last refres
 
 Add repo-specific notes here. `brain context refresh` preserves content outside managed blocks.
 
-- 2026-04-11: Added the repo-owned `googleworkspace-cli` skill bundle, installed it to `~/.codex/skills/googleworkspace-cli`, and documented the one-line install path via `scripts/install.sh`.
-- 2026-04-11: Hardened note updates to normalize full-note stdin/frontmatter safely and made `brain skills` install repo-owned skills as a bundle by default.
+- 2026-04-11: Hardened note updates to normalize full-note stdin/frontmatter safely and tightened `brain skills` so it now installs only the Brain skill instead of acting like a multi-skill bundle installer.
 - 2026-04-11: Installed the updated global `brain` binary from commit `93e71a6` and pushed the note-integrity plus multi-skill install changes to `main`.
 - 2026-04-11: Added the brain emoji to the README title and published the change to `main`.
 - 2026-04-11: Rewrote the README and why-doc wording to describe Brain in the present tense without historical framing.
@@ -52,3 +51,7 @@ Add repo-specific notes here. `brain context refresh` preserves content outside 
 - 2026-04-11: Added Windows support across config pathing, release assets, `brain update`, a PowerShell installer, a PowerShell maintainer refresh script, Windows CI/release coverage, and the user-facing install/update docs. Windows now targets `%LocalAppData%\\Programs\\brain\\brain.exe` by default and uses `.zip` release assets with checksum verification.
 
 - 2026-04-11: Recorded the Windows support rollout through a Brain-managed current-state update so session closeout tracks the repo change.
+
+- 2026-04-11: Added first-class Copilot and Pi skill targets based on their documented roots. Copilot now installs globally to `~/.copilot/skills` and locally to `.github/skills`; Pi now installs globally to `~/.pi/agent/skills` and locally to `.pi/skills`.
+
+- 2026-04-11: Simplified `brain skills` so it now installs only the Brain skill, removed the repo-owned `googleworkspace-cli` bundle, and rewrote the README/usage docs around adding the Brain skill globally or locally.

@@ -146,11 +146,15 @@ brain session finish --project . --summary "auth flow tightened"
 brain skills targets --scope both --agent codex --project .
 brain skills install --scope global --agent codex
 brain skills install --scope local --agent codex --project .
-brain skills install --scope global --agent codex --skill googleworkspace-cli
+brain skills install --scope global --agent claude
+brain skills install --scope global --agent copilot
+brain skills install --scope local --agent copilot --project .
+brain skills install --scope global --agent pi
+brain skills install --scope local --agent pi --project .
 brain skills install --scope global --agent openclaw --mode copy
 ```
 
-Without `--skill`, install and target resolution include all repo-owned skills under `./skills`.
+`brain skills install` always installs the Brain skill. Use `--scope global` to add it to your machine and `--scope local --project .` to add it to the current project.
 
 ## History And Undo
 

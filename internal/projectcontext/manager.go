@@ -139,6 +139,8 @@ func wrapperFile(projectDir, agent string) string {
 	switch agent {
 	case "claude":
 		return filepath.Join(projectDir, ".claude", "CLAUDE.md")
+	case "copilot":
+		return filepath.Join(projectDir, ".github", "copilot-instructions.md")
 	default:
 		return filepath.Join(projectDir, "."+agent, "AGENTS.md")
 	}

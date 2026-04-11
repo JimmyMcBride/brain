@@ -37,7 +37,7 @@ The index is local to each project under `.brain/state/brain.sqlite3`.
 - `internal/project` owns `.brain/project.yaml` and planning paradigm metadata
 - `internal/plan` owns group/item planning behavior
 - `internal/brainstorm` owns project-local brainstorming flows
-- `internal/skills` installs repo-owned skill bundles into agent runtimes
+- `internal/skills` installs the Brain skill into agent runtimes
 - `internal/update` owns version/update behavior
 
 ## Composition Root
