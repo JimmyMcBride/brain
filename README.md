@@ -11,6 +11,12 @@ It does four things:
 
 If you want the shortest possible explanation: `brain` is a command line memory system for markdown notes and AI-assisted software work.
 
+## Read this next
+
+- Read [`docs/usage.md`](docs/usage.md) if you want to use the CLI day to day.
+- Read [`docs/architecture.md`](docs/architecture.md) if you want to understand the internals.
+- Read [`docs/skills.md`](docs/skills.md) if you want to install skills, project context, and sessions for agents.
+
 ## Mental model
 
 You keep your notes in Obsidian-compatible markdown. `brain` indexes and searches them locally. In coding repos, `brain` can also install project context and enforce a session workflow so agents do not just improvise.
@@ -53,6 +59,17 @@ flowchart LR
 - Project-local context bundles for coding agents
 - Session enforcement with repo-local policy and ledgers
 - Backups, history, undo, and diffable organize workflows
+
+## Start here
+
+If you are new to `brain`, this is the simplest path:
+
+1. run `brain init`
+2. create or capture a few notes
+3. run `brain reindex`
+4. use `brain search` and `brain find`
+5. if you want agents to use the repo consistently, run `brain context install`
+6. if you want hard enforcement, use `brain session start`
 
 ## Install
 

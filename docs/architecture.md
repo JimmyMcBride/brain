@@ -1,59 +1,116 @@
 # Architecture
 
-`brain` is a local-first Go CLI for managing an Obsidian-compatible markdown vault with PARA at the top level and hybrid retrieval on top.
+`docs/architecture.md` explains how `brain` is built. It is for contributors and anyone who wants to understand the internal model.
 
-## Components
+Read [`../README.md`](../README.md) first for the product overview. Read [`usage.md`](usage.md) if you want command workflows instead of internals.
 
-- `internal/config`: XDG-aware config loading plus env overrides.
-- `internal/vault`: vault validation, PARA scaffolding, markdown walking, and path resolution.
-- `internal/notes`: note model, YAML frontmatter handling, templates, file operations.
-- `internal/index`: SQLite schema, FTS5 virtual table, markdown chunking, embedding storage.
-- `internal/search`: hybrid search that merges FTS and embedding similarity.
-- `internal/history` and `internal/backup`: append-only logs, pre-change backups, undo.
-- `internal/content`: simple seed, gather, outline, and publish workflow.
-- `internal/projectcontext`: generates repo-local `AGENTS.md`, `.brain/context/*`, and agent wrapper files.
-- `internal/session`: enforces project sessions, policy checks, ledger writes, and finish-stage validation.
-- `internal/skills`: installs canonical and wrapper skill docs into agent directories.
+## System shape
 
-## Project Context
+At a high level, `brain` is a markdown-first system with three layers:
 
-`brain` also supports repo-local context engineering for coding agents:
+1. the vault layer where notes live as plain files
+2. the local service layer where indexing, history, content, and policy logic run
+3. the agent layer where skills, project context, and sessions shape repo behavior
 
-1. `brain context install` creates a root `AGENTS.md`.
-2. It generates a modular `.brain/context` bundle for overview, architecture, standards, workflows, memory policy, and current state.
-3. It generates `.brain/policy.yaml` plus a managed `.gitignore` block for local session state.
-3. It can generate thin agent-specific wrappers such as `.codex/AGENTS.md` or `.claude/CLAUDE.md`.
-4. `brain context refresh` updates brain-managed sections while preserving user-authored content outside managed blocks.
+```mermaid
+flowchart TD
+    V["Vault layer<br/>markdown notes in PARA folders"] --> S["brain services"]
+    S --> I["Indexing and search<br/>SQLite + FTS5 + embeddings"]
+    S --> H["History and backup<br/>logs + backups + undo"]
+    S --> C["Content packaging<br/>seed / gather / outline / publish"]
+    S --> P["Project context<br/>AGENTS.md + .brain/context + policy"]
+    P --> A["Agent workflows<br/>skills + session enforcement"]
+```
 
-## Session Enforcement
+## Package map
 
-`brain` now supports hard project-session enforcement:
+- `internal/config`: XDG-aware config loading plus env overrides
+- `internal/vault`: vault validation, PARA scaffolding, markdown walking, and path resolution
+- `internal/notes`: note model, YAML frontmatter handling, templates, and file operations
+- `internal/index`: SQLite schema, FTS5 virtual table, markdown chunking, embedding storage
+- `internal/search`: hybrid ranking over FTS and vector similarity
+- `internal/history`: append-only logs and undo orchestration
+- `internal/backup`: pre-change file backups
+- `internal/content`: note-to-content workflow helpers
+- `internal/projectcontext`: project context generation, wrappers, managed file updates, policy generation
+- `internal/session`: active session state, ledger writing, preflight, and closeout validation
+- `internal/skills`: skill installation into global or local agent roots
 
-1. `brain session start --task "..."` validates preflight requirements and writes `.brain/session.json`.
-2. `brain session run -- ...` records verification commands in the active session.
-3. `brain session validate --stage finish` evaluates repo changes, note updates, reindex status, and required command runs.
-4. `brain session finish` writes an immutable ledger entry under `.brain/sessions/` and clears the active session.
+## Data flow
 
-## Hybrid RAG
+### Vault and retrieval
 
-The retrieval layer is intentionally simple and local:
+`brain` treats markdown in the vault as the source of truth. Reindexing produces a local search layer; it does not replace the files.
 
-1. Notes are parsed from the vault.
-2. Markdown bodies are chunked on headings.
-3. Chunks are written into SQLite and mirrored into an FTS5 table.
-4. Embeddings are generated per chunk and stored as blobs.
-5. Searches query FTS and embeddings separately.
-6. Scores are normalized and merged into a final ranking.
+```mermaid
+flowchart LR
+    N["Vault notes"] --> C["Chunk markdown by headings"]
+    C --> D["SQLite tables"]
+    D --> F["FTS5 chunks table"]
+    D --> E["Embedding blobs"]
+    Q["search query"] --> F
+    Q --> E
+    F --> M["candidate set"]
+    E --> M
+    M --> R["normalize + merge + rerank"]
+```
 
-The default embedding provider is `localhash`, which keeps the tool usable without network access. `openai` is supported for stronger semantic retrieval when `OPENAI_API_KEY` is available.
+### Project context and sessions
 
-## PARA Model
+Repo-local context is generated from deterministic repo facts. Sessions add enforcement on top of that context.
+
+```mermaid
+flowchart LR
+    R["Repo scan"] --> G["AGENTS.md + .brain/context + .brain/policy.yaml"]
+    G --> S["session start"]
+    S --> V["active session state"]
+    V --> C["repo work + note updates + session run commands"]
+    C --> F["finish validation"]
+    F --> L["immutable ledger entry"]
+```
+
+## Retrieval model
+
+The hybrid retrieval path is intentionally simple and inspectable:
+
+1. parse notes from the vault
+2. split markdown by headings
+3. store chunks in SQLite
+4. mirror chunk text into FTS5
+5. generate embeddings for chunks
+6. search lexical and semantic candidates separately
+7. normalize and merge scores into a final ranking
+
+The default embedder is `localhash`, which keeps the tool usable offline. `openai` is supported when better semantic retrieval matters more than strict local-only operation.
+
+## Safety model
+
+`brain` avoids direct unsafe mutation patterns by default:
+
+- note-changing operations can create backups first
+- changes are logged into append-only history
+- undo uses stored backups and operation metadata
+- organize flows support dry-run behavior
+- session enforcement can require durable note updates and explicit verification commands
+
+## Project-context model
+
+Project context is split deliberately:
+
+- `AGENTS.md`: the root contract for the repo
+- `.brain/context/*`: modular agent-readable project context
+- `.brain/policy.yaml`: machine-readable enforcement policy
+- agent wrappers such as `.codex/AGENTS.md` or `.claude/CLAUDE.md`: thin pointers back to the root contract
+
+Generated files are brain-managed through markers or whole-file ownership so refreshes stay deterministic while leaving room for local notes outside managed sections.
+
+## PARA model
 
 `brain` keeps the top level intentionally narrow:
 
-- `Projects/`: active outcomes with an end state.
-- `Areas/`: ongoing responsibilities and recurring context.
-- `Resources/`: reference material, captures, lessons, and content packages.
-- `Archives/`: inactive material retained for history.
+- `Projects/`: active outcomes with an end state
+- `Areas/`: ongoing responsibilities and recurring context
+- `Resources/`: reference material, captures, lessons, and content packages
+- `Archives/`: inactive material retained for history
 
 Richer structure belongs below those folders, not beside them.
