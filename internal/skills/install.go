@@ -29,6 +29,7 @@ type InstallRequest struct {
 	Mode       InstallMode
 	Scope      Scope
 	Agents     []string
+	Skills     []string
 	ProjectDir string
 	SkillRoots []string
 	RepoRoot   string
@@ -36,6 +37,7 @@ type InstallRequest struct {
 
 type InstallResult struct {
 	Agent  string `json:"agent"`
+	Skill  string `json:"skill"`
 	Scope  string `json:"scope"`
 	Root   string `json:"root"`
 	Path   string `json:"path"`
@@ -43,10 +45,17 @@ type InstallResult struct {
 }
 
 type Target struct {
-	Agent string `json:"agent"`
-	Scope string `json:"scope"`
-	Root  string `json:"root"`
-	Path  string `json:"path"`
+	Agent  string `json:"agent"`
+	Skill  string `json:"skill"`
+	Scope  string `json:"scope"`
+	Root   string `json:"root"`
+	Path   string `json:"path"`
+	Source string `json:"-"`
+}
+
+type SkillSource struct {
+	Name string
+	Path string
 }
 
 func NewInstaller(home string) *Installer {
@@ -59,11 +68,6 @@ func NewInstaller(home string) *Installer {
 }
 
 func (i *Installer) Install(req InstallRequest) ([]InstallResult, error) {
-	source := filepath.Join(req.RepoRoot, "skills", "brain")
-	if err := validateSkillSource(source); err != nil {
-		return nil, err
-	}
-
 	targets, err := i.ResolveTargets(req)
 	if err != nil {
 		return nil, err
@@ -74,11 +78,12 @@ func (i *Installer) Install(req InstallRequest) ([]InstallResult, error) {
 			return nil, fmt.Errorf("create skill root %s: %w", target.Root, err)
 		}
 		mode := effectiveMode(req.Mode, target)
-		if err := installPath(mode, source, target.Path); err != nil {
+		if err := installPath(mode, target.Source, target.Path); err != nil {
 			return nil, err
 		}
 		results = append(results, InstallResult{
 			Agent:  target.Agent,
+			Skill:  target.Skill,
 			Scope:  target.Scope,
 			Root:   target.Root,
 			Path:   target.Path,
@@ -108,16 +113,24 @@ func (i *Installer) ResolveTargets(req InstallRequest) ([]Target, error) {
 	if len(agents) == 0 {
 		agents = knownAgents()
 	}
+	discovered, err := discoverSkills(req.RepoRoot, req.Skills)
+	if err != nil {
+		return nil, err
+	}
 
 	var targets []Target
 	for _, root := range req.SkillRoots {
 		root = filepath.Clean(expandHome(root, i.Home))
-		targets = append(targets, Target{
-			Agent: agentNameFromRoot(root),
-			Scope: "custom",
-			Root:  root,
-			Path:  filepath.Join(root, "brain"),
-		})
+		for _, skill := range discovered {
+			targets = append(targets, Target{
+				Agent:  agentNameFromRoot(root),
+				Skill:  skill.Name,
+				Scope:  "custom",
+				Root:   root,
+				Path:   filepath.Join(root, skill.Name),
+				Source: skill.Path,
+			})
+		}
 	}
 
 	if scope == ScopeLocal || scope == ScopeBoth {
@@ -128,28 +141,88 @@ func (i *Installer) ResolveTargets(req InstallRequest) ([]Target, error) {
 		projectDir = filepath.Clean(expandHome(projectDir, i.Home))
 		for _, agent := range agents {
 			root := filepath.Join(projectDir, "."+agent, "skills")
-			targets = append(targets, Target{
-				Agent: agent,
-				Scope: string(ScopeLocal),
-				Root:  root,
-				Path:  filepath.Join(root, "brain"),
-			})
+			for _, skill := range discovered {
+				targets = append(targets, Target{
+					Agent:  agent,
+					Skill:  skill.Name,
+					Scope:  string(ScopeLocal),
+					Root:   root,
+					Path:   filepath.Join(root, skill.Name),
+					Source: skill.Path,
+				})
+			}
 		}
 	}
 
 	if scope == ScopeGlobal || scope == ScopeBoth {
 		for _, agent := range agents {
 			root := knownGlobalSkillRoot(i.Home, agent)
-			targets = append(targets, Target{
-				Agent: agent,
-				Scope: string(ScopeGlobal),
-				Root:  root,
-				Path:  filepath.Join(root, "brain"),
-			})
+			for _, skill := range discovered {
+				targets = append(targets, Target{
+					Agent:  agent,
+					Skill:  skill.Name,
+					Scope:  string(ScopeGlobal),
+					Root:   root,
+					Path:   filepath.Join(root, skill.Name),
+					Source: skill.Path,
+				})
+			}
 		}
 	}
 
 	return dedupeTargets(targets), nil
+}
+
+func discoverSkills(repoRoot string, selected []string) ([]SkillSource, error) {
+	skillsRoot := filepath.Join(repoRoot, "skills")
+	entries, err := os.ReadDir(skillsRoot)
+	if err != nil {
+		return nil, fmt.Errorf("read skills root %s: %w", skillsRoot, err)
+	}
+
+	selectedSet := map[string]bool{}
+	for _, skill := range selected {
+		selectedSet[skill] = true
+	}
+
+	var discovered []SkillSource
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		source := filepath.Join(skillsRoot, entry.Name())
+		if err := validateSkillSource(source); err != nil {
+			continue
+		}
+		if len(selectedSet) > 0 && !selectedSet[entry.Name()] {
+			continue
+		}
+		discovered = append(discovered, SkillSource{Name: entry.Name(), Path: source})
+	}
+	sort.Slice(discovered, func(i, j int) bool {
+		return discovered[i].Name < discovered[j].Name
+	})
+
+	if len(selectedSet) > 0 {
+		found := map[string]bool{}
+		for _, skill := range discovered {
+			found[skill.Name] = true
+		}
+		var missing []string
+		for _, skill := range selected {
+			if !found[skill] {
+				missing = append(missing, skill)
+			}
+		}
+		if len(missing) > 0 {
+			sort.Strings(missing)
+			return nil, fmt.Errorf("unknown skill(s): %s", strings.Join(missing, ", "))
+		}
+	}
+	if len(discovered) == 0 {
+		return nil, fmt.Errorf("no installable skills found in %s", skillsRoot)
+	}
+	return discovered, nil
 }
 
 func validateSkillSource(source string) error {
@@ -292,7 +365,10 @@ func dedupeTargets(targets []Target) []Target {
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Scope == out[j].Scope {
 			if out[i].Agent == out[j].Agent {
-				return out[i].Path < out[j].Path
+				if out[i].Skill == out[j].Skill {
+					return out[i].Path < out[j].Path
+				}
+				return out[i].Skill < out[j].Skill
 			}
 			return out[i].Agent < out[j].Agent
 		}

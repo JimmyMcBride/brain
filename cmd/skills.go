@@ -14,17 +14,18 @@ func addSkillsCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoa
 	var mode string
 	var scope string
 	var agents []string
+	var skillNames []string
 	var project string
 	var skillRoots []string
 
 	skillsCmd := &cobra.Command{
 		Use:   "skills",
-		Short: "Install the Brain skill bundle into global or project-local agent skill roots",
+		Short: "Install repo-owned skills into global or project-local agent skill roots",
 	}
 
 	installCmd := &cobra.Command{
 		Use:   "install",
-		Short: "Install the Brain skill for known or custom AI agent skill directories",
+		Short: "Install repo-owned skills for known or custom AI agent skill directories",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appCtx, err := loadApp()
 			if err != nil {
@@ -35,6 +36,7 @@ func addSkillsCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoa
 				Mode:       skills.InstallMode(mode),
 				Scope:      skills.Scope(scope),
 				Agents:     agents,
+				Skills:     skillNames,
 				ProjectDir: project,
 				SkillRoots: skillRoots,
 				RepoRoot:   repoRoot(),
@@ -44,7 +46,7 @@ func addSkillsCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoa
 			}
 			return appCtx.Output.Print(results, func(w io.Writer) error {
 				for _, result := range results {
-					if _, err := fmt.Fprintf(w, "%s [%s] %s -> %s\n", result.Agent, result.Scope, result.Method, result.Path); err != nil {
+					if _, err := fmt.Fprintf(w, "%s [%s] %s %s -> %s\n", result.Agent, result.Scope, result.Skill, result.Method, result.Path); err != nil {
 						return err
 					}
 				}
@@ -66,6 +68,7 @@ func addSkillsCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoa
 				Mode:       skills.InstallMode(mode),
 				Scope:      skills.Scope(scope),
 				Agents:     agents,
+				Skills:     skillNames,
 				ProjectDir: project,
 				SkillRoots: skillRoots,
 				RepoRoot:   repoRoot(),
@@ -75,7 +78,7 @@ func addSkillsCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoa
 			}
 			return appCtx.Output.Print(targets, func(w io.Writer) error {
 				for _, target := range targets {
-					if _, err := fmt.Fprintf(w, "%s [%s] %s\n", target.Agent, target.Scope, target.Path); err != nil {
+					if _, err := fmt.Fprintf(w, "%s [%s] %s %s\n", target.Agent, target.Scope, target.Skill, target.Path); err != nil {
 						return err
 					}
 				}
@@ -87,22 +90,26 @@ func addSkillsCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoa
 	installCmd.Flags().StringVar(&mode, "mode", string(skills.ModeSymlink), "install mode: symlink or copy")
 	installCmd.Flags().StringVar(&scope, "scope", string(skills.ScopeGlobal), "install scope: global, local, or both")
 	installCmd.Flags().StringArrayVarP(&agents, "agent", "a", nil, "target agent name; repeatable, defaults to known agents")
+	installCmd.Flags().StringArrayVar(&skillNames, "skill", nil, "skill name to install; repeatable, defaults to all repo-owned skills")
 	installCmd.Flags().StringVar(&project, "project", ".", "project root used for local installs")
 	installCmd.Flags().StringArrayVar(&skillRoots, "skill-root", nil, "custom skill root directory; repeatable")
 
 	targetsCmd.Flags().StringVar(&mode, "mode", string(skills.ModeSymlink), "install mode validation: symlink or copy")
 	targetsCmd.Flags().StringVar(&scope, "scope", string(skills.ScopeGlobal), "target scope: global, local, or both")
 	targetsCmd.Flags().StringArrayVarP(&agents, "agent", "a", nil, "target agent name; repeatable, defaults to known agents")
+	targetsCmd.Flags().StringArrayVar(&skillNames, "skill", nil, "skill name to resolve; repeatable, defaults to all repo-owned skills")
 	targetsCmd.Flags().StringVar(&project, "project", ".", "project root used for local targets")
 	targetsCmd.Flags().StringArrayVar(&skillRoots, "skill-root", nil, "custom skill root directory; repeatable")
 
 	skillsCmd.Long = strings.TrimSpace(`
-Install the Brain skill bundle into AI agent skill directories.
+Install repo-owned skills into AI agent skill directories.
 
 Known agents use the conventional roots:
   global: ~/.<agent>/skills
   local:  <project>/.<agent>/skills
 
+By default the command installs all repo-owned skills discovered under ./skills.
+Use --skill to target one or more specific skills.
 You can also target nonstandard tools directly with --skill-root.
 `)
 

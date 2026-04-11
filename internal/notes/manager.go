@@ -176,15 +176,34 @@ func (m *Manager) Update(path string, input UpdateInput) (*Note, error) {
 	if err != nil {
 		return nil, err
 	}
-	if input.Title != nil {
-		note.Title = *input.Title
-		note.Metadata["title"] = *input.Title
-	}
 	if input.Body != nil {
-		note.Content = *input.Body
+		if HasFrontmatter(*input.Body) {
+			meta, body, err := ParseFrontmatter(*input.Body)
+			if err != nil {
+				return nil, err
+			}
+			for k, v := range meta {
+				note.Metadata[k] = v
+			}
+			if title := stringValue(meta["title"]); title != "" {
+				note.Title = title
+			}
+			note.Content = body
+		} else {
+			note.Content = *input.Body
+		}
 	}
 	for k, v := range input.Metadata {
 		note.Metadata[k] = v
+		if k == "title" {
+			if title := stringValue(v); title != "" {
+				note.Title = title
+			}
+		}
+	}
+	if input.Title != nil {
+		note.Title = *input.Title
+		note.Metadata["title"] = *input.Title
 	}
 	note.Metadata["updated"] = time.Now().UTC().Format(time.RFC3339)
 	raw, err := ComposeFrontmatter(note.Metadata, note.Content)

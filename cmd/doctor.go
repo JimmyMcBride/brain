@@ -9,6 +9,7 @@ import (
 	"brain/internal/config"
 	"brain/internal/embeddings"
 	"brain/internal/index"
+	"brain/internal/notes"
 	"brain/internal/output"
 	"brain/internal/workspace"
 
@@ -40,10 +41,16 @@ func addDoctorCommand(root *cobra.Command, flags *rootFlagsState) {
 			} else {
 				checks = append(checks, map[string]any{"name": "embedding", "ok": true, "details": cfg.EmbeddingProvider + "/" + cfg.EmbeddingModel})
 			}
-			if err := workspace.New(projectDir).Validate(); err != nil {
+			workspaceSvc := workspace.New(projectDir)
+			if err := workspaceSvc.Validate(); err != nil {
 				checks = append(checks, map[string]any{"name": "workspace", "ok": false, "details": err.Error()})
 			} else {
 				checks = append(checks, map[string]any{"name": "workspace", "ok": true, "details": "project-local workspace present"})
+			}
+			if files, err := notes.ValidateWorkspaceMarkdown(workspaceSvc); err != nil {
+				checks = append(checks, map[string]any{"name": "note_integrity", "ok": false, "details": err.Error()})
+			} else {
+				checks = append(checks, map[string]any{"name": "note_integrity", "ok": true, "details": strconv.Itoa(files) + " files checked"})
 			}
 			if exists(paths.DBFile) {
 				store, err := index.New(paths.DBFile)

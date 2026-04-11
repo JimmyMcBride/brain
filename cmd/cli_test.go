@@ -172,15 +172,62 @@ func TestCLIProjectPlanningWorkflow(t *testing.T) {
 func TestCLISkillsCommands(t *testing.T) {
 	env := newCLIEnv(t)
 	targets := requireOK(t, env.run(t, "", "skills", "targets", "--scope", "both", "-a", "codex", "-a", "zed", "--project", env.project, "--skill-root", env.custom))
-	if !strings.Contains(targets, "codex [global] <ROOT>/home/.codex/skills/brain") {
+	if !strings.Contains(targets, "codex [global] brain <ROOT>/home/.codex/skills/brain") {
 		t.Fatalf("missing global codex target:\n%s", targets)
 	}
-	if !strings.Contains(targets, "zed [local] <ROOT>/project/.zed/skills/brain") {
+	if !strings.Contains(targets, "codex [global] googleworkspace-cli <ROOT>/home/.codex/skills/googleworkspace-cli") {
+		t.Fatalf("missing global googleworkspace-cli target:\n%s", targets)
+	}
+	if !strings.Contains(targets, "zed [local] brain <ROOT>/project/.zed/skills/brain") {
 		t.Fatalf("missing local zed target:\n%s", targets)
 	}
 	requireOK(t, env.run(t, "", "skills", "install", "--scope", "local", "-a", "codex", "--project", env.project, "--mode", "copy"))
 	if _, err := os.Stat(filepath.Join(env.project, ".codex", "skills", "brain", "SKILL.md")); err != nil {
 		t.Fatalf("expected local skill install: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(env.project, ".codex", "skills", "googleworkspace-cli", "SKILL.md")); err != nil {
+		t.Fatalf("expected local googleworkspace-cli install: %v", err)
+	}
+
+	filtered := requireOK(t, env.run(t, "", "skills", "targets", "--scope", "global", "-a", "codex", "--skill", "brain"))
+	if strings.Contains(filtered, "googleworkspace-cli") {
+		t.Fatalf("expected filtered targets to omit googleworkspace-cli:\n%s", filtered)
+	}
+}
+
+func TestCLIEditNormalizesFullNoteInput(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	payload := "---\ntitle: Manual\ntype: resource\n---\n# Body\n"
+	requireOK(t, env.run(t, payload, "--config", env.config, "--project", env.project, "edit", ".brain/context/current-state.md", "--stdin"))
+
+	raw, err := os.ReadFile(filepath.Join(env.project, ".brain", "context", "current-state.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(raw)
+	if strings.Count(content, "---\n") != 2 {
+		t.Fatalf("expected exactly one frontmatter block:\n%s", content)
+	}
+	if strings.Contains(content, "\n---\n---\n") {
+		t.Fatalf("unexpected nested frontmatter:\n%s", content)
+	}
+	if !strings.Contains(content, "# Body") {
+		t.Fatalf("missing updated body:\n%s", content)
+	}
+}
+
+func TestCLIDoctorDetectsBrokenNotes(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	broken := "---\nupdated: now\n---\n---\ntitle: Broken\n---\n# Body\n"
+	if err := os.WriteFile(filepath.Join(env.project, ".brain", "context", "current-state.md"), []byte(broken), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	doctor := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "doctor"))
+	if !strings.Contains(doctor, "note_integrity: fail") {
+		t.Fatalf("expected doctor to report note integrity failure:\n%s", doctor)
 	}
 }
 

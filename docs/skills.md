@@ -25,12 +25,14 @@ Preview install targets:
 
 ```bash
 brain skills targets --scope both --agent codex --agent claude --project .
+brain skills targets --scope global --agent codex --skill brain
 ```
 
 Install globally:
 
 ```bash
 brain skills install --scope global --agent codex
+brain skills install --scope global --agent codex --skill googleworkspace-cli
 ```
 
 Install into a project:
@@ -40,6 +42,7 @@ brain skills install --scope local --agent codex --project .
 ```
 
 Use `--mode copy` when the target runtime does not support symlinked skill directories well. OpenClaw should generally use copy mode.
+When no `--skill` flag is provided, `brain` installs all repo-owned skills discovered under `./skills`.
 
 Global Codex install targets land under `~/.codex/skills/`.
 

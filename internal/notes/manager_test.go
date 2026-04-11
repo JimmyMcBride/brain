@@ -103,3 +103,93 @@ func TestManagerLifecycle(t *testing.T) {
 		t.Fatalf("unexpected edited content: %q", edited.Content)
 	}
 }
+
+func TestUpdateNormalizesFullNoteInput(t *testing.T) {
+	manager := newTestManager(t)
+	note, err := manager.Create(CreateInput{
+		Title:    "Alpha Note",
+		NoteType: "resource",
+		Section:  ".brain",
+		Subdir:   "resources/references",
+		Metadata: map[string]any{"topic": "alpha"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	body := "---\ntitle: Imported Title\ntopic: beta\ncustom: yes\n---\n# Imported Body\n"
+	updated, err := manager.Update(note.Path, UpdateInput{
+		Body:     &body,
+		Metadata: map[string]any{"status": "active"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Title != "Imported Title" {
+		t.Fatalf("unexpected title: %s", updated.Title)
+	}
+	if updated.Metadata["topic"] != "beta" || updated.Metadata["status"] != "active" {
+		t.Fatalf("unexpected metadata: %+v", updated.Metadata)
+	}
+	if strings.HasPrefix(strings.TrimLeft(updated.Content, "\n"), "---\n") {
+		t.Fatalf("expected normalized body without nested frontmatter:\n%s", updated.Content)
+	}
+	if strings.TrimSpace(updated.Content) != "# Imported Body" {
+		t.Fatalf("unexpected body: %q", updated.Content)
+	}
+}
+
+func TestUpdateExplicitFlagsOverrideFullNoteInput(t *testing.T) {
+	manager := newTestManager(t)
+	note, err := manager.Create(CreateInput{
+		Title:    "Alpha Note",
+		NoteType: "resource",
+		Section:  ".brain",
+		Subdir:   "resources/references",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	body := "---\ntitle: Imported Title\nstatus: todo\n---\n# Imported Body\n"
+	title := "Explicit Title"
+	updated, err := manager.Update(note.Path, UpdateInput{
+		Title:    &title,
+		Body:     &body,
+		Metadata: map[string]any{"status": "done"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Title != "Explicit Title" || updated.Metadata["title"] != "Explicit Title" {
+		t.Fatalf("expected explicit title to win: %+v", updated.Metadata)
+	}
+	if updated.Metadata["status"] != "done" {
+		t.Fatalf("expected explicit metadata to win: %+v", updated.Metadata)
+	}
+}
+
+func TestUpdateRejectsInvalidFrontmatter(t *testing.T) {
+	manager := newTestManager(t)
+	note, err := manager.Create(CreateInput{
+		Title:    "Alpha Note",
+		NoteType: "resource",
+		Section:  ".brain",
+		Subdir:   "resources/references",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	body := "---\ntitle: nope\n# Missing terminator\n"
+	if _, err := manager.Update(note.Path, UpdateInput{Body: &body}); err == nil {
+		t.Fatal("expected invalid frontmatter error")
+	}
+	reloaded, err := manager.Read(note.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.HasPrefix(strings.TrimLeft(reloaded.Content, "\n"), "---\n") {
+		t.Fatalf("note was modified unexpectedly:\n%s", reloaded.Content)
+	}
+}

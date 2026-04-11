@@ -26,6 +26,17 @@ func ParseFrontmatter(raw string) (map[string]any, string, error) {
 	return meta, parts[1], nil
 }
 
+func HasFrontmatter(raw string) bool {
+	raw = strings.ReplaceAll(raw, "\r\n", "\n")
+	return strings.HasPrefix(raw, "---\n")
+}
+
+func HasNestedFrontmatter(body string) bool {
+	body = strings.ReplaceAll(body, "\r\n", "\n")
+	body = strings.TrimLeft(body, "\n")
+	return strings.HasPrefix(body, "---\n")
+}
+
 func ComposeFrontmatter(meta map[string]any, body string) (string, error) {
 	if meta == nil {
 		meta = map[string]any{}
