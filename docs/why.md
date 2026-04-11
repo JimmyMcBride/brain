@@ -2,7 +2,7 @@
 
 ## One Brain Per Project
 
-Project knowledge ages badly when it lives in one global heap. `brain` now treats every repo as its own operating environment so the docs, planning, context, and search index belong to that project instead of to one universal memory pool.
+`brain` treats every repo as its own operating environment so the docs, planning, context, and search index belong directly to that project.
 
 ## Plain Markdown First
 
@@ -10,7 +10,7 @@ Humans should be able to read and edit the durable state without a proprietary i
 
 ## Search Without Centralization
 
-Retrieval is still useful, but it does not need a shared global database. A per-project index keeps results focused, avoids accidental cross-project contamination, and makes the system easier to reason about.
+Retrieval should stay focused on the project you are in. A per-project index keeps results relevant, avoids cross-project contamination, and makes the system easier to reason about.
 
 ## Explicit Agent Contracts
 

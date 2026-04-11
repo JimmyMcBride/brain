@@ -16,7 +16,7 @@ It keeps human docs at the repo root, keeps machine-managed state under `.brain/
 
 ## Mental Model
 
-`brain` is not a shared global memory store anymore. Every project gets its own Brain.
+`brain` gives each project its own Brain: a clear markdown layer for docs, context, planning, brainstorming, and local search.
 
 ```text
 my-project/
