@@ -1,4 +1,7 @@
 ---
+updated: "2026-04-11T06:20:04Z"
+---
+---
 updated: "2026-04-11T06:14:48Z"
 ---
 # Current State
@@ -32,4 +35,4 @@ This file is a deterministic snapshot of the repository state at the last refres
 
 Add repo-specific notes here. `brain context refresh` preserves content outside managed blocks.
 
-- 2026-04-11: Added the repo-owned `googleworkspace-cli` skill bundle and installed it to `~/.codex/skills/googleworkspace-cli`.
+- 2026-04-11: Added the repo-owned `googleworkspace-cli` skill bundle, installed it to `~/.codex/skills/googleworkspace-cli`, and documented the one-line install path via `scripts/install.sh`.
