@@ -36,3 +36,4 @@ Release/history references:
 - [.brain/resources/changes/project-context-bundles-and-agent-contracts.md](../.brain/resources/changes/project-context-bundles-and-agent-contracts.md)
 - [.brain/resources/changes/session-enforcement-and-policy-engine.md](../.brain/resources/changes/session-enforcement-and-policy-engine.md)
 - [.brain/resources/changes/project-scoped-planning-and-brainstorming.md](../.brain/resources/changes/project-scoped-planning-and-brainstorming.md)
+- [.brain/resources/references/maintainer-global-refresh.md](../.brain/resources/references/maintainer-global-refresh.md)

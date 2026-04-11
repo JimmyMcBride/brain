@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-11T15:32:46Z"
+updated: "2026-04-11T15:46:01Z"
 ---
 # Current State
 
@@ -45,3 +45,4 @@ Add repo-specific notes here. `brain context refresh` preserves content outside 
 - 2026-04-11: Tightened the retrieval language in the README, usage docs, and Brain skill so the default `localhash` provider is described honestly as lexical search plus lightweight semantic hinting, while doctor/search status remain the source of truth for the active provider.
 - 2026-04-11: Fixed the session manager race on `.brain/session.json` by serializing active-session mutations with a filesystem lock, writing session state atomically, and making `brain session run` refuse to record into a session that was finished or aborted while the command was still running.
 - 2026-04-11: Installed the global `brain` binary from commit `7cc80a2` with embedded build metadata and prepared the product-tightening roadmap plus session concurrency fixes for push to `main`.
+- 2026-04-11: Added `scripts/refresh-global-brain.sh` plus a maintainer reference note so repo maintainers can rebuild `~/.local/bin/brain` with embedded build metadata and sync the global Codex `brain` skill from `skills/brain/` without treating the refresh itself as a new product change.
