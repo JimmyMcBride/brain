@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-11T16:43:02Z"
+updated: "2026-04-11T16:56:28Z"
 ---
 # Current State
 
@@ -48,3 +48,4 @@ Add repo-specific notes here. `brain context refresh` preserves content outside 
 - 2026-04-11: Added `scripts/refresh-global-brain.sh` plus a maintainer reference note so repo maintainers can rebuild `~/.local/bin/brain` with embedded build metadata and sync the global Codex `brain` skill from `skills/brain/` without treating the refresh itself as a new product change.
 - 2026-04-11: Published the maintainer-only global refresh workflow and script so maintainers can rebuild `~/.local/bin/brain`, sync the global Codex `brain` skill, and verify both against the pushed repo `HEAD`.
 - 2026-04-11: Added `brain adopt` as the first-class existing-repo onboarding path. It shares bootstrap logic with `brain init`, adopts Brain-owned markdown into the managed-block model, reports `adopted` for unmanaged files, and preserves previous content under `Local Notes` instead of clobbering it.
+- 2026-04-11: Published `brain adopt` as the existing-repo onboarding path and pushed the shared bootstrap plus managed-file adoption workflow to `main`, then refreshed the installed binary and global Codex `brain` skill from that release state.
