@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -218,7 +219,9 @@ func TestCLIContextCommands(t *testing.T) {
 	for _, path := range []string{
 		filepath.Join(env.project, "AGENTS.md"),
 		filepath.Join(env.project, ".brain", "context", "overview.md"),
+		filepath.Join(env.project, ".brain", "policy.yaml"),
 		filepath.Join(env.project, ".codex", "AGENTS.md"),
+		filepath.Join(env.project, ".gitignore"),
 	} {
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("expected context file %s: %v", path, err)
@@ -251,5 +254,93 @@ func TestCLIContextCommands(t *testing.T) {
 	dryRun := requireOK(t, env.run(t, "", "context", "refresh", "--project", env.project, "--agent", "codex", "--dry-run"))
 	if !strings.Contains(dryRun, "unchanged") {
 		t.Fatalf("expected unchanged dry-run output:\n%s", dryRun)
+	}
+}
+
+func TestCLISessionWorkflow(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "init", "--vault", env.vault, "--data", env.data))
+	initGitProject(t, env.project)
+	requireOK(t, env.run(t, "", "--config", env.config, "context", "install", "--project", env.project))
+
+	startOutput := requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "tighten session enforcement"))
+	if !strings.Contains(startOutput, "Started session") || !strings.Contains(startOutput, "brain search \"project tighten session enforcement\"") {
+		t.Fatalf("unexpected session start output:\n%s", startOutput)
+	}
+
+	secondStart := env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "duplicate")
+	if secondStart.err == nil {
+		t.Fatalf("expected second start to fail:\nstdout=%s\nstderr=%s", secondStart.stdout, secondStart.stderr)
+	}
+
+	if err := os.WriteFile(filepath.Join(env.project, "main.go"), []byte("package main\nfunc main() { println(\"x\") }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	validateBlocked := env.run(t, "", "--config", env.config, "session", "validate", "--project", env.project, "--stage", "finish")
+	if validateBlocked.err == nil || !strings.Contains(validateBlocked.stdout, "durable note update required for repo changes") {
+		t.Fatalf("expected finish validation to block before note update:\nstdout=%s\nstderr=%s", validateBlocked.stdout, validateBlocked.stderr)
+	}
+
+	requireOK(t, env.run(t, "", "--config", env.config, "capture", "Project: session enforcement note", "--body", "Recorded durable note for project changes."))
+	validateNeedsReindex := env.run(t, "", "--config", env.config, "session", "validate", "--project", env.project, "--stage", "finish")
+	if validateNeedsReindex.err == nil || !strings.Contains(validateNeedsReindex.stdout, "reindex required after note updates") {
+		t.Fatalf("expected reindex obligation:\nstdout=%s\nstderr=%s", validateNeedsReindex.stdout, validateNeedsReindex.stderr)
+	}
+
+	requireOK(t, env.run(t, "", "--config", env.config, "reindex"))
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "run", "--project", env.project, "--", "go", "test", "./..."))
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "run", "--project", env.project, "--", "go", "build", "./..."))
+
+	finishOutput := requireOK(t, env.run(t, "", "--config", env.config, "session", "finish", "--project", env.project, "--summary", "session complete"))
+	if !strings.Contains(finishOutput, "finished") || !strings.Contains(finishOutput, ".brain/sessions/") {
+		t.Fatalf("unexpected finish output:\n%s", finishOutput)
+	}
+
+	validateNoSession := env.run(t, "", "--config", env.config, "session", "validate", "--project", env.project)
+	if validateNoSession.err == nil {
+		t.Fatalf("expected validate to fail after finish")
+	}
+}
+
+func TestCLISessionAbort(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "init", "--vault", env.vault, "--data", env.data))
+	initGitProject(t, env.project)
+	requireOK(t, env.run(t, "", "--config", env.config, "context", "install", "--project", env.project))
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "abort flow"))
+
+	abortOutput := requireOK(t, env.run(t, "", "--config", env.config, "session", "abort", "--project", env.project, "--reason", "stopped work"))
+	if !strings.Contains(abortOutput, "aborted") {
+		t.Fatalf("unexpected abort output:\n%s", abortOutput)
+	}
+
+	if _, err := os.Stat(filepath.Join(env.project, ".brain", "session.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected active session cleared, got err=%v", err)
+	}
+}
+
+func initGitProject(t *testing.T, project string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(project, "go.mod"), []byte("module example.com/demo\n\ngo 1.26\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "main.go"), []byte("package main\nfunc main() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitCommand(t, project, "init", "-q")
+	runGitCommand(t, project, "config", "user.email", "tester@example.com")
+	runGitCommand(t, project, "config", "user.name", "tester")
+	runGitCommand(t, project, "add", ".")
+	runGitCommand(t, project, "commit", "-q", "-m", "init")
+}
+
+func runGitCommand(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, string(output))
 	}
 }

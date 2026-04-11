@@ -17,9 +17,12 @@ Use `brain` as the primary interface for working with the knowledge vault.
 If the current repository has a project contract, read it before relying on the generic skill text:
 
 1. Read `AGENTS.md` at the repo root if it exists.
-2. Read the linked `.brain/context/*.md` files needed for the task.
-3. Use the `brain` CLI as the operational interface for project memory and vault work.
-4. Fall back to this skill's generic guidance only when project-local context is absent.
+2. Read `.brain/policy.yaml` if it exists.
+3. Read the linked `.brain/context/*.md` files needed for the task.
+4. If no validated session is active, run `brain session start --task "<task>"`.
+5. If a session is already active, run `brain session validate`.
+6. Use the `brain` CLI as the operational interface for project memory and vault work.
+7. Fall back to this skill's generic guidance only when project-local context is absent.
 
 ## Goals
 
@@ -44,8 +47,9 @@ When starting work with a vault:
 When starting work in a code repository that uses `brain` project context:
 
 1. Read the project `AGENTS.md`.
-2. Read `.brain/context/overview.md`, `.brain/context/architecture.md`, `.brain/context/workflows.md`, and `.brain/context/memory-policy.md`.
-3. Retrieve any relevant durable notes before making large changes.
+2. Read `.brain/policy.yaml`.
+3. Read `.brain/context/overview.md`, `.brain/context/architecture.md`, `.brain/context/workflows.md`, and `.brain/context/memory-policy.md`.
+4. Retrieve any relevant durable notes before making large changes.
 
 ## OpenClaw usage
 
@@ -94,6 +98,14 @@ Use these commands by default:
   - Create a repo-local `AGENTS.md` plus a modular `.brain/context` bundle.
 - `brain context refresh --project .`
   - Refresh brain-managed project context files without overwriting user notes outside managed blocks.
+- `brain session start --project . --task "..."`
+  - Start a validated project session and write local session state.
+- `brain session validate`
+  - Confirm an active session exists and inspect finish-stage obligations.
+- `brain session run -- <command>`
+  - Execute and record verification commands for the active session.
+- `brain session finish`
+  - Enforce memory updates, reindex requirements, and required command runs before closing the session.
 
 ## Operating rules
 

@@ -1,0 +1,42 @@
+version: 1
+project:
+    name: brain
+    slug: brain
+    runtime: go
+    memory:
+        accepted_note_globs:
+            - Projects/brain.md
+            - Projects/Brain/**
+            - Resources/Captures/**/brain*.md
+session:
+    require_task: true
+    single_active: true
+    active_file: .brain/session.json
+    ledger_dir: .brain/sessions
+preflight:
+    require_brain_doctor: true
+    required_docs:
+        - AGENTS.md
+        - .brain/context/overview.md
+        - .brain/context/workflows.md
+        - .brain/context/memory-policy.md
+    suggested_commands:
+        - brain find brain
+        - brain search "brain {task}"
+closeout:
+    acceptable_history_operations:
+        - create
+        - update
+        - move
+        - rename
+        - publish
+        - seed
+    require_memory_update_on_repo_change: true
+    require_reindex_after_note_updates: true
+    verification_profiles:
+        - name: tests
+          commands:
+            - go test ./...
+        - name: build
+          commands:
+            - go build ./...

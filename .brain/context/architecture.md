@@ -17,6 +17,7 @@ Use this file for the structural shape of the repository.
 - `internal/output/`
 - `internal/projectcontext/`
 - `internal/search/`
+- `internal/session/`
 - `internal/skills/`
 - `internal/templates/`
 - `internal/vault/`
@@ -26,6 +27,7 @@ Use this file for the structural shape of the repository.
 - Favor small package boundaries and explicit CLI/app wiring.
 - Keep public CLI behavior stable; add internal seams only when they improve testability or safety.
 - Treat generated project context as deterministic repo state, not LLM-authored prose.
+- Treat session enforcement as the hard-control layer above soft context files.
 <!-- brain:end context-architecture -->
 
 ## Local Notes

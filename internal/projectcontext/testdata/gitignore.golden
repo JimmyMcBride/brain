@@ -1,7 +1,3 @@
-/brain
-/dist/
-/tmp/
-
 # brain:begin gitignore-session
 .brain/session.json
 .brain/sessions/

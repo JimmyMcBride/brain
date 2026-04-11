@@ -41,12 +41,13 @@ func TestResolveAgentsFromInstalledSkills(t *testing.T) {
 }
 
 func TestMergeDocumentPreservesLocalNotes(t *testing.T) {
-	spec := docSpec{
+	spec := fileSpec{
 		Path:      "AGENTS.md",
 		Kind:      "contract",
 		Title:     "Project Agent Contract",
 		BlockID:   "agents-contract",
 		Body:      "fresh body",
+		Style:     "markdown",
 		LocalNote: true,
 	}
 	existing := "# Project Agent Contract\n\n<!-- brain:begin agents-contract -->\nstale\n<!-- brain:end agents-contract -->\n\n## Local Notes\n\nKeep this.\n"
@@ -66,12 +67,13 @@ func TestMergeDocumentPreservesLocalNotes(t *testing.T) {
 }
 
 func TestMergeDocumentRequiresForceForUnmanagedFile(t *testing.T) {
-	spec := docSpec{
+	spec := fileSpec{
 		Path:      "AGENTS.md",
 		Kind:      "contract",
 		Title:     "Project Agent Contract",
 		BlockID:   "agents-contract",
 		Body:      "fresh body",
+		Style:     "markdown",
 		LocalNote: true,
 	}
 	if _, _, _, err := mergeDocument("manual file", spec, false, false); err == nil {
@@ -80,12 +82,13 @@ func TestMergeDocumentRequiresForceForUnmanagedFile(t *testing.T) {
 }
 
 func TestMergeDocumentForceAdoptsUnmanagedFile(t *testing.T) {
-	spec := docSpec{
+	spec := fileSpec{
 		Path:      "AGENTS.md",
 		Kind:      "contract",
 		Title:     "Project Agent Contract",
 		BlockID:   "agents-contract",
 		Body:      "fresh body",
+		Style:     "markdown",
 		LocalNote: true,
 	}
 	merged, preserved, action, err := mergeDocument("manual file", spec, true, false)

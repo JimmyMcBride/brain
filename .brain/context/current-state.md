@@ -11,7 +11,7 @@ This file is a deterministic snapshot of the repository state at the last refres
 - Go module: `brain`
 - Current branch: `main`
 - Remote: `https://github.com/JimmyMcBride/brain.git`
-- Go test files: `12`
+- Go test files: `14`
 
 ## Docs
 

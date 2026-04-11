@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 
+	"brain/internal/history"
+
 	"github.com/spf13/cobra"
 )
 
@@ -22,6 +24,17 @@ func addReindexCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLo
 			}
 			stats, err := appCtx.Index.Reindex(cmd.Context(), appCtx.Vault, appCtx.Embedder)
 			if err != nil {
+				return err
+			}
+			if err := appCtx.History.Append(history.Entry{
+				Operation: "reindex",
+				Summary:   "reindexed vault",
+				Metadata: map[string]any{
+					"notes":      stats.Notes,
+					"chunks":     stats.Chunks,
+					"embeddings": stats.Embeddings,
+				},
+			}); err != nil {
 				return err
 			}
 			return appCtx.Output.Print(stats, func(w io.Writer) error {

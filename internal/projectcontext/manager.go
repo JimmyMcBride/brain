@@ -51,13 +51,15 @@ type Snapshot struct {
 	HasGit          bool
 }
 
-type docSpec struct {
-	Path      string
-	Kind      string
-	Title     string
-	BlockID   string
-	Body      string
-	LocalNote bool
+type fileSpec struct {
+	Path          string
+	Kind          string
+	Title         string
+	BlockID       string
+	Body          string
+	Style         string
+	LocalNote     bool
+	CommentPrefix string
 }
 
 func New(home string) *Manager {
@@ -89,10 +91,15 @@ func (m *Manager) apply(ctx context.Context, req Request) ([]Result, error) {
 	}
 
 	snapshot := scanRepo(ctx, projectDir)
-	specs := bundleSpecs(snapshot, m.resolveAgents(req.Agents))
+	policyBody, err := RenderPolicy(snapshot)
+	if err != nil {
+		return nil, err
+	}
+
+	specs := bundleSpecs(snapshot, m.resolveAgents(req.Agents), policyBody)
 	results := make([]Result, 0, len(specs))
 	for _, spec := range specs {
-		result, err := syncDoc(spec, req.DryRun, req.Force)
+		result, err := syncSpec(spec, req.DryRun, req.Force)
 		if err != nil {
 			return nil, err
 		}
@@ -130,14 +137,15 @@ func wrapperFile(projectDir, agent string) string {
 	}
 }
 
-func bundleSpecs(snapshot Snapshot, agents []string) []docSpec {
-	docs := []docSpec{
+func bundleSpecs(snapshot Snapshot, agents []string, policyBody string) []fileSpec {
+	specs := []fileSpec{
 		{
 			Path:      filepath.Join(snapshot.ProjectDir, "AGENTS.md"),
 			Kind:      "contract",
 			Title:     "Project Agent Contract",
 			BlockID:   "agents-contract",
 			Body:      renderAgents(snapshot),
+			Style:     "markdown",
 			LocalNote: true,
 		},
 		{
@@ -146,6 +154,7 @@ func bundleSpecs(snapshot Snapshot, agents []string) []docSpec {
 			Title:     "Overview",
 			BlockID:   "context-overview",
 			Body:      renderOverview(snapshot),
+			Style:     "markdown",
 			LocalNote: true,
 		},
 		{
@@ -154,6 +163,7 @@ func bundleSpecs(snapshot Snapshot, agents []string) []docSpec {
 			Title:     "Architecture",
 			BlockID:   "context-architecture",
 			Body:      renderArchitecture(snapshot),
+			Style:     "markdown",
 			LocalNote: true,
 		},
 		{
@@ -162,6 +172,7 @@ func bundleSpecs(snapshot Snapshot, agents []string) []docSpec {
 			Title:     "Standards",
 			BlockID:   "context-standards",
 			Body:      renderStandards(snapshot),
+			Style:     "markdown",
 			LocalNote: true,
 		},
 		{
@@ -170,6 +181,7 @@ func bundleSpecs(snapshot Snapshot, agents []string) []docSpec {
 			Title:     "Workflows",
 			BlockID:   "context-workflows",
 			Body:      renderWorkflows(snapshot),
+			Style:     "markdown",
 			LocalNote: true,
 		},
 		{
@@ -178,6 +190,7 @@ func bundleSpecs(snapshot Snapshot, agents []string) []docSpec {
 			Title:     "Memory Policy",
 			BlockID:   "context-memory-policy",
 			Body:      renderMemoryPolicy(snapshot),
+			Style:     "markdown",
 			LocalNote: true,
 		},
 		{
@@ -186,20 +199,286 @@ func bundleSpecs(snapshot Snapshot, agents []string) []docSpec {
 			Title:     "Current State",
 			BlockID:   "context-current-state",
 			Body:      renderCurrentState(snapshot),
+			Style:     "markdown",
 			LocalNote: true,
+		},
+		{
+			Path:  filepath.Join(snapshot.ProjectDir, ".brain", "policy.yaml"),
+			Kind:  "policy",
+			Body:  policyBody,
+			Style: "wholefile",
+		},
+		{
+			Path:          filepath.Join(snapshot.ProjectDir, ".gitignore"),
+			Kind:          "ignore",
+			BlockID:       "gitignore-session",
+			Body:          renderGitIgnore(),
+			Style:         "textblock",
+			CommentPrefix: "# ",
 		},
 	}
 	for _, agent := range agents {
-		docs = append(docs, docSpec{
+		specs = append(specs, fileSpec{
 			Path:      wrapperFile(snapshot.ProjectDir, agent),
 			Kind:      "wrapper",
 			Title:     strings.ToUpper(agent[:1]) + agent[1:] + " Wrapper",
 			BlockID:   "agent-wrapper-" + agent,
 			Body:      renderWrapper(agent),
+			Style:     "markdown",
 			LocalNote: true,
 		})
 	}
-	return docs
+	return specs
+}
+
+func syncSpec(spec fileSpec, dryRun, force bool) (Result, error) {
+	switch spec.Style {
+	case "markdown":
+		return syncMarkdownDoc(spec, dryRun, force)
+	case "textblock":
+		return syncTextBlock(spec, dryRun)
+	case "wholefile":
+		return syncWholeFile(spec, dryRun)
+	default:
+		return Result{}, fmt.Errorf("unsupported context file style %q", spec.Style)
+	}
+}
+
+func syncWholeFile(spec fileSpec, dryRun bool) (Result, error) {
+	existing, err := os.ReadFile(spec.Path)
+	if err != nil && !os.IsNotExist(err) {
+		return Result{}, err
+	}
+	action := "created"
+	if err == nil {
+		action = "updated"
+		if string(existing) == spec.Body {
+			action = "unchanged"
+		}
+	}
+	if !dryRun && action != "unchanged" {
+		if err := os.MkdirAll(filepath.Dir(spec.Path), 0o755); err != nil {
+			return Result{}, err
+		}
+		if err := os.WriteFile(spec.Path, []byte(spec.Body), 0o644); err != nil {
+			return Result{}, err
+		}
+	}
+	return Result{
+		Path:          filepath.ToSlash(spec.Path),
+		Kind:          spec.Kind,
+		Action:        action,
+		ManagedBlocks: nil,
+	}, nil
+}
+
+func syncTextBlock(spec fileSpec, dryRun bool) (Result, error) {
+	existing, err := os.ReadFile(spec.Path)
+	if err != nil && !os.IsNotExist(err) {
+		return Result{}, err
+	}
+	merged, preserved, action, err := mergeTextBlock(string(existing), spec, os.IsNotExist(err))
+	if err != nil {
+		return Result{}, err
+	}
+	if !dryRun && action != "unchanged" {
+		if err := os.MkdirAll(filepath.Dir(spec.Path), 0o755); err != nil {
+			return Result{}, err
+		}
+		if err := os.WriteFile(spec.Path, []byte(merged), 0o644); err != nil {
+			return Result{}, err
+		}
+	}
+	return Result{
+		Path:                 filepath.ToSlash(spec.Path),
+		Kind:                 spec.Kind,
+		Action:               action,
+		PreservedUserContent: preserved,
+		ManagedBlocks:        []string{spec.BlockID},
+	}, nil
+}
+
+func syncMarkdownDoc(spec fileSpec, dryRun, force bool) (Result, error) {
+	existing, err := os.ReadFile(spec.Path)
+	if err != nil && !os.IsNotExist(err) {
+		return Result{}, err
+	}
+	content, preserved, action, err := mergeDocument(string(existing), spec, force, os.IsNotExist(err))
+	if err != nil {
+		return Result{}, fmt.Errorf("%s: %w", filepath.ToSlash(spec.Path), err)
+	}
+	if !dryRun && action != "unchanged" {
+		if err := os.MkdirAll(filepath.Dir(spec.Path), 0o755); err != nil {
+			return Result{}, err
+		}
+		if err := os.WriteFile(spec.Path, []byte(content), 0o644); err != nil {
+			return Result{}, err
+		}
+	}
+	return Result{
+		Path:                 filepath.ToSlash(spec.Path),
+		Kind:                 spec.Kind,
+		Action:               action,
+		PreservedUserContent: preserved,
+		ManagedBlocks:        []string{spec.BlockID},
+	}, nil
+}
+
+func mergeDocument(existing string, spec fileSpec, force, missing bool) (string, bool, string, error) {
+	begin := managedBegin(spec.BlockID)
+	end := managedEnd(spec.BlockID)
+	managed := managedBody(spec)
+	if missing || strings.TrimSpace(existing) == "" {
+		return managed, false, "created", nil
+	}
+
+	if strings.Contains(existing, begin) && strings.Contains(existing, end) {
+		start := strings.Index(existing, begin)
+		finish := strings.Index(existing[start:], end)
+		if finish < 0 {
+			return "", false, "", fmt.Errorf("missing managed block end marker")
+		}
+		finish += start + len(end)
+		if finish < len(existing) && existing[finish] == '\n' {
+			finish++
+		}
+		replaced := existing[:start] + managedSection(spec) + existing[finish:]
+		action := "updated"
+		if replaced == existing {
+			action = "unchanged"
+		}
+		return replaced, hasUserContent(existing, spec.BlockID), action, nil
+	}
+
+	if !force {
+		return "", false, "", fmt.Errorf("existing file is not brain-managed; rerun with --force to adopt it")
+	}
+
+	trimmed := strings.TrimSpace(existing)
+	adopted := managed
+	if trimmed != "" {
+		adopted = strings.TrimRight(adopted, "\n") + "\n\n## Local Notes\n\n" + trimmed + "\n"
+	}
+	return adopted, trimmed != "", "updated", nil
+}
+
+func mergeTextBlock(existing string, spec fileSpec, missing bool) (string, bool, string, error) {
+	begin := textBlockBegin(spec)
+	end := textBlockEnd(spec)
+	block := textBlock(spec)
+	if missing || strings.TrimSpace(existing) == "" {
+		return block, false, "created", nil
+	}
+	if strings.Contains(existing, begin) && strings.Contains(existing, end) {
+		start := strings.Index(existing, begin)
+		finish := strings.Index(existing[start:], end)
+		if finish < 0 {
+			return "", false, "", fmt.Errorf("missing managed text block end marker")
+		}
+		finish += start + len(end)
+		if finish < len(existing) && existing[finish] == '\n' {
+			finish++
+		}
+		replaced := existing[:start] + block + existing[finish:]
+		action := "updated"
+		if replaced == existing {
+			action = "unchanged"
+		}
+		return replaced, normalizeOutsideText(existing, begin, end) != "", action, nil
+	}
+	content := strings.TrimRight(existing, "\n")
+	if content != "" {
+		content += "\n\n"
+	}
+	content += block
+	return content, strings.TrimSpace(existing) != "", "updated", nil
+}
+
+func managedBody(spec fileSpec) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# %s\n\n", spec.Title)
+	b.WriteString(managedSection(spec))
+	if spec.LocalNote {
+		b.WriteString("\n")
+		b.WriteString(localNotesSection)
+	}
+	return b.String()
+}
+
+func managedSection(spec fileSpec) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s\n", managedBegin(spec.BlockID))
+	b.WriteString(strings.TrimSpace(spec.Body))
+	b.WriteString("\n")
+	fmt.Fprintf(&b, "%s\n", managedEnd(spec.BlockID))
+	return b.String()
+}
+
+func textBlock(spec fileSpec) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s\n", textBlockBegin(spec))
+	b.WriteString(strings.TrimRight(spec.Body, "\n"))
+	b.WriteString("\n")
+	fmt.Fprintf(&b, "%s\n", textBlockEnd(spec))
+	return b.String()
+}
+
+func managedBegin(id string) string {
+	return "<!-- brain:begin " + id + " -->"
+}
+
+func managedEnd(id string) string {
+	return "<!-- brain:end " + id + " -->"
+}
+
+func textBlockBegin(spec fileSpec) string {
+	return spec.CommentPrefix + "brain:begin " + spec.BlockID
+}
+
+func textBlockEnd(spec fileSpec) string {
+	return spec.CommentPrefix + "brain:end " + spec.BlockID
+}
+
+func hasUserContent(existing, blockID string) bool {
+	begin := managedBegin(blockID)
+	end := managedEnd(blockID)
+	start := strings.Index(existing, begin)
+	finish := strings.Index(existing, end)
+	if start < 0 || finish < 0 {
+		return strings.TrimSpace(existing) != ""
+	}
+	finish += len(end)
+	prefix := normalizeOutsideContent(existing[:start])
+	suffix := normalizeOutsideContent(existing[finish:])
+	return prefix != "" || suffix != ""
+}
+
+func normalizeOutsideContent(s string) string {
+	s = strings.TrimSpace(s)
+	for _, title := range []string{
+		"# Project Agent Contract",
+		"# Overview",
+		"# Architecture",
+		"# Standards",
+		"# Workflows",
+		"# Memory Policy",
+		"# Current State",
+		"# Claude Wrapper",
+		"# Codex Wrapper",
+		"# Openclaw Wrapper",
+		"# Pi Wrapper",
+		"# Ai Wrapper",
+	} {
+		s = strings.TrimSpace(strings.ReplaceAll(s, title, ""))
+	}
+	s = strings.TrimSpace(strings.ReplaceAll(s, strings.TrimSpace(localNotesSection), ""))
+	return s
+}
+
+func normalizeOutsideText(s, begin, end string) string {
+	s = strings.TrimSpace(strings.ReplaceAll(s, begin, ""))
+	s = strings.TrimSpace(strings.ReplaceAll(s, end, ""))
+	return s
 }
 
 func defaultProjectDir(dir string) string {
@@ -232,7 +511,6 @@ func scanRepo(ctx context.Context, projectDir string) Snapshot {
 		ProjectDir:  projectDir,
 		ProjectName: filepath.Base(projectDir),
 	}
-
 	snapshot.ManifestFiles = existingFiles(projectDir, "go.mod", "package.json", "Cargo.toml", "pyproject.toml", "Makefile")
 	snapshot.DocFiles = discoverDocs(projectDir)
 	snapshot.CIFiles = discoverCIFiles(projectDir)
@@ -241,7 +519,6 @@ func scanRepo(ctx context.Context, projectDir string) Snapshot {
 	snapshot.TestFiles = countTestFiles(projectDir)
 	snapshot.PrimaryRuntime = primaryRuntime(snapshot.ManifestFiles, projectDir)
 	snapshot.GoModule = readGoModule(projectDir)
-
 	if gitAvailable(ctx, projectDir) {
 		snapshot.HasGit = true
 		snapshot.CurrentBranch = strings.TrimSpace(runGit(ctx, projectDir, "branch", "--show-current"))
@@ -250,7 +527,6 @@ func scanRepo(ctx context.Context, projectDir string) Snapshot {
 		snapshot.DefaultBranch = strings.TrimPrefix(head, "origin/")
 		snapshot.Dirty = strings.TrimSpace(runGit(ctx, projectDir, "status", "--porcelain")) != ""
 	}
-
 	return snapshot
 }
 
@@ -406,6 +682,7 @@ func readGoModule(projectDir string) string {
 
 func renderAgents(snapshot Snapshot) string {
 	var b strings.Builder
+	slug := policySlug(snapshot.ProjectName)
 	fmt.Fprintf(&b, "Use this file as the canonical project contract for `%s`.\n\n", snapshot.ProjectName)
 	b.WriteString("Read the linked context files before substantial work. Prefer the `brain` skill and `brain` CLI for project memory, retrieval, and durable context updates.\n\n")
 	b.WriteString("## Table Of Contents\n\n")
@@ -419,6 +696,7 @@ func renderAgents(snapshot Snapshot) string {
 		{"Workflows", "./.brain/context/workflows.md"},
 		{"Memory Policy", "./.brain/context/memory-policy.md"},
 		{"Current State", "./.brain/context/current-state.md"},
+		{"Policy", "./.brain/policy.yaml"},
 	} {
 		fmt.Fprintf(&b, "- [%s](%s)\n", entry.name, entry.path)
 	}
@@ -429,11 +707,13 @@ func renderAgents(snapshot Snapshot) string {
 		}
 	}
 	b.WriteString("\n## Required Workflow\n\n")
-	b.WriteString("1. Read this file and the linked context files needed for the task.\n")
-	b.WriteString("2. Retrieve existing project memory with `brain find` or `brain search` before substantial work.\n")
-	b.WriteString("3. Use `brain capture`, `brain add`, or `brain edit` for durable context updates.\n")
-	b.WriteString("4. Reindex after note changes when retrieval quality matters.\n")
-	b.WriteString("5. Mention relevant note updates in the final response.\n")
+	b.WriteString("1. If no validated session is active, run `brain session start --task \"<task>\"`.\n")
+	b.WriteString("2. If a session is already active, run `brain session validate` before substantial work.\n")
+	b.WriteString("3. Read this file and the linked context files needed for the task.\n")
+	fmt.Fprintf(&b, "4. Retrieve project memory with `brain find %s` or `brain search \"%s <task>\"`.\n", slug, slug)
+	b.WriteString("5. Use `brain capture`, `brain add`, or `brain edit` for durable context updates.\n")
+	b.WriteString("6. Use `brain session run -- <command>` for required verification commands.\n")
+	b.WriteString("7. Finish with `brain session finish` so policy checks can enforce memory updates, reindexing, and required command runs.\n")
 	return b.String()
 }
 
@@ -475,6 +755,7 @@ func renderArchitecture(snapshot Snapshot) string {
 		b.WriteString("- Favor small package boundaries and explicit CLI/app wiring.\n")
 		b.WriteString("- Keep public CLI behavior stable; add internal seams only when they improve testability or safety.\n")
 		b.WriteString("- Treat generated project context as deterministic repo state, not LLM-authored prose.\n")
+		b.WriteString("- Treat session enforcement as the hard-control layer above soft context files.\n")
 	} else {
 		b.WriteString("- Keep repo boundaries explicit and document key entrypoints in this file.\n")
 		b.WriteString("- Update this file when runtime architecture or integration boundaries change.\n")
@@ -489,8 +770,8 @@ func renderStandards(snapshot Snapshot) string {
 	switch snapshot.PrimaryRuntime {
 	case "go":
 		b.WriteString("- Keep code idiomatic Go with small, concrete abstractions.\n")
-		b.WriteString("- Prefer explicit tests for CLI behavior, indexing, retrieval, and safety flows.\n")
-		b.WriteString("- Verify with `go test ./...` and `go build ./...` before calling work complete.\n")
+		b.WriteString("- Prefer explicit tests for CLI behavior, indexing, retrieval, safety flows, and session enforcement.\n")
+		b.WriteString("- Record required verification through `brain session run -- ...` so finish-stage enforcement can validate it.\n")
 	default:
 		b.WriteString("- Preserve existing repo conventions and testing workflows.\n")
 		b.WriteString("- Prefer narrow, reviewable changes over broad speculative rewrites.\n")
@@ -506,19 +787,23 @@ func renderStandards(snapshot Snapshot) string {
 
 func renderWorkflows(snapshot Snapshot) string {
 	var b strings.Builder
+	slug := policySlug(snapshot.ProjectName)
 	b.WriteString("Use this file for agent operating workflow inside the repo.\n\n")
 	b.WriteString("## Startup\n\n")
-	b.WriteString("1. Read `AGENTS.md` and the linked context files needed for the task.\n")
-	b.WriteString("2. Review relevant repo docs before making assumptions.\n")
-	b.WriteString("3. If project memory matters, run `brain find <topic>` or `brain search \"<topic>\"`.\n\n")
+	b.WriteString("1. If no validated session is active, run `brain session start --task \"<task>\"`.\n")
+	b.WriteString("2. If a session already exists, run `brain session validate`.\n")
+	b.WriteString("3. Read `AGENTS.md`, `.brain/policy.yaml`, and the linked context files needed for the task.\n")
+	fmt.Fprintf(&b, "4. If project memory matters, run `brain find %s` or `brain search \"%s <task>\"`.\n\n", slug, slug)
 	b.WriteString("## During Work\n\n")
 	b.WriteString("- Capture durable discoveries, decisions, and risks with `brain capture`.\n")
 	b.WriteString("- Update existing durable notes instead of duplicating context.\n")
+	b.WriteString("- Run required verification commands through `brain session run -- <command>`.\n")
 	b.WriteString("- Re-read context before large changes if the task shifts.\n\n")
 	b.WriteString("## Close-Out\n\n")
 	b.WriteString("- Refresh or update durable notes for meaningful behavior, config, or architecture changes.\n")
 	b.WriteString("- Run `brain reindex` after note changes when search quality matters.\n")
-	b.WriteString("- Mention relevant note additions or updates in the final response.\n")
+	b.WriteString("- Finish with `brain session finish`.\n")
+	b.WriteString("- If you must bypass enforcement, use `brain session finish --force --reason \"...\"` so the override is recorded.\n")
 	return b.String()
 }
 
@@ -576,143 +861,25 @@ func renderWrapper(agent string) string {
 	fmt.Fprintf(&b, "This `%s` wrapper delegates to the root project contract.\n\n", agent)
 	b.WriteString("## Required Reads\n\n")
 	b.WriteString("- `../AGENTS.md`\n")
+	b.WriteString("- `../.brain/policy.yaml`\n")
 	b.WriteString("- `../.brain/context/overview.md`\n")
 	b.WriteString("- `../.brain/context/architecture.md`\n")
 	b.WriteString("- `../.brain/context/workflows.md`\n")
 	b.WriteString("- `../.brain/context/memory-policy.md`\n\n")
 	b.WriteString("## Required Behavior\n\n")
 	b.WriteString("- Treat `../AGENTS.md` as the canonical project contract.\n")
+	b.WriteString("- If no validated session is active, run `brain session start --task \"<task>\"`.\n")
+	b.WriteString("- If a session is already active, run `brain session validate` before substantial work.\n")
 	b.WriteString("- Use the `brain` skill and `brain` CLI when project memory or vault context matters.\n")
-	b.WriteString("- Capture durable context changes and mention them in the final response.\n")
+	b.WriteString("- Use `brain session run -- <command>` for required verification commands.\n")
+	b.WriteString("- Finish with `brain session finish` and mention relevant note updates in the final response.\n")
 	return b.String()
 }
 
-func syncDoc(spec docSpec, dryRun, force bool) (Result, error) {
-	existing, err := os.ReadFile(spec.Path)
-	if err != nil && !os.IsNotExist(err) {
-		return Result{}, err
-	}
-	content, preserved, action, err := mergeDocument(string(existing), spec, force, os.IsNotExist(err))
-	if err != nil {
-		return Result{}, fmt.Errorf("%s: %w", filepath.ToSlash(spec.Path), err)
-	}
-	if !dryRun && action != "unchanged" {
-		if err := os.MkdirAll(filepath.Dir(spec.Path), 0o755); err != nil {
-			return Result{}, err
-		}
-		if err := os.WriteFile(spec.Path, []byte(content), 0o644); err != nil {
-			return Result{}, err
-		}
-	}
-	return Result{
-		Path:                 filepath.ToSlash(spec.Path),
-		Kind:                 spec.Kind,
-		Action:               action,
-		PreservedUserContent: preserved,
-		ManagedBlocks:        []string{spec.BlockID},
-	}, nil
-}
-
-func mergeDocument(existing string, spec docSpec, force, missing bool) (string, bool, string, error) {
-	begin := managedBegin(spec.BlockID)
-	end := managedEnd(spec.BlockID)
-	managed := managedBody(spec)
-	if missing || strings.TrimSpace(existing) == "" {
-		return managed, false, "created", nil
-	}
-
-	if strings.Contains(existing, begin) && strings.Contains(existing, end) {
-		start := strings.Index(existing, begin)
-		finish := strings.Index(existing[start:], end)
-		if finish < 0 {
-			return "", false, "", fmt.Errorf("missing managed block end marker")
-		}
-		finish += start + len(end)
-		if finish < len(existing) && existing[finish] == '\n' {
-			finish++
-		}
-		replaced := existing[:start] + managedSection(spec) + existing[finish:]
-		action := "updated"
-		if replaced == existing {
-			action = "unchanged"
-		}
-		return replaced, hasUserContent(existing, spec.BlockID), action, nil
-	}
-
-	if !force {
-		return "", false, "", fmt.Errorf("existing file is not brain-managed; rerun with --force to adopt it")
-	}
-
-	trimmed := strings.TrimSpace(existing)
-	adopted := managed
-	if trimmed != "" {
-		adopted = strings.TrimRight(adopted, "\n") + "\n\n## Local Notes\n\n" + trimmed + "\n"
-	}
-	action := "updated"
-	return adopted, trimmed != "", action, nil
-}
-
-func managedBody(spec docSpec) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "# %s\n\n", spec.Title)
-	b.WriteString(managedSection(spec))
-	if spec.LocalNote {
-		b.WriteString("\n")
-		b.WriteString(localNotesSection)
-	}
-	return b.String()
-}
-
-func managedSection(spec docSpec) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "%s\n", managedBegin(spec.BlockID))
-	b.WriteString(strings.TrimSpace(spec.Body))
-	b.WriteString("\n")
-	fmt.Fprintf(&b, "%s\n", managedEnd(spec.BlockID))
-	return b.String()
-}
-
-func managedBegin(id string) string {
-	return "<!-- brain:begin " + id + " -->"
-}
-
-func managedEnd(id string) string {
-	return "<!-- brain:end " + id + " -->"
-}
-
-func hasUserContent(existing, blockID string) bool {
-	begin := managedBegin(blockID)
-	end := managedEnd(blockID)
-	start := strings.Index(existing, begin)
-	finish := strings.Index(existing, end)
-	if start < 0 || finish < 0 {
-		return strings.TrimSpace(existing) != ""
-	}
-	finish += len(end)
-	prefix := normalizeOutsideContent(existing[:start])
-	suffix := normalizeOutsideContent(existing[finish:])
-	return prefix != "" || suffix != ""
-}
-
-func normalizeOutsideContent(s string) string {
-	s = strings.TrimSpace(s)
-	for _, title := range []string{
-		"# Project Agent Contract",
-		"# Overview",
-		"# Architecture",
-		"# Standards",
-		"# Workflows",
-		"# Memory Policy",
-		"# Current State",
-		"# Claude Wrapper",
-		"# Codex Wrapper",
-		"# Openclaw Wrapper",
-		"# Pi Wrapper",
-		"# Ai Wrapper",
-	} {
-		s = strings.TrimSpace(strings.ReplaceAll(s, title, ""))
-	}
-	normalizedLocalNotes := strings.TrimSpace(localNotesSection)
-	s = strings.TrimSpace(strings.ReplaceAll(s, normalizedLocalNotes, ""))
-	return s
+func renderGitIgnore() string {
+	return strings.TrimSpace(`
+.brain/session.json
+.brain/sessions/
+.brain/policy.override.yaml
+`) + "\n"
 }

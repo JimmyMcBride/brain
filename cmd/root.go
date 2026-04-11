@@ -89,6 +89,7 @@ func addCommands(root *cobra.Command, flags *rootFlagsState, loadApp appLoader) 
 	addHistoryCommand(root, flags, loadApp)
 	addUndoCommand(root, flags, loadApp)
 	addContextCommand(root, flags, loadApp)
+	addSessionCommand(root, flags, loadApp)
 	addSkillsCommand(root, flags, loadApp)
 }
 

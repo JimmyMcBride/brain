@@ -56,5 +56,25 @@ This creates:
 - `.brain/context/workflows.md`
 - `.brain/context/memory-policy.md`
 - `.brain/context/current-state.md`
+- `.brain/policy.yaml`
 
 If an agent wrapper is requested, `brain` also generates a thin wrapper such as `.codex/AGENTS.md` or `.claude/CLAUDE.md` that points back to the root project contract.
+
+## Sessions
+
+When you want actual enforcement instead of soft guidance, use sessions:
+
+```bash
+brain session start --project . --task "ship auth fix"
+brain session validate --project .
+brain session run --project . -- go test ./...
+brain session finish --project .
+```
+
+The generated policy file defines:
+
+- required docs and suggested startup commands
+- accepted project-memory note paths
+- whether repo changes require durable note updates
+- whether reindex is required after note changes
+- required verification command profiles

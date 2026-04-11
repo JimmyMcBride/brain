@@ -6,8 +6,8 @@ Use this file for implementation and review expectations.
 ## Standards
 
 - Keep code idiomatic Go with small, concrete abstractions.
-- Prefer explicit tests for CLI behavior, indexing, retrieval, and safety flows.
-- Verify with `go test ./...` and `go build ./...` before calling work complete.
+- Prefer explicit tests for CLI behavior, indexing, retrieval, safety flows, and session enforcement.
+- Record required verification through `brain session run -- ...` so finish-stage enforcement can validate it.
 
 ## CI
 

@@ -12,6 +12,7 @@
 - `internal/history` and `internal/backup`: append-only logs, pre-change backups, undo.
 - `internal/content`: simple seed, gather, outline, and publish workflow.
 - `internal/projectcontext`: generates repo-local `AGENTS.md`, `.brain/context/*`, and agent wrapper files.
+- `internal/session`: enforces project sessions, policy checks, ledger writes, and finish-stage validation.
 - `internal/skills`: installs canonical and wrapper skill docs into agent directories.
 
 ## Project Context
@@ -20,8 +21,18 @@
 
 1. `brain context install` creates a root `AGENTS.md`.
 2. It generates a modular `.brain/context` bundle for overview, architecture, standards, workflows, memory policy, and current state.
+3. It generates `.brain/policy.yaml` plus a managed `.gitignore` block for local session state.
 3. It can generate thin agent-specific wrappers such as `.codex/AGENTS.md` or `.claude/CLAUDE.md`.
 4. `brain context refresh` updates brain-managed sections while preserving user-authored content outside managed blocks.
+
+## Session Enforcement
+
+`brain` now supports hard project-session enforcement:
+
+1. `brain session start --task "..."` validates preflight requirements and writes `.brain/session.json`.
+2. `brain session run -- ...` records verification commands in the active session.
+3. `brain session validate --stage finish` evaluates repo changes, note updates, reindex status, and required command runs.
+4. `brain session finish` writes an immutable ledger entry under `.brain/sessions/` and clears the active session.
 
 ## Hybrid RAG
 

@@ -54,12 +54,28 @@
     ]
   },
   {
+    "path": ".brain/policy.yaml",
+    "kind": "policy",
+    "action": "created",
+    "preserved_user_content": false,
+    "managed_blocks": null
+  },
+  {
     "path": ".codex/AGENTS.md",
     "kind": "wrapper",
     "action": "created",
     "preserved_user_content": false,
     "managed_blocks": [
       "agent-wrapper-codex"
+    ]
+  },
+  {
+    "path": ".gitignore",
+    "kind": "ignore",
+    "action": "created",
+    "preserved_user_content": false,
+    "managed_blocks": [
+      "gitignore-session"
     ]
   },
   {

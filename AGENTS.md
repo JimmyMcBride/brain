@@ -13,6 +13,7 @@ Read the linked context files before substantial work. Prefer the `brain` skill 
 - [Workflows](./.brain/context/workflows.md)
 - [Memory Policy](./.brain/context/memory-policy.md)
 - [Current State](./.brain/context/current-state.md)
+- [Policy](./.brain/policy.yaml)
 
 ## Human Docs
 
@@ -24,11 +25,13 @@ Read the linked context files before substantial work. Prefer the `brain` skill 
 
 ## Required Workflow
 
-1. Read this file and the linked context files needed for the task.
-2. Retrieve existing project memory with `brain find` or `brain search` before substantial work.
-3. Use `brain capture`, `brain add`, or `brain edit` for durable context updates.
-4. Reindex after note changes when retrieval quality matters.
-5. Mention relevant note updates in the final response.
+1. If no validated session is active, run `brain session start --task "<task>"`.
+2. If a session is already active, run `brain session validate` before substantial work.
+3. Read this file and the linked context files needed for the task.
+4. Retrieve project memory with `brain find brain` or `brain search "brain <task>"`.
+5. Use `brain capture`, `brain add`, or `brain edit` for durable context updates.
+6. Use `brain session run -- <command>` for required verification commands.
+7. Finish with `brain session finish` so policy checks can enforce memory updates, reindexing, and required command runs.
 <!-- brain:end agents-contract -->
 
 ## Local Notes

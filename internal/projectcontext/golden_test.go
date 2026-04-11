@@ -32,6 +32,8 @@ func TestGeneratedDocumentGoldens(t *testing.T) {
 		{"wrapper-codex.golden", ".codex/AGENTS.md"},
 		{"overview.golden", ".brain/context/overview.md"},
 		{"current-state.golden", ".brain/context/current-state.md"},
+		{"policy.golden", ".brain/policy.yaml"},
+		{"gitignore.golden", ".gitignore"},
 	}
 
 	for _, tc := range cases {
@@ -42,6 +44,7 @@ func TestGeneratedDocumentGoldens(t *testing.T) {
 			}
 			got := strings.ReplaceAll(filepath.ToSlash(string(gotBytes)), filepath.ToSlash(project), "<PROJECT>")
 			got = strings.ReplaceAll(got, "demo-project", "<PROJECT_NAME>")
+			got = strings.ReplaceAll(got, "DemoProject", "<PROJECT_TITLE>")
 			want, err := os.ReadFile(filepath.Join("testdata", tc.name))
 			if err != nil {
 				t.Fatal(err)

@@ -15,6 +15,7 @@ import (
 	"brain/internal/output"
 	"brain/internal/projectcontext"
 	"brain/internal/search"
+	"brain/internal/session"
 	"brain/internal/skills"
 	"brain/internal/templates"
 	"brain/internal/vault"
@@ -35,6 +36,7 @@ type App struct {
 	Content   *content.Manager
 	Skills    *skills.Installer
 	Context   *projectcontext.Manager
+	Session   *session.Manager
 	Output    *output.Printer
 }
 
@@ -90,6 +92,7 @@ func New(configPath string, jsonOutput bool, opts Options) (*App, error) {
 		Content:   contentManager,
 		Skills:    skills.NewInstaller(userHome),
 		Context:   projectcontext.New(userHome),
+		Session:   session.New(historyLog),
 		Output:    output.New(cfg.OutputMode, opts.Stdout),
 	}, nil
 }

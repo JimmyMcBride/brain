@@ -4,5 +4,7 @@ created   context  .brain/context/memory-policy.md
 created   context  .brain/context/overview.md
 created   context  .brain/context/standards.md
 created   context  .brain/context/workflows.md
+created   policy   .brain/policy.yaml
 created   wrapper  .codex/AGENTS.md
+created   ignore   .gitignore
 created   contract AGENTS.md

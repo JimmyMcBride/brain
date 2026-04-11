@@ -69,3 +69,14 @@ brain context install --project . --agent codex --agent openclaw
 brain context refresh --project .
 brain context refresh --project . --dry-run
 ```
+
+## Sessions
+
+```bash
+brain session start --project . --task "tighten search ranking"
+brain session validate --project .
+brain session run --project . -- go test ./...
+brain session run --project . -- go build ./...
+brain session finish --project . --summary "search update complete"
+brain session abort --project . --reason "switching tasks"
+```
