@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-11T14:26:14Z"
+updated: "2026-04-11T14:27:08Z"
 ---
 # Current State
 
@@ -39,3 +39,4 @@ Add repo-specific notes here. `brain context refresh` preserves content outside 
 - 2026-04-11: Rewrote the README and why-doc wording to describe Brain in the present tense without historical framing.
 - 2026-04-11: Added retrieval observability with tracked index freshness metadata, `brain search status`, `brain search --explain`, and a doctor check for stale or missing local index state.
 - 2026-04-11: Updated the Brain skill guidance to use `brain search status`, `brain search --explain`, and `doctor` index freshness when debugging retrieval.
+- 2026-04-11: Updated the global `brain` binary to commit `f741dea` and refreshed the global Codex `brain` skill so it includes retrieval freshness and explain/status guidance.
