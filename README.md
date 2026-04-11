@@ -8,7 +8,7 @@ It keeps human docs at the repo root, keeps machine-managed state under `.brain/
 
 - initializes a project-local Brain workspace in any repo or folder
 - keeps durable project knowledge in plain markdown
-- indexes `AGENTS.md`, `docs/**/*.md`, and `.brain/**/*.md` with SQLite FTS plus embeddings
+- indexes `AGENTS.md`, `docs/**/*.md`, and `.brain/**/*.md` with SQLite FTS plus an embedding provider
 - provides project-scoped planning and brainstorming commands
 - generates deterministic agent context and optional wrappers
 - tracks note history and supports undo
@@ -116,6 +116,8 @@ It excludes local runtime state such as:
 
 This keeps retrieval focused on durable project knowledge instead of transient internals.
 
+By default, `brain` uses the built-in `localhash` provider. That gives you strong local lexical search plus lightweight semantic hinting without any network dependency. If you want stronger semantic retrieval, switch the embedding provider to `openai`.
+
 ## Config
 
 Config lives at `~/.config/brain/config.yaml`.
@@ -125,6 +127,11 @@ Supported fields:
 - `embedding_provider`
 - `embedding_model`
 - `output_mode`
+
+Default values:
+
+- `embedding_provider: localhash`
+- `embedding_model: hash-v1`
 
 Environment overrides:
 

@@ -2,6 +2,8 @@
 
 `brain` is operated per project. Use `--project` when you are acting on a repo other than the current directory.
 
+The default config uses `embedding_provider: localhash` and `embedding_model: hash-v1`.
+
 ## Install
 
 For the standard end-user install path:
@@ -53,7 +55,7 @@ brain search --project . --explain "Supabase auth"
 ```
 
 `find` is path/title/type/content matching.  
-`search` uses the local SQLite index and embeddings over project-managed markdown. The index lives in `.brain/state/brain.sqlite3`, tracks its own freshness, rebuilds automatically when it is missing or stale, and can explain how lexical and semantic scores contributed to a result with `--explain`.
+`search` uses the local SQLite index plus the configured embedding provider over project-managed markdown. With the default `localhash` provider, the result is strong local lexical search plus lightweight semantic hinting rather than a high-quality hosted semantic model. The index lives in `.brain/state/brain.sqlite3`, tracks its own freshness, rebuilds automatically when it is missing or stale, and `brain doctor` plus `brain search status` both show the active provider/model. Use `--explain` to inspect lexical and semantic contributions.
 
 ## Brainstorming
 

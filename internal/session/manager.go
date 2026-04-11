@@ -133,6 +133,12 @@ type FinishResult struct {
 	LedgerPath string           `json:"ledger_path,omitempty"`
 }
 
+const (
+	sessionLockRetryDelay = 20 * time.Millisecond
+	sessionLockTimeout    = 2 * time.Second
+	sessionLockStaleAfter = 30 * time.Second
+)
+
 func New(historyLog *history.Logger) *Manager {
 	return &Manager{History: historyLog}
 }
@@ -151,11 +157,6 @@ func (m *Manager) Start(ctx context.Context, req StartRequest) (*StartResult, er
 		return nil, errors.New("task is required; use --task")
 	}
 	activePath := filepath.Join(projectDir, filepath.FromSlash(policy.Session.ActiveFile))
-	if policy.Session.SingleActive {
-		if active, err := loadActiveSession(activePath); err == nil && active.Status == "active" {
-			return nil, fmt.Errorf("active session %s already exists for task %q", active.ID, active.Task)
-		}
-	}
 
 	checks, err := m.preflightChecks(ctx, projectDir, req.ConfigPath, policy)
 	if err != nil {
@@ -187,7 +188,18 @@ func (m *Manager) Start(ctx context.Context, req StartRequest) (*StartResult, er
 		RequiredDocs:      append([]string(nil), policy.Preflight.RequiredDocs...),
 		SuggestedCommands: expandSuggestedCommands(policy.Preflight.SuggestedCommands, task),
 	}
-	if err := saveActiveSession(activePath, &active); err != nil {
+	if err := withSessionLock(activePath, func() error {
+		if policy.Session.SingleActive {
+			existing, err := loadActiveSessionIfExists(activePath)
+			if err != nil {
+				return err
+			}
+			if existing != nil && existing.Status == "active" {
+				return fmt.Errorf("active session %s already exists for task %q", existing.ID, existing.Task)
+			}
+		}
+		return saveActiveSession(activePath, &active)
+	}); err != nil {
 		return nil, err
 	}
 
@@ -252,49 +264,57 @@ func (m *Manager) Finish(ctx context.Context, req FinishRequest) (*FinishResult,
 		return nil, err
 	}
 	activePath := filepath.Join(projectDir, filepath.FromSlash(policy.Session.ActiveFile))
-	active, err := loadActiveSession(activePath)
-	if err != nil {
-		return nil, err
-	}
+	var result *FinishResult
+	if err := withSessionLock(activePath, func() error {
+		active, err := loadActiveSession(activePath)
+		if err != nil {
+			return err
+		}
 
-	validation, err := m.evaluateFinish(ctx, policy, active)
-	if err != nil {
-		return nil, err
-	}
-	if !validation.OK && !req.Force {
-		return &FinishResult{
-			Status:     "blocked",
+		validation, err := m.evaluateFinish(ctx, policy, active)
+		if err != nil {
+			return err
+		}
+		if !validation.OK && !req.Force {
+			result = &FinishResult{
+				Status:     "blocked",
+				SessionID:  active.ID,
+				Validation: *validation,
+			}
+			return nil
+		}
+		if req.Force && strings.TrimSpace(req.Reason) == "" {
+			return errors.New("force finish requires --reason")
+		}
+
+		now := time.Now().UTC()
+		if validation.OK {
+			active.Status = "finished"
+		} else {
+			active.Status = "forced_finished"
+		}
+		active.EndedAt = &now
+		active.TerminalSummary = strings.TrimSpace(req.Summary)
+		active.OverrideReason = strings.TrimSpace(req.Reason)
+		ledgerPath, err := writeLedger(projectDir, policy, active)
+		if err != nil {
+			return err
+		}
+		if err := removeActiveSession(activePath); err != nil {
+			return err
+		}
+		result = &FinishResult{
+			Status:     active.Status,
 			SessionID:  active.ID,
+			Forced:     !validation.OK,
 			Validation: *validation,
-		}, nil
-	}
-	if req.Force && strings.TrimSpace(req.Reason) == "" {
-		return nil, errors.New("force finish requires --reason")
-	}
-
-	now := time.Now().UTC()
-	if validation.OK {
-		active.Status = "finished"
-	} else {
-		active.Status = "forced_finished"
-	}
-	active.EndedAt = &now
-	active.TerminalSummary = strings.TrimSpace(req.Summary)
-	active.OverrideReason = strings.TrimSpace(req.Reason)
-	ledgerPath, err := writeLedger(projectDir, policy, active)
-	if err != nil {
+			LedgerPath: filepath.ToSlash(ledgerPath),
+		}
+		return nil
+	}); err != nil {
 		return nil, err
 	}
-	if err := os.Remove(activePath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, err
-	}
-	return &FinishResult{
-		Status:     active.Status,
-		SessionID:  active.ID,
-		Forced:     !validation.OK,
-		Validation: *validation,
-		LedgerPath: filepath.ToSlash(ledgerPath),
-	}, nil
+	return result, nil
 }
 
 func (m *Manager) Abort(ctx context.Context, req AbortRequest) (*FinishResult, error) {
@@ -307,27 +327,34 @@ func (m *Manager) Abort(ctx context.Context, req AbortRequest) (*FinishResult, e
 		return nil, err
 	}
 	activePath := filepath.Join(projectDir, filepath.FromSlash(policy.Session.ActiveFile))
-	active, err := loadActiveSession(activePath)
-	if err != nil {
+	var result *FinishResult
+	if err := withSessionLock(activePath, func() error {
+		active, err := loadActiveSession(activePath)
+		if err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		active.Status = "aborted"
+		active.EndedAt = &now
+		active.OverrideReason = strings.TrimSpace(req.Reason)
+		ledgerPath, err := writeLedger(projectDir, policy, active)
+		if err != nil {
+			return err
+		}
+		if err := removeActiveSession(activePath); err != nil {
+			return err
+		}
+		result = &FinishResult{
+			Status:     "aborted",
+			SessionID:  active.ID,
+			Validation: ValidationResult{OK: true, Stage: "abort", SessionID: active.ID, Task: active.Task},
+			LedgerPath: filepath.ToSlash(ledgerPath),
+		}
+		return nil
+	}); err != nil {
 		return nil, err
 	}
-	now := time.Now().UTC()
-	active.Status = "aborted"
-	active.EndedAt = &now
-	active.OverrideReason = strings.TrimSpace(req.Reason)
-	ledgerPath, err := writeLedger(projectDir, policy, active)
-	if err != nil {
-		return nil, err
-	}
-	if err := os.Remove(activePath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, err
-	}
-	return &FinishResult{
-		Status:     "aborted",
-		SessionID:  active.ID,
-		Validation: ValidationResult{OK: true, Stage: "abort", SessionID: active.ID, Task: active.Task},
-		LedgerPath: filepath.ToSlash(ledgerPath),
-	}, nil
+	return result, nil
 }
 
 func (m *Manager) RunCommand(ctx context.Context, req RunRequest, stdout, stderr io.Writer) (*RunResult, error) {
@@ -343,7 +370,7 @@ func (m *Manager) RunCommand(ctx context.Context, req RunRequest, stdout, stderr
 		return nil, err
 	}
 	activePath := filepath.Join(projectDir, filepath.FromSlash(policy.Session.ActiveFile))
-	active, err := loadActiveSession(activePath)
+	active, err := loadActiveSessionForRecording(activePath)
 	if err != nil {
 		return nil, err
 	}
@@ -387,21 +414,21 @@ func (m *Manager) RunCommand(ctx context.Context, req RunRequest, stdout, stderr
 		Command:   strings.Join(req.Argv, " "),
 		ExitCode:  exitCode,
 	}
-	active.CommandRuns = append(active.CommandRuns, record)
-	if err := saveActiveSession(activePath, active); err != nil {
-		return nil, err
-	}
 
 	result := &RunResult{
 		SessionID: active.ID,
 		Command:   record.Command,
 		ExitCode:  exitCode,
-		Recorded:  true,
 	}
 	if req.CaptureOutput {
 		result.Stdout = outBuf.String()
 		result.Stderr = errBuf.String()
 	}
+	if err := appendCommandRun(activePath, active.ID, record); err != nil {
+		result.Recorded = false
+		return result, err
+	}
+	result.Recorded = true
 	if runErr != nil {
 		return result, runErr
 	}
@@ -526,6 +553,17 @@ func loadActiveSession(path string) (*ActiveSession, error) {
 	return &active, nil
 }
 
+func loadActiveSessionIfExists(path string) (*ActiveSession, error) {
+	active, err := loadActiveSession(path)
+	if err == nil {
+		return active, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	return nil, err
+}
+
 func saveActiveSession(path string, active *ActiveSession) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
@@ -534,7 +572,108 @@ func saveActiveSession(path string, active *ActiveSession) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, raw, 0o644)
+	return writeFileAtomically(path, raw, 0o644)
+}
+
+func removeActiveSession(path string) error {
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+func loadActiveSessionForRecording(path string) (*ActiveSession, error) {
+	var active *ActiveSession
+	if err := withSessionLock(path, func() error {
+		current, err := loadActiveSession(path)
+		if err != nil {
+			return err
+		}
+		active = current
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return active, nil
+}
+
+func appendCommandRun(path, sessionID string, record CommandRun) error {
+	return withSessionLock(path, func() error {
+		active, err := loadActiveSession(path)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("session %s ended before command %q could be recorded", sessionID, record.Command)
+			}
+			return err
+		}
+		if active.ID != sessionID || active.Status != "active" {
+			return fmt.Errorf("session %s is no longer active; command %q was not recorded", sessionID, record.Command)
+		}
+		active.CommandRuns = append(active.CommandRuns, record)
+		return saveActiveSession(path, active)
+	})
+}
+
+func withSessionLock(activePath string, fn func() error) error {
+	lockPath := activePath + ".lock"
+	deadline := time.Now().Add(sessionLockTimeout)
+	for {
+		if err := os.Mkdir(lockPath, 0o700); err == nil {
+			defer func() {
+				_ = os.Remove(lockPath)
+			}()
+			return fn()
+		} else if !errors.Is(err, os.ErrExist) {
+			return fmt.Errorf("acquire session lock: %w", err)
+		}
+
+		if stale, staleErr := sessionLockIsStale(lockPath); staleErr == nil && stale {
+			_ = os.Remove(lockPath)
+			continue
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("session state is busy at %s; retry", filepath.ToSlash(activePath))
+		}
+		time.Sleep(sessionLockRetryDelay)
+	}
+}
+
+func sessionLockIsStale(lockPath string) (bool, error) {
+	info, err := os.Stat(lockPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	return time.Since(info.ModTime()) > sessionLockStaleAfter, nil
+}
+
+func writeFileAtomically(path string, raw []byte, mode os.FileMode) error {
+	dir := filepath.Dir(path)
+	tempFile, err := os.CreateTemp(dir, ".brain-session-*")
+	if err != nil {
+		return err
+	}
+	tempPath := tempFile.Name()
+	defer func() {
+		_ = os.Remove(tempPath)
+	}()
+	if err := tempFile.Chmod(mode); err != nil {
+		_ = tempFile.Close()
+		return err
+	}
+	if _, err := tempFile.Write(raw); err != nil {
+		_ = tempFile.Close()
+		return err
+	}
+	if err := tempFile.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tempPath, path); err != nil {
+		return err
+	}
+	return nil
 }
 
 func writeLedger(projectDir string, policy *projectcontext.Policy, active *ActiveSession) (string, error) {

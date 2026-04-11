@@ -52,6 +52,44 @@ type VerificationProfile struct {
 	Commands []string `yaml:"commands" json:"commands"`
 }
 
+type PolicyOverride struct {
+	Version   *int                     `yaml:"version"`
+	Project   *PolicyProjectOverride   `yaml:"project"`
+	Session   *PolicySessionOverride   `yaml:"session"`
+	Preflight *PolicyPreflightOverride `yaml:"preflight"`
+	Closeout  *PolicyCloseoutOverride  `yaml:"closeout"`
+}
+
+type PolicyProjectOverride struct {
+	Name    *string                      `yaml:"name"`
+	Slug    *string                      `yaml:"slug"`
+	Runtime *string                      `yaml:"runtime"`
+	Memory  *PolicyProjectMemoryOverride `yaml:"memory"`
+}
+
+type PolicyProjectMemoryOverride struct {
+	AcceptedNoteGlobs *[]string `yaml:"accepted_note_globs"`
+}
+
+type PolicySessionOverride struct {
+	RequireTask  *bool   `yaml:"require_task"`
+	SingleActive *bool   `yaml:"single_active"`
+	ActiveFile   *string `yaml:"active_file"`
+	LedgerDir    *string `yaml:"ledger_dir"`
+}
+
+type PolicyPreflightOverride struct {
+	RequireBrainDoctor *bool     `yaml:"require_brain_doctor"`
+	RequiredDocs       *[]string `yaml:"required_docs"`
+	SuggestedCommands  *[]string `yaml:"suggested_commands"`
+}
+
+type PolicyCloseoutOverride struct {
+	AcceptableHistoryOperations     *[]string              `yaml:"acceptable_history_operations"`
+	RequireMemoryUpdateOnRepoChange *bool                  `yaml:"require_memory_update_on_repo_change"`
+	VerificationProfiles            *[]VerificationProfile `yaml:"verification_profiles"`
+}
+
 func DefaultPolicy(snapshot Snapshot) Policy {
 	slug := policySlug(snapshot.ProjectName)
 	policy := Policy{
@@ -126,7 +164,7 @@ func LoadPolicy(projectDir string) (*Policy, string, string, error) {
 	}
 	normalizePolicy(&base)
 	if overrideRaw, err := os.ReadFile(overridePath); err == nil && len(strings.TrimSpace(string(overrideRaw))) != 0 {
-		var override Policy
+		var override PolicyOverride
 		if err := yaml.Unmarshal(overrideRaw, &override); err != nil {
 			return nil, basePath, overridePath, fmt.Errorf("parse policy override: %w", err)
 		}
@@ -159,54 +197,62 @@ func normalizePolicy(policy *Policy) {
 	}
 }
 
-func mergePolicy(base, override *Policy) {
+func mergePolicy(base *Policy, override *PolicyOverride) {
 	if override == nil || base == nil {
 		return
 	}
-	if override.Version != 0 {
-		base.Version = override.Version
+	if override.Version != nil {
+		base.Version = *override.Version
 	}
-	if override.Project.Name != "" {
-		base.Project.Name = override.Project.Name
+	if override.Project != nil {
+		if override.Project.Name != nil {
+			base.Project.Name = *override.Project.Name
+		}
+		if override.Project.Slug != nil {
+			base.Project.Slug = *override.Project.Slug
+		}
+		if override.Project.Runtime != nil {
+			base.Project.Runtime = *override.Project.Runtime
+		}
+		if override.Project.Memory != nil && override.Project.Memory.AcceptedNoteGlobs != nil {
+			base.Project.Memory.AcceptedNoteGlobs = append([]string(nil), (*override.Project.Memory.AcceptedNoteGlobs)...)
+		}
 	}
-	if override.Project.Slug != "" {
-		base.Project.Slug = override.Project.Slug
+	if override.Session != nil {
+		if override.Session.ActiveFile != nil {
+			base.Session.ActiveFile = *override.Session.ActiveFile
+		}
+		if override.Session.LedgerDir != nil {
+			base.Session.LedgerDir = *override.Session.LedgerDir
+		}
+		if override.Session.RequireTask != nil {
+			base.Session.RequireTask = *override.Session.RequireTask
+		}
+		if override.Session.SingleActive != nil {
+			base.Session.SingleActive = *override.Session.SingleActive
+		}
 	}
-	if override.Project.Runtime != "" {
-		base.Project.Runtime = override.Project.Runtime
+	if override.Preflight != nil {
+		if override.Preflight.RequiredDocs != nil {
+			base.Preflight.RequiredDocs = append([]string(nil), (*override.Preflight.RequiredDocs)...)
+		}
+		if override.Preflight.SuggestedCommands != nil {
+			base.Preflight.SuggestedCommands = append([]string(nil), (*override.Preflight.SuggestedCommands)...)
+		}
+		if override.Preflight.RequireBrainDoctor != nil {
+			base.Preflight.RequireBrainDoctor = *override.Preflight.RequireBrainDoctor
+		}
 	}
-	if len(override.Project.Memory.AcceptedNoteGlobs) != 0 {
-		base.Project.Memory.AcceptedNoteGlobs = append([]string(nil), override.Project.Memory.AcceptedNoteGlobs...)
-	}
-	if override.Session.ActiveFile != "" {
-		base.Session.ActiveFile = override.Session.ActiveFile
-	}
-	if override.Session.LedgerDir != "" {
-		base.Session.LedgerDir = override.Session.LedgerDir
-	}
-	if override.Session.RequireTask {
-		base.Session.RequireTask = true
-	}
-	if override.Session.SingleActive {
-		base.Session.SingleActive = true
-	}
-	if len(override.Preflight.RequiredDocs) != 0 {
-		base.Preflight.RequiredDocs = append([]string(nil), override.Preflight.RequiredDocs...)
-	}
-	if len(override.Preflight.SuggestedCommands) != 0 {
-		base.Preflight.SuggestedCommands = append([]string(nil), override.Preflight.SuggestedCommands...)
-	}
-	if override.Preflight.RequireBrainDoctor {
-		base.Preflight.RequireBrainDoctor = true
-	}
-	if len(override.Closeout.AcceptableHistoryOperations) != 0 {
-		base.Closeout.AcceptableHistoryOperations = append([]string(nil), override.Closeout.AcceptableHistoryOperations...)
-	}
-	if override.Closeout.RequireMemoryUpdateOnRepoChange {
-		base.Closeout.RequireMemoryUpdateOnRepoChange = true
-	}
-	if len(override.Closeout.VerificationProfiles) != 0 {
-		base.Closeout.VerificationProfiles = append([]VerificationProfile(nil), override.Closeout.VerificationProfiles...)
+	if override.Closeout != nil {
+		if override.Closeout.AcceptableHistoryOperations != nil {
+			base.Closeout.AcceptableHistoryOperations = append([]string(nil), (*override.Closeout.AcceptableHistoryOperations)...)
+		}
+		if override.Closeout.RequireMemoryUpdateOnRepoChange != nil {
+			base.Closeout.RequireMemoryUpdateOnRepoChange = *override.Closeout.RequireMemoryUpdateOnRepoChange
+		}
+		if override.Closeout.VerificationProfiles != nil {
+			base.Closeout.VerificationProfiles = append([]VerificationProfile(nil), (*override.Closeout.VerificationProfiles)...)
+		}
 	}
 }
 

@@ -57,7 +57,7 @@ Use these commands by default:
 - `brain find [query]`
   - Search path, title, type, or note content.
 - `brain search "query"`
-  - Run hybrid retrieval over the local project index.
+  - Run hybrid retrieval over the local project index. With the default `localhash` provider, this is best understood as lexical search plus lightweight semantic hinting.
 - `brain search status`
   - Inspect index freshness, indexed counts, and the local sqlite path without mutating the index.
 - `brain search --explain "query"`
@@ -97,6 +97,7 @@ Use these commands by default:
 4. `brain search --explain "<task or concept>"` when you need to inspect ranking behavior.
 5. `brain read <path>` for the winning notes.
 6. Re-run search after meaningful note updates when you need the latest local state reflected. Brain will rebuild the local index automatically only when it is stale or missing.
+7. If retrieval quality matters, check which provider is active in `brain doctor` or `brain search status` before assuming the project is using a strong hosted semantic model.
 
 ## When Not To Use This Skill
 
