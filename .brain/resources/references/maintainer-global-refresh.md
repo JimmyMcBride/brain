@@ -15,7 +15,8 @@ Use this when a real product change should also update your installed `brain` bi
 3. Run required verification through `brain session run -- <command>`.
 4. Commit the repo changes.
 5. Push `main`.
-6. Refresh the installed binary and global Codex skill:
+6. Wait for the automatic stable release workflow to tag and publish the new version from that pushed commit.
+7. Refresh the installed binary and global Codex skill:
 
 Unix shell:
 
@@ -29,7 +30,7 @@ Windows PowerShell:
 .\scripts\refresh-global-brain.ps1
 ```
 
-7. Verify:
+8. Verify:
    - Unix: `~/.local/bin/brain version` shows the pushed commit
    - Windows: `%LocalAppData%\Programs\brain\brain.exe version` shows the pushed commit
    - the installed global Codex `brain` skill matches `skills/brain/`

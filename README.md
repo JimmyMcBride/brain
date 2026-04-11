@@ -59,6 +59,8 @@ These installers verify published checksums, support `linux`, `darwin`, and `win
 - Unix: `~/.local/bin/brain`
 - Windows: `%LocalAppData%\Programs\brain\brain.exe`
 
+Pushes to `main` publish stable GitHub releases automatically, so install normally targets the latest release from `main`.
+
 If no GitHub release exists yet, the same command falls back to downloading the current `main` source archive from GitHub and building it locally with Go.
 
 Optional overrides:
@@ -234,6 +236,8 @@ Project state is derived from `--project` and `.brain/state`. It is not configur
 ## Update Model
 
 `brain update` downloads the newest matching GitHub Release, verifies checksums, and installs the binary.
+
+By default, that means the latest stable release published automatically from `main`.
 
 - if the current binary is writable, it updates in place
 - otherwise it installs to:

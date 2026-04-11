@@ -23,6 +23,8 @@ That installs the latest tagged release with checksum verification into:
 - Unix: `~/.local/bin/brain`
 - Windows: `%LocalAppData%\Programs\brain\brain.exe`
 
+Pushes to `main` publish stable GitHub releases automatically, so install and update normally follow the latest release from `main`.
+
 If no release has been published yet, the installer falls back to downloading the current `main` source tarball and building it locally with Go.
 
 ## Bootstrap A Project
@@ -183,3 +185,5 @@ brain update
 ```
 
 On Windows, `brain update` uses the same release assets and default install target as `scripts/install.ps1`.
+
+By default, `brain update` tracks the latest stable GitHub release published from `main`.

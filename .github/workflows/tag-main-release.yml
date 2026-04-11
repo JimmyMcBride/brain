@@ -1,0 +1,47 @@
+name: Tag Main Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tag-main-release
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch tags
+        run: git fetch --force --tags origin
+
+      - name: Compute next release tag
+        id: next_tag
+        run: |
+          set -euo pipefail
+          ./scripts/next-release-tag.sh >> "$GITHUB_OUTPUT"
+
+      - name: Stop if HEAD is already tagged
+        if: steps.next_tag.outputs.head_already_tagged == 'true'
+        run: |
+          echo "HEAD already has release tag ${{ steps.next_tag.outputs.tag }}; skipping."
+
+      - name: Create and push release tag
+        if: steps.next_tag.outputs.head_already_tagged != 'true'
+        env:
+          TAG: ${{ steps.next_tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "${TAG}" "${GITHUB_SHA}"
+          git push origin "refs/tags/${TAG}"
