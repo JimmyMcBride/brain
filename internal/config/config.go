@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -145,7 +146,7 @@ func resolvePaths(configPath string) (Paths, error) {
 	}
 	configPath = expandHome(configPath)
 	home, _ := os.UserHomeDir()
-	appDataDir := filepath.Join(userDataDir(home), "brain")
+	appDataDir := filepath.Join(userDataDirFor(runtime.GOOS, home), "brain")
 	return Paths{
 		ConfigFile:      configPath,
 		ConfigDir:       filepath.Dir(configPath),
@@ -154,7 +155,13 @@ func resolvePaths(configPath string) (Paths, error) {
 	}, nil
 }
 
-func userDataDir(home string) string {
+func userDataDirFor(goos, home string) string {
+	if goos == "windows" {
+		if v := os.Getenv("LOCALAPPDATA"); v != "" {
+			return expandHome(v)
+		}
+		return filepath.Join(home, "AppData", "Local")
+	}
 	if v := os.Getenv("XDG_DATA_HOME"); v != "" {
 		return expandHome(v)
 	}

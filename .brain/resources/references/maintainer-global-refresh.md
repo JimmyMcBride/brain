@@ -17,13 +17,22 @@ Use this when a real product change should also update your installed `brain` bi
 5. Push `main`.
 6. Refresh the installed binary and global Codex skill:
 
+Unix shell:
+
 ```bash
 ./scripts/refresh-global-brain.sh
 ```
 
+Windows PowerShell:
+
+```powershell
+.\scripts\refresh-global-brain.ps1
+```
+
 7. Verify:
-   - `~/.local/bin/brain version` shows the pushed commit
-   - `diff -qr skills/brain ~/.codex/skills/brain` succeeds
+   - Unix: `~/.local/bin/brain version` shows the pushed commit
+   - Windows: `%LocalAppData%\Programs\brain\brain.exe version` shows the pushed commit
+   - the installed global Codex `brain` skill matches `skills/brain/`
 
 ## Defaults
 

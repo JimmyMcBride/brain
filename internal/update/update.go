@@ -2,6 +2,7 @@ package update
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -16,7 +17,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -159,8 +159,7 @@ func (m *Manager) Update(ctx context.Context, req Request) (Result, error) {
 		CurrentPath:    m.exe,
 	}
 
-	platformOK := slices.Contains([]string{"linux", "darwin"}, m.goos) && slices.Contains([]string{"amd64", "arm64"}, m.goarch)
-	if !platformOK {
+	if !supportedPlatform(m.goos, m.goarch) {
 		result.Status = "unsupported_platform"
 		result.Message = fmt.Sprintf("%s/%s is not supported by the release updater", m.goos, m.goarch)
 		return result, nil
@@ -218,8 +217,8 @@ func (m *Manager) Update(ctx context.Context, req Request) (Result, error) {
 		return result, err
 	}
 
-	extractedPath := filepath.Join(tmpDir, "brain")
-	if err := extractBinary(archivePath, extractedPath); err != nil {
+	extractedPath := filepath.Join(tmpDir, executableName(m.goos))
+	if err := extractBinary(archivePath, extractedPath, m.goos); err != nil {
 		return result, err
 	}
 	if err := m.installBinary(extractedPath, installPath); err != nil {
@@ -338,11 +337,11 @@ func (m *Manager) chooseInstallPath() (string, bool, error) {
 	if isWritableTarget(m.exe) {
 		return m.exe, false, nil
 	}
-	localBin := filepath.Join(m.home, ".local", "bin")
-	if err := os.MkdirAll(localBin, 0o755); err != nil {
+	installDir := defaultInstallDir(m.goos, m.home)
+	if err := os.MkdirAll(installDir, 0o755); err != nil {
 		return "", false, fmt.Errorf("create fallback bin dir: %w", err)
 	}
-	return filepath.Join(localBin, "brain"), true, nil
+	return filepath.Join(installDir, executableName(m.goos)), true, nil
 }
 
 func (m *Manager) installBinary(extractedPath, target string) error {
@@ -354,7 +353,7 @@ func (m *Manager) installBinary(extractedPath, target string) error {
 	}
 
 	if _, err := os.Stat(target); err == nil {
-		backupName := fmt.Sprintf("brain_%s_%s", time.Now().UTC().Format("20060102T150405Z"), sanitizeVersion(chooseVersion(buildinfo.Version)))
+		backupName := fmt.Sprintf("brain_%s_%s%s", time.Now().UTC().Format("20060102T150405Z"), sanitizeVersion(chooseVersion(buildinfo.Version)), executableSuffix(m.goos))
 		backupPath := filepath.Join(m.paths.UpdateBackupDir, backupName)
 		if err := copyFile(target, backupPath, 0o755); err != nil {
 			return fmt.Errorf("backup current binary: %w", err)
@@ -382,8 +381,8 @@ func (m *Manager) installBinary(extractedPath, target string) error {
 }
 
 func (m *Manager) pathDetails() (bool, string) {
-	localBin := filepath.Join(m.home, ".local", "bin")
-	contains := pathContains(localBin, os.Getenv("PATH"))
+	installDir := defaultInstallDir(m.goos, m.home)
+	contains := pathContains(installDir, os.Getenv("PATH"))
 	found, err := m.look("brain")
 	if err != nil {
 		return contains, ""
@@ -395,7 +394,7 @@ func (m *Manager) pathDetails() (bool, string) {
 }
 
 func selectAssets(rel *release, goos, goarch string) (asset, asset, error) {
-	archiveName := fmt.Sprintf("brain_%s_%s_%s.tar.gz", rel.TagName, goos, goarch)
+	archiveName := archiveAssetName(rel.TagName, goos, goarch)
 	checksumName := fmt.Sprintf("brain_%s_checksums.txt", rel.TagName)
 	var archiveAsset asset
 	var checksumsAsset asset
@@ -459,7 +458,14 @@ func fileChecksum(path string) (string, error) {
 	return hex.EncodeToString(sum.Sum(nil)), nil
 }
 
-func extractBinary(archivePath, dest string) error {
+func extractBinary(archivePath, dest, goos string) error {
+	if goos == "windows" {
+		return extractZipBinary(archivePath, dest)
+	}
+	return extractTarBinary(archivePath, dest)
+}
+
+func extractTarBinary(archivePath, dest string) error {
 	file, err := os.Open(archivePath)
 	if err != nil {
 		return fmt.Errorf("open archive: %w", err)
@@ -505,6 +511,40 @@ func extractBinary(archivePath, dest string) error {
 	return errors.New("brain binary not found in archive")
 }
 
+func extractZipBinary(archivePath, dest string) error {
+	reader, err := zip.OpenReader(archivePath)
+	if err != nil {
+		return fmt.Errorf("open zip: %w", err)
+	}
+	defer reader.Close()
+	for _, file := range reader.File {
+		if filepath.Base(file.Name) != "brain.exe" {
+			continue
+		}
+		rc, err := file.Open()
+		if err != nil {
+			return fmt.Errorf("open zip binary: %w", err)
+		}
+		out, err := os.Create(dest)
+		if err != nil {
+			rc.Close()
+			return fmt.Errorf("create extracted binary: %w", err)
+		}
+		if _, err := io.Copy(out, rc); err != nil {
+			out.Close()
+			rc.Close()
+			return fmt.Errorf("extract binary: %w", err)
+		}
+		if err := out.Close(); err != nil {
+			rc.Close()
+			return fmt.Errorf("close extracted binary: %w", err)
+		}
+		rc.Close()
+		return nil
+	}
+	return errors.New("brain binary not found in archive")
+}
+
 func copyFile(src, dest string, mode os.FileMode) error {
 	in, err := os.Open(src)
 	if err != nil {
@@ -543,7 +583,8 @@ func isWritableTarget(target string) bool {
 func pathContains(dir, pathEnv string) bool {
 	cleanDir := filepath.Clean(dir)
 	for _, entry := range filepath.SplitList(pathEnv) {
-		if filepath.Clean(entry) == cleanDir {
+		cleanEntry := filepath.Clean(entry)
+		if cleanEntry == cleanDir || strings.EqualFold(cleanEntry, cleanDir) {
 			return true
 		}
 	}
@@ -556,7 +597,50 @@ func sanitizeVersion(version string) string {
 }
 
 func sameFilePath(a, b string) bool {
-	return filepath.Clean(a) == filepath.Clean(b)
+	cleanA := filepath.Clean(a)
+	cleanB := filepath.Clean(b)
+	return cleanA == cleanB || strings.EqualFold(cleanA, cleanB)
+}
+
+func supportedPlatform(goos, goarch string) bool {
+	switch goos {
+	case "linux", "darwin", "windows":
+		return goarch == "amd64" || goarch == "arm64"
+	default:
+		return false
+	}
+}
+
+func archiveAssetName(tag, goos, goarch string) string {
+	return fmt.Sprintf("brain_%s_%s_%s%s", tag, goos, goarch, archiveExtension(goos))
+}
+
+func archiveExtension(goos string) string {
+	if goos == "windows" {
+		return ".zip"
+	}
+	return ".tar.gz"
+}
+
+func executableName(goos string) string {
+	return "brain" + executableSuffix(goos)
+}
+
+func executableSuffix(goos string) string {
+	if goos == "windows" {
+		return ".exe"
+	}
+	return ""
+}
+
+func defaultInstallDir(goos, home string) string {
+	if goos == "windows" {
+		if localAppData := os.Getenv("LOCALAPPDATA"); strings.TrimSpace(localAppData) != "" {
+			return filepath.Join(localAppData, "Programs", "brain")
+		}
+		return filepath.Join(home, "AppData", "Local", "Programs", "brain")
+	}
+	return filepath.Join(home, ".local", "bin")
 }
 
 func parseSemver(tag string) (semVersion, bool) {

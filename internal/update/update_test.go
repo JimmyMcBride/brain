@@ -2,6 +2,7 @@ package update
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -63,8 +64,25 @@ func TestVerifyChecksumFileAndExtractBinary(t *testing.T) {
 		t.Fatalf("expected checksum verification to pass: %v", err)
 	}
 	dest := filepath.Join(root, "brain")
-	if err := extractBinary(archivePath, dest); err != nil {
+	if err := extractBinary(archivePath, dest, "linux"); err != nil {
 		t.Fatalf("expected extraction to pass: %v", err)
+	}
+	if got := string(mustRead(t, dest)); got != string(binary) {
+		t.Fatalf("unexpected extracted binary: %s", got)
+	}
+}
+
+func TestExtractBinaryWindowsZip(t *testing.T) {
+	root := t.TempDir()
+	archivePath := filepath.Join(root, "brain_v1.2.3_windows_amd64.zip")
+	binary := []byte("new-brain-binary")
+	if err := os.WriteFile(archivePath, mustZipArchive(t, binary), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	dest := filepath.Join(root, "brain.exe")
+	if err := extractBinary(archivePath, dest, "windows"); err != nil {
+		t.Fatalf("expected zip extraction to pass: %v", err)
 	}
 	if got := string(mustRead(t, dest)); got != string(binary) {
 		t.Fatalf("unexpected extracted binary: %s", got)
@@ -293,7 +311,7 @@ func TestManagerUnsupportedPlatform(t *testing.T) {
 	manager := New(cfg, paths, Options{
 		ExecutablePath: filepath.Join(root, "brain"),
 		HomeDir:        filepath.Join(root, "home"),
-		GOOS:           "windows",
+		GOOS:           "plan9",
 		GOARCH:         "amd64",
 	})
 	result, err := manager.Update(context.Background(), Request{})
@@ -302,6 +320,66 @@ func TestManagerUnsupportedPlatform(t *testing.T) {
 	}
 	if result.Status != "unsupported_platform" {
 		t.Fatalf("unexpected result: %+v", result)
+	}
+}
+
+func TestManagerUpdateWindowsFallbackInstall(t *testing.T) {
+	restore := setBuildInfo("v0.1.0")
+	defer restore()
+
+	server, _ := newReleaseServerForPlatform(t, "windows", "amd64", []release{
+		makeRelease("v0.2.0", false, "windows", "amd64", []byte("brain-v0.2.0")),
+	})
+	defer server.Close()
+
+	root := t.TempDir()
+	home := filepath.Join(root, "home")
+	localAppData := filepath.Join(root, "LocalAppData")
+	t.Setenv("LOCALAPPDATA", localAppData)
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg, paths := newUpdateTestSetup(t, root)
+	if err := os.MkdirAll(paths.UpdateBackupDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	lockedDir := filepath.Join(root, "locked")
+	if err := os.MkdirAll(lockedDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	exePath := filepath.Join(lockedDir, "brain.exe")
+	if err := os.WriteFile(exePath, []byte("brain-v0.1.0"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(lockedDir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(lockedDir, 0o755)
+
+	manager := New(cfg, paths, Options{
+		APIBaseURL:     server.URL,
+		HTTPClient:     server.Client(),
+		ExecutablePath: exePath,
+		HomeDir:        home,
+		GOOS:           "windows",
+		GOARCH:         "amd64",
+		LookPath:       func(string) (string, error) { return exePath, nil },
+	})
+
+	result, err := manager.Update(context.Background(), Request{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != "installed_to_fallback" || !result.FallbackUsed {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	wantPath := filepath.Join(localAppData, "Programs", "brain", "brain.exe")
+	if result.InstalledPath != wantPath {
+		t.Fatalf("unexpected install path: %+v", result)
+	}
+	if got := string(mustRead(t, wantPath)); got != "brain-v0.2.0" {
+		t.Fatalf("expected fallback install content, got %q", got)
 	}
 }
 
@@ -344,10 +422,14 @@ type servedAsset struct {
 }
 
 func newReleaseServer(t *testing.T, releases []release) (*httptest.Server, []*servedAsset) {
+	return newReleaseServerForPlatform(t, "linux", "amd64", releases)
+}
+
+func newReleaseServerForPlatform(t *testing.T, goos, goarch string, releases []release) (*httptest.Server, []*servedAsset) {
 	t.Helper()
 	assets := make([]*servedAsset, 0, len(releases))
 	for _, rel := range releases {
-		archiveAsset, checksumsAsset, err := selectAssets(&rel, "linux", "amd64")
+		archiveAsset, checksumsAsset, err := selectAssets(&rel, goos, goarch)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -358,7 +440,7 @@ func newReleaseServer(t *testing.T, releases []release) (*httptest.Server, []*se
 				break
 			}
 		}
-		archiveBytes := mustArchive(t, archive)
+		archiveBytes := mustReleaseArchive(t, goos, archive)
 		sum := sha256.Sum256(archiveBytes)
 		assets = append(assets, &servedAsset{
 			tag:         rel.TagName,
@@ -412,7 +494,7 @@ func newReleaseServer(t *testing.T, releases []release) (*httptest.Server, []*se
 }
 
 func makeRelease(tag string, prerelease bool, goos, goarch string, archiveBinary []byte) release {
-	archiveName := "brain_" + tag + "_" + goos + "_" + goarch + ".tar.gz"
+	archiveName := archiveAssetName(tag, goos, goarch)
 	return release{
 		TagName:    tag,
 		Prerelease: prerelease,
@@ -421,6 +503,14 @@ func makeRelease(tag string, prerelease bool, goos, goarch string, archiveBinary
 			{Name: "brain_" + tag + "_checksums.txt"},
 		},
 	}
+}
+
+func mustReleaseArchive(t *testing.T, goos string, binary []byte) []byte {
+	t.Helper()
+	if goos == "windows" {
+		return mustZipArchive(t, binary)
+	}
+	return mustArchive(t, binary)
 }
 
 func mustArchive(t *testing.T, binary []byte) []byte {
@@ -443,6 +533,26 @@ func mustArchive(t *testing.T, binary []byte) []byte {
 		t.Fatal(err)
 	}
 	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+func mustZipArchive(t *testing.T, binary []byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	file, err := zw.CreateHeader(&zip.FileHeader{
+		Name:   "brain.exe",
+		Method: zip.Deflate,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.Write(binary); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
 		t.Fatal(err)
 	}
 	return buf.Bytes()

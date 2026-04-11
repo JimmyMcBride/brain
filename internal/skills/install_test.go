@@ -29,14 +29,14 @@ func TestResolveTargetsGlobalAndLocal(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]bool{
-		"/home/tester/.codex/skills/brain":               true,
-		"/home/tester/.codex/skills/googleworkspace-cli": true,
-		"/home/tester/.zed/skills/brain":                 true,
-		"/home/tester/.zed/skills/googleworkspace-cli":   true,
-		"/tmp/project/.codex/skills/brain":               true,
-		"/tmp/project/.codex/skills/googleworkspace-cli": true,
-		"/tmp/project/.zed/skills/brain":                 true,
-		"/tmp/project/.zed/skills/googleworkspace-cli":   true,
+		filepath.Join("/home/tester", ".codex", "skills", "brain"):               true,
+		filepath.Join("/home/tester", ".codex", "skills", "googleworkspace-cli"): true,
+		filepath.Join("/home/tester", ".zed", "skills", "brain"):                 true,
+		filepath.Join("/home/tester", ".zed", "skills", "googleworkspace-cli"):   true,
+		filepath.Join("/tmp/project", ".codex", "skills", "brain"):               true,
+		filepath.Join("/tmp/project", ".codex", "skills", "googleworkspace-cli"): true,
+		filepath.Join("/tmp/project", ".zed", "skills", "brain"):                 true,
+		filepath.Join("/tmp/project", ".zed", "skills", "googleworkspace-cli"):   true,
 	}
 	if len(targets) != len(want) {
 		t.Fatalf("expected %d targets, got %d", len(want), len(targets))

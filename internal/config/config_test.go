@@ -80,3 +80,23 @@ func TestProjectPathsUsesProjectLocalState(t *testing.T) {
 		t.Fatalf("unexpected update backup dir: %s", paths.UpdateBackupDir)
 	}
 }
+
+func TestUserDataDirForWindowsUsesLocalAppData(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("LOCALAPPDATA", filepath.Join(root, "LocalAppData"))
+
+	got := userDataDirFor("windows", filepath.Join(root, "home"))
+	want := filepath.Join(root, "LocalAppData")
+	if got != want {
+		t.Fatalf("unexpected windows app data dir: %s", got)
+	}
+}
+
+func TestUserDataDirForWindowsFallsBackToUserProfile(t *testing.T) {
+	root := t.TempDir()
+	got := userDataDirFor("windows", filepath.Join(root, "home"))
+	want := filepath.Join(root, "home", "AppData", "Local")
+	if got != want {
+		t.Fatalf("unexpected windows fallback app data dir: %s", got)
+	}
+}

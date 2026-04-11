@@ -6,13 +6,22 @@ The default config uses `embedding_provider: localhash` and `embedding_model: ha
 
 ## Install
 
-For the standard end-user install path:
+For the standard end-user install path on Unix:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/JimmyMcBride/brain/main/scripts/install.sh | sh
 ```
 
-That installs the latest tagged release into `~/.local/bin/brain` with checksum verification.
+For Windows PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/JimmyMcBride/brain/main/scripts/install.ps1 | iex
+```
+
+That installs the latest tagged release with checksum verification into:
+
+- Unix: `~/.local/bin/brain`
+- Windows: `%LocalAppData%\Programs\brain\brain.exe`
 
 If no release has been published yet, the installer falls back to downloading the current `main` source tarball and building it locally with Go.
 
@@ -159,3 +168,5 @@ brain version
 brain update --check
 brain update
 ```
+
+On Windows, `brain update` uses the same release assets and default install target as `scripts/install.ps1`.

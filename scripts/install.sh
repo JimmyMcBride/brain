@@ -70,7 +70,7 @@ detect_os() {
   case "$(uname -s)" in
     Linux) printf 'linux\n' ;;
     Darwin) printf 'darwin\n' ;;
-    *) die "unsupported OS: $(uname -s)" ;;
+    *) die "unsupported OS: $(uname -s) (Windows users should run scripts/install.ps1 from PowerShell)" ;;
   esac
 }
 

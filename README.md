@@ -42,28 +42,61 @@ my-project/
 
 ### One-line install
 
+Unix shell:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/JimmyMcBride/brain/main/scripts/install.sh | sh
 ```
 
-This installs the latest tagged release to `~/.local/bin/brain`, verifies the published checksum, and works on `linux` and `darwin` for `amd64` and `arm64`.
+Windows PowerShell:
 
-If no GitHub release exists yet, the same command falls back to downloading the current `main` source tarball from GitHub and building it locally with Go.
+```powershell
+irm https://raw.githubusercontent.com/JimmyMcBride/brain/main/scripts/install.ps1 | iex
+```
+
+These installers verify published checksums, support `linux`, `darwin`, and `windows` on `amd64` and `arm64`, and install by default to:
+
+- Unix: `~/.local/bin/brain`
+- Windows: `%LocalAppData%\Programs\brain\brain.exe`
+
+If no GitHub release exists yet, the same command falls back to downloading the current `main` source archive from GitHub and building it locally with Go.
 
 Optional overrides:
+
+Unix shell:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/JimmyMcBride/brain/main/scripts/install.sh | \
   BRAIN_VERSION=v0.1.0 BRAIN_INSTALL_DIR="$HOME/.local/bin" sh
 ```
 
+Windows PowerShell:
+
+```powershell
+$env:BRAIN_VERSION = "v0.1.0"
+$env:BRAIN_INSTALL_DIR = "$env:LOCALAPPDATA\Programs\brain"
+irm https://raw.githubusercontent.com/JimmyMcBride/brain/main/scripts/install.ps1 | iex
+```
+
 ### Build from source
+
+Unix shell:
 
 ```bash
 git clone https://github.com/JimmyMcBride/brain.git
 cd brain
 go build -o brain .
 install -Dm0755 brain ~/.local/bin/brain
+```
+
+Windows PowerShell:
+
+```powershell
+git clone https://github.com/JimmyMcBride/brain.git
+cd brain
+go build -o brain.exe .
+New-Item -ItemType Directory -Force -Path "$env:LOCALAPPDATA\Programs\brain" | Out-Null
+Copy-Item .\brain.exe "$env:LOCALAPPDATA\Programs\brain\brain.exe" -Force
 ```
 
 ### Go run during development
@@ -149,7 +182,9 @@ Project state is derived from `--project` and `.brain/state`. It is not configur
 `brain update` downloads the newest matching GitHub Release, verifies checksums, and installs the binary.
 
 - if the current binary is writable, it updates in place
-- otherwise it installs to `~/.local/bin/brain`
+- otherwise it installs to:
+  - Unix: `~/.local/bin/brain`
+  - Windows: `%LocalAppData%\Programs\brain\brain.exe`
 - replaced binaries are backed up under the global Brain app data directory
 
 ## Read Next

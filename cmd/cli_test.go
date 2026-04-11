@@ -49,6 +49,9 @@ func newCLIEnv(t *testing.T) *cliEnv {
 		t.Fatal(err)
 	}
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("LOCALAPPDATA", filepath.Join(root, "LocalAppData"))
+	t.Setenv("APPDATA", filepath.Join(root, "AppData", "Roaming"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "xdg-config"))
 	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "xdg-data"))
 	return &cliEnv{

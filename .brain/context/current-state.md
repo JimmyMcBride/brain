@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-11T16:56:28Z"
+updated: "2026-04-11T17:19:12Z"
 ---
 # Current State
 
@@ -49,3 +49,6 @@ Add repo-specific notes here. `brain context refresh` preserves content outside 
 - 2026-04-11: Published the maintainer-only global refresh workflow and script so maintainers can rebuild `~/.local/bin/brain`, sync the global Codex `brain` skill, and verify both against the pushed repo `HEAD`.
 - 2026-04-11: Added `brain adopt` as the first-class existing-repo onboarding path. It shares bootstrap logic with `brain init`, adopts Brain-owned markdown into the managed-block model, reports `adopted` for unmanaged files, and preserves previous content under `Local Notes` instead of clobbering it.
 - 2026-04-11: Published `brain adopt` as the existing-repo onboarding path and pushed the shared bootstrap plus managed-file adoption workflow to `main`, then refreshed the installed binary and global Codex `brain` skill from that release state.
+- 2026-04-11: Added Windows support across config pathing, release assets, `brain update`, a PowerShell installer, a PowerShell maintainer refresh script, Windows CI/release coverage, and the user-facing install/update docs. Windows now targets `%LocalAppData%\\Programs\\brain\\brain.exe` by default and uses `.zip` release assets with checksum verification.
+
+- 2026-04-11: Recorded the Windows support rollout through a Brain-managed current-state update so session closeout tracks the repo change.
