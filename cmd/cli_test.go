@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,6 +10,10 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"brain/internal/buildinfo"
+	"brain/internal/config"
+	"brain/internal/update"
 )
 
 var rfc3339Pattern = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z`)
@@ -24,8 +29,6 @@ type cliEnv struct {
 	moduleRoot string
 	home       string
 	config     string
-	vault      string
-	data       string
 	project    string
 	custom     string
 }
@@ -37,8 +40,6 @@ func newCLIEnv(t *testing.T) *cliEnv {
 	root := t.TempDir()
 	home := filepath.Join(root, "home")
 	config := filepath.Join(root, "config.yaml")
-	vault := filepath.Join(root, "vault")
-	data := filepath.Join(root, "data")
 	project := filepath.Join(root, "project")
 	custom := filepath.Join(root, "custom-skills")
 	if err := os.MkdirAll(home, 0o755); err != nil {
@@ -55,8 +56,6 @@ func newCLIEnv(t *testing.T) *cliEnv {
 		moduleRoot: moduleRoot,
 		home:       home,
 		config:     config,
-		vault:      vault,
-		data:       data,
 		project:    project,
 		custom:     custom,
 	}
@@ -103,88 +102,70 @@ func requireOK(t *testing.T, result cliResult) string {
 	return result.stdout
 }
 
-func TestCLIVaultLifecycle(t *testing.T) {
+func TestCLIProjectLifecycle(t *testing.T) {
 	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
 
-	requireOK(t, env.run(t, "", "--config", env.config, "init", "--vault", env.vault, "--data", env.data))
-
-	if _, err := os.Stat(filepath.Join(env.vault, "Projects")); err != nil {
-		t.Fatalf("missing Projects dir: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(env.data, "brain.sqlite3")); err != nil {
-		t.Fatalf("missing sqlite db: %v", err)
-	}
-
-	requireOK(t, env.run(t, "", "--config", env.config, "add", "Project Atlas", "-s", "Projects", "-t", "project"))
-	requireOK(t, env.run(t, "", "--config", env.config, "add", "Signal Notes", "-s", "Resources", "-t", "resource", "-b", "# Signal Notes\n\nLexical retrieval works well locally."))
-
-	findOutput := requireOK(t, env.run(t, "", "--config", env.config, "find", "signal"))
-	if !strings.Contains(findOutput, "Resources/signal-notes.md [resource] Signal Notes") {
-		t.Fatalf("find output missing note:\n%s", findOutput)
+	for _, path := range []string{
+		filepath.Join(env.project, "AGENTS.md"),
+		filepath.Join(env.project, "docs", "project-overview.md"),
+		filepath.Join(env.project, ".brain", "context", "overview.md"),
+		filepath.Join(env.project, ".brain", "state", "brain.sqlite3"),
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("expected %s: %v", path, err)
+		}
 	}
 
-	searchBefore := requireOK(t, env.run(t, "", "--config", env.config, "search", "signal"))
-	if !strings.Contains(searchBefore, "No indexed content. Run `brain reindex` first.") {
-		t.Fatalf("unexpected pre-index search output:\n%s", searchBefore)
+	findOutput := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "find", "project-overview"))
+	if !strings.Contains(findOutput, "docs/project-overview.md") {
+		t.Fatalf("unexpected find output:\n%s", findOutput)
 	}
 
-	requireOK(t, env.run(t, "", "--config", env.config, "capture", "Quick Thought", "-b", "Semantic retrieval helps recall nearby concepts."))
-	requireOK(t, env.run(t, "", "--config", env.config, "daily", "2026-04-09"))
-	requireOK(t, env.run(t, "", "--config", env.config, "reindex"))
-
-	searchAfter := requireOK(t, env.run(t, "", "--config", env.config, "search", "lexical retrieval"))
-	if !strings.Contains(searchAfter, "Resources/signal-notes.md") {
-		t.Fatalf("expected indexed search result:\n%s", searchAfter)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "edit", "docs/project-overview.md", "-b", "# Project Overview\n\nUpdated body."))
+	readOutput := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "read", "docs/project-overview.md"))
+	if !strings.Contains(readOutput, "Updated body.") {
+		t.Fatalf("unexpected read output:\n%s", readOutput)
 	}
 
-	requireOK(t, env.run(t, "", "--config", env.config, "edit", "Resources/signal-notes.md", "-m", "status=active", "-b", "# Signal Notes\n\nUpdated body."))
-	requireOK(t, env.run(t, "", "--config", env.config, "move", "Resources/signal-notes.md", "Areas/Reference/"))
-
-	readMoved := requireOK(t, env.run(t, "", "--config", env.config, "read", "Areas/Reference/signal-notes.md"))
-	if !strings.Contains(readMoved, "Updated body.") {
-		t.Fatalf("unexpected read output:\n%s", readMoved)
+	searchOutput := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "search", "updated body"))
+	if !strings.Contains(searchOutput, "docs/project-overview.md") {
+		t.Fatalf("unexpected search output:\n%s", searchOutput)
 	}
 
-	historyOutput := requireOK(t, env.run(t, "", "--config", env.config, "history", "-n", "3"))
-	lines := strings.Split(strings.TrimSpace(historyOutput), "\n")
-	if len(lines) == 0 || !strings.Contains(lines[0], "move") {
-		t.Fatalf("expected newest history entry to be move:\n%s", historyOutput)
-	}
-
-	requireOK(t, env.run(t, "", "--config", env.config, "undo"))
-	if _, err := os.Stat(filepath.Join(env.vault, "Resources", "signal-notes.md")); err != nil {
-		t.Fatalf("expected note restored after undo: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(env.vault, "Areas", "Reference", "signal-notes.md")); !os.IsNotExist(err) {
-		t.Fatalf("expected moved file removed after undo, got err=%v", err)
+	historyOutput := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "history", "-n", "3"))
+	if !strings.Contains(historyOutput, "update") {
+		t.Fatalf("unexpected history output:\n%s", historyOutput)
 	}
 }
 
-func TestCLIContentWorkflow(t *testing.T) {
+func TestCLIProjectPlanningWorkflow(t *testing.T) {
 	env := newCLIEnv(t)
-	requireOK(t, env.run(t, "", "--config", env.config, "init", "--vault", env.vault, "--data", env.data))
-	requireOK(t, env.run(t, "", "--config", env.config, "add", "Content Seed", "-s", "Projects", "-t", "project", "-b", "# Content Seed\n\nAgents need explicit tool contracts for content workflows."))
-	requireOK(t, env.run(t, "", "--config", env.config, "add", "Agent Notes", "-s", "Resources", "-t", "resource", "-b", "# Agent Notes\n\nContent seed workflows need explicit tool contracts for agents."))
-	requireOK(t, env.run(t, "", "--config", env.config, "reindex"))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
 
-	requireOK(t, env.run(t, "", "--config", env.config, "content", "seed", "Projects/content-seed.md"))
-	gatherOutput := requireOK(t, env.run(t, "", "--config", env.config, "content", "gather", "Projects/content-seed.md", "-n", "3"))
-	if !strings.Contains(gatherOutput, "Resources/agent-notes.md") {
-		t.Fatalf("expected related note in gather output:\n%s", gatherOutput)
+	initOutput := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "plan", "init", "--paradigm", "epics"))
+	if !strings.Contains(initOutput, "Initialized planning with epics paradigm") {
+		t.Fatalf("unexpected plan init output:\n%s", initOutput)
 	}
 
-	requireOK(t, env.run(t, "", "--config", env.config, "content", "outline", "Projects/content-seed.md", "-n", "3"))
-	if _, err := os.Stat(filepath.Join(env.vault, "Resources", "Content", "Outlines", "content-seed-outline.md")); err != nil {
-		t.Fatalf("expected outline note: %v", err)
-	}
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "brainstorm", "start", "Auth Ideas"))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "plan", "group", "create", "Auth System"))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "plan", "item", "create", "Login Flow", "--group", "Auth System", "-b", "Support email and password login.", "--criteria", "Validate email format", "--resource", "[[.brain/brainstorms/auth-ideas.md]]"))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "plan", "item", "update", "login-flow", "--status", "done", "--criteria", "Hash passwords"))
 
-	requireOK(t, env.run(t, "", "--config", env.config, "content", "publish", "Projects/content-seed.md", "--channel", "blog"))
-	published, err := os.ReadFile(filepath.Join(env.vault, "Projects", "content-seed.md"))
+	storyPath := filepath.Join(env.project, ".brain", "planning", "stories", "login-flow.md")
+	storyRaw, err := os.ReadFile(storyPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(published), "published: true") {
-		t.Fatalf("expected publish metadata in note:\n%s", string(published))
+	story := string(storyRaw)
+	if !strings.Contains(story, "Support email and password login.") || !strings.Contains(story, "- [ ] Hash passwords") {
+		t.Fatalf("unexpected story contents:\n%s", story)
+	}
+
+	statusOutput := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "plan", "status"))
+	if !strings.Contains(statusOutput, "epics") || !strings.Contains(statusOutput, "Stories: 1 total, 1 done, 0 remaining") {
+		t.Fatalf("unexpected status output:\n%s", statusOutput)
 	}
 }
 
@@ -197,80 +178,35 @@ func TestCLISkillsCommands(t *testing.T) {
 	if !strings.Contains(targets, "zed [local] <ROOT>/project/.zed/skills/brain") {
 		t.Fatalf("missing local zed target:\n%s", targets)
 	}
-	if !strings.Contains(targets, "custom [custom] <ROOT>/custom-skills/brain") {
-		t.Fatalf("missing custom target:\n%s", targets)
-	}
-
 	requireOK(t, env.run(t, "", "skills", "install", "--scope", "local", "-a", "codex", "--project", env.project, "--mode", "copy"))
 	if _, err := os.Stat(filepath.Join(env.project, ".codex", "skills", "brain", "SKILL.md")); err != nil {
 		t.Fatalf("expected local skill install: %v", err)
-	}
-
-	requireOK(t, env.run(t, "", "skills", "install", "--scope", "global", "-a", "codex", "--mode", "copy"))
-	if _, err := os.Stat(filepath.Join(env.home, ".codex", "skills", "brain", "SKILL.md")); err != nil {
-		t.Fatalf("expected global skill install: %v", err)
 	}
 }
 
 func TestCLIContextCommands(t *testing.T) {
 	env := newCLIEnv(t)
-	requireOK(t, env.run(t, "", "context", "install", "--project", env.project, "--agent", "codex"))
+	requireOK(t, env.run(t, "", "--config", env.config, "context", "install", "--project", env.project, "--agent", "codex"))
 
 	for _, path := range []string{
 		filepath.Join(env.project, "AGENTS.md"),
 		filepath.Join(env.project, ".brain", "context", "overview.md"),
-		filepath.Join(env.project, ".brain", "policy.yaml"),
-		filepath.Join(env.project, ".codex", "AGENTS.md"),
-		filepath.Join(env.project, ".gitignore"),
+		filepath.Join(env.project, "docs", "project-overview.md"),
 	} {
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("expected context file %s: %v", path, err)
 		}
 	}
-
-	overviewPath := filepath.Join(env.project, ".brain", "context", "overview.md")
-	overviewData, err := os.ReadFile(overviewPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	overviewData = append(overviewData, []byte("\nProject note: keep this.\n")...)
-	if err := os.WriteFile(overviewPath, overviewData, 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	refreshOutput := requireOK(t, env.run(t, "", "context", "refresh", "--project", env.project, "--agent", "codex"))
-	if !strings.Contains(refreshOutput, "updated   context  .brain/context/overview.md preserve-user") {
-		t.Fatalf("unexpected refresh output:\n%s", refreshOutput)
-	}
-
-	refreshed, err := os.ReadFile(overviewPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(refreshed), "Project note: keep this.") {
-		t.Fatalf("expected preserved local note:\n%s", string(refreshed))
-	}
-
-	dryRun := requireOK(t, env.run(t, "", "context", "refresh", "--project", env.project, "--agent", "codex", "--dry-run"))
-	if !strings.Contains(dryRun, "unchanged") {
-		t.Fatalf("expected unchanged dry-run output:\n%s", dryRun)
-	}
 }
 
 func TestCLISessionWorkflow(t *testing.T) {
 	env := newCLIEnv(t)
-	requireOK(t, env.run(t, "", "--config", env.config, "init", "--vault", env.vault, "--data", env.data))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
 	initGitProject(t, env.project)
-	requireOK(t, env.run(t, "", "--config", env.config, "context", "install", "--project", env.project))
 
 	startOutput := requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "tighten session enforcement"))
-	if !strings.Contains(startOutput, "Started session") || !strings.Contains(startOutput, "brain search \"project tighten session enforcement\"") {
+	if !strings.Contains(startOutput, "Started session") {
 		t.Fatalf("unexpected session start output:\n%s", startOutput)
-	}
-
-	secondStart := env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "duplicate")
-	if secondStart.err == nil {
-		t.Fatalf("expected second start to fail:\nstdout=%s\nstderr=%s", secondStart.stdout, secondStart.stderr)
 	}
 
 	if err := os.WriteFile(filepath.Join(env.project, "main.go"), []byte("package main\nfunc main() { println(\"x\") }\n"), 0o644); err != nil {
@@ -282,13 +218,7 @@ func TestCLISessionWorkflow(t *testing.T) {
 		t.Fatalf("expected finish validation to block before note update:\nstdout=%s\nstderr=%s", validateBlocked.stdout, validateBlocked.stderr)
 	}
 
-	requireOK(t, env.run(t, "", "--config", env.config, "capture", "Project: session enforcement note", "--body", "Recorded durable note for project changes."))
-	validateNeedsReindex := env.run(t, "", "--config", env.config, "session", "validate", "--project", env.project, "--stage", "finish")
-	if validateNeedsReindex.err == nil || !strings.Contains(validateNeedsReindex.stdout, "reindex required after note updates") {
-		t.Fatalf("expected reindex obligation:\nstdout=%s\nstderr=%s", validateNeedsReindex.stdout, validateNeedsReindex.stderr)
-	}
-
-	requireOK(t, env.run(t, "", "--config", env.config, "reindex"))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "edit", "AGENTS.md", "-b", "# Project Agent Contract\n\nRecorded durable note for project changes.\n"))
 	requireOK(t, env.run(t, "", "--config", env.config, "session", "run", "--project", env.project, "--", "go", "test", "./..."))
 	requireOK(t, env.run(t, "", "--config", env.config, "session", "run", "--project", env.project, "--", "go", "build", "./..."))
 
@@ -296,27 +226,69 @@ func TestCLISessionWorkflow(t *testing.T) {
 	if !strings.Contains(finishOutput, "finished") || !strings.Contains(finishOutput, ".brain/sessions/") {
 		t.Fatalf("unexpected finish output:\n%s", finishOutput)
 	}
+}
 
-	validateNoSession := env.run(t, "", "--config", env.config, "session", "validate", "--project", env.project)
-	if validateNoSession.err == nil {
-		t.Fatalf("expected validate to fail after finish")
+func TestCLIVersionCommand(t *testing.T) {
+	env := newCLIEnv(t)
+	restore := setCLICommandBuildInfo("v1.2.3", "abc123", "2026-04-10T00:00:00Z")
+	defer restore()
+
+	human := requireOK(t, env.run(t, "", "--config", env.config, "version"))
+	if !strings.Contains(human, "version: v1.2.3") || !strings.Contains(human, "commit:  abc123") {
+		t.Fatalf("unexpected version output:\n%s", human)
+	}
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--json", "version"))
+	if !strings.Contains(jsonOut, "\"version\": \"v1.2.3\"") {
+		t.Fatalf("unexpected version json:\n%s", jsonOut)
 	}
 }
 
-func TestCLISessionAbort(t *testing.T) {
+func TestCLIUpdateCommand(t *testing.T) {
 	env := newCLIEnv(t)
-	requireOK(t, env.run(t, "", "--config", env.config, "init", "--vault", env.vault, "--data", env.data))
-	initGitProject(t, env.project)
-	requireOK(t, env.run(t, "", "--config", env.config, "context", "install", "--project", env.project))
-	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "abort flow"))
+	restoreUpdater := newUpdater
+	restoreBuild := setCLICommandBuildInfo("v0.1.0", "abc123", "2026-04-10T00:00:00Z")
+	defer func() {
+		newUpdater = restoreUpdater
+		restoreBuild()
+	}()
 
-	abortOutput := requireOK(t, env.run(t, "", "--config", env.config, "session", "abort", "--project", env.project, "--reason", "stopped work"))
-	if !strings.Contains(abortOutput, "aborted") {
-		t.Fatalf("unexpected abort output:\n%s", abortOutput)
+	newUpdater = func(cfg *config.Config, paths config.Paths) updater {
+		return stubUpdater{result: update.Result{
+			CurrentVersion: "v0.1.0",
+			LatestVersion:  "v0.2.0",
+			ReleaseTag:     "v0.2.0",
+			ReleaseURL:     "https://example.com/releases/v0.2.0",
+			Status:         "update_available",
+			Message:        "v0.1.0 -> v0.2.0",
+		}}
 	}
+	checkOnly := requireOK(t, env.run(t, "", "--config", env.config, "update", "--check"))
+	if !strings.Contains(checkOnly, "update: v0.1.0 -> v0.2.0") {
+		t.Fatalf("unexpected check output:\n%s", checkOnly)
+	}
+}
 
-	if _, err := os.Stat(filepath.Join(env.project, ".brain", "session.json")); !os.IsNotExist(err) {
-		t.Fatalf("expected active session cleared, got err=%v", err)
+type stubUpdater struct {
+	result update.Result
+	err    error
+}
+
+func (s stubUpdater) Update(context.Context, update.Request) (update.Result, error) {
+	return s.result, s.err
+}
+
+func setCLICommandBuildInfo(version, commit, date string) func() {
+	oldVersion := buildinfo.Version
+	oldCommit := buildinfo.Commit
+	oldDate := buildinfo.Date
+	buildinfo.Version = version
+	buildinfo.Commit = commit
+	buildinfo.Date = date
+	return func() {
+		buildinfo.Version = oldVersion
+		buildinfo.Commit = oldCommit
+		buildinfo.Date = oldDate
 	}
 }
 

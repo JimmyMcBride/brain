@@ -1,0 +1,79 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+          - os: linux
+            arch: arm64
+          - os: darwin
+            arch: amd64
+          - os: darwin
+            arch: arm64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Build release archive
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: '0'
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          OUT_DIR="dist/${GOOS}_${GOARCH}"
+          mkdir -p "${OUT_DIR}/brain"
+          go build \
+            -ldflags="-s -w -X 'brain/internal/buildinfo.Version=${TAG}' -X 'brain/internal/buildinfo.Commit=${GITHUB_SHA}' -X 'brain/internal/buildinfo.Date=$(date -u +%Y-%m-%dT%H:%M:%SZ)'" \
+            -o "${OUT_DIR}/brain/brain" .
+          tar -C "${OUT_DIR}/brain" -czf "dist/brain_${TAG}_${GOOS}_${GOARCH}.tar.gz" brain
+
+      - name: Upload archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/brain_${{ github.ref_name }}_${{ matrix.os }}_${{ matrix.arch }}.tar.gz
+
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: release-*
+          merge-multiple: true
+
+      - name: Create checksums
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum brain_${GITHUB_REF_NAME}_*.tar.gz > "brain_${GITHUB_REF_NAME}_checksums.txt"
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/brain_${{ github.ref_name }}_*.tar.gz
+            dist/brain_${{ github.ref_name }}_checksums.txt

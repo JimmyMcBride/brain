@@ -1,8 +1,0 @@
-config: ok (present)
-vault: ok (present)
-sqlite: ok (present)
-index_dir: ok (present)
-embedding: ok (localhash/hash-v1)
-notes: ok (1)
-chunks: ok (1)
-embeddings: ok (1)

@@ -12,7 +12,7 @@ Use this file for agent operating workflow inside the repo.
 
 ## During Work
 
-- Capture durable discoveries, decisions, and risks with `brain capture`.
+- Keep durable discoveries, decisions, and risks in AGENTS.md, /docs, or .brain notes.
 - Update existing durable notes instead of duplicating context.
 - Run required verification commands through `brain session run -- <command>`.
 - Re-read context before large changes if the task shifts.
@@ -20,7 +20,6 @@ Use this file for agent operating workflow inside the repo.
 ## Close-Out
 
 - Refresh or update durable notes for meaningful behavior, config, or architecture changes.
-- Run `brain reindex` after note changes when search quality matters.
 - Finish with `brain session finish`.
 - If you must bypass enforcement, use `brain session finish --force --reason "..."` so the override is recorded.
 <!-- brain:end context-workflows -->

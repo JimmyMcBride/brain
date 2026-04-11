@@ -26,7 +26,7 @@ func addEditCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoade
 				return err
 			}
 			defer appCtx.Close()
-			if err := appCtx.EnsureVault(); err != nil {
+			if err := appCtx.EnsureWorkspace(); err != nil {
 				return err
 			}
 			path := args[0]

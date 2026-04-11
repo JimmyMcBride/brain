@@ -1,114 +1,123 @@
 # Usage
 
-`docs/usage.md` is the operator manual. It explains how to use `brain` day to day.
+`brain` is operated per project. Use `--project` when you are acting on a repo other than the current directory.
 
-Read [`../README.md`](../README.md) first if you want the quick product overview. Read [`architecture.md`](architecture.md) if you want internals.
-
-## Common workflows
-
-### 1. Set up a vault
+## Bootstrap A Project
 
 ```bash
-brain init
-brain doctor
+brain init --project .
+brain doctor --project .
+brain context install --project .
+brain plan init --project . --paradigm epics
 ```
 
-Use this first on a new machine or when pointing `brain` at a new vault.
+This creates:
 
-### 2. Create notes quickly
+- `AGENTS.md`
+- `docs/project-overview.md`
+- `docs/project-architecture.md`
+- `docs/project-workflows.md`
+- `.brain/context/*`
+- `.brain/policy.yaml`
+- `.brain/project.yaml`
+- `.brain/state/brain.sqlite3`
+
+## Read And Update Notes
 
 ```bash
-brain add "Client migration" --section Projects --type project
-brain add "TLS notes" --section Resources --type resource --template resource.md
-brain capture "Follow up with vendor" --body "Need pricing and rollout dates."
-brain daily
+brain read --project . AGENTS.md
+brain read --project . docs/project-overview.md
+brain edit --project . docs/project-overview.md -b "# Project Overview\n\nUpdated body."
+brain edit --project . AGENTS.md --editor nvim
 ```
 
-Use `add` for durable notes with a template, `capture` for fast intake, and `daily` for a dated daily note.
-
-### 3. Read, edit, and move notes
+## Retrieve Context
 
 ```bash
-brain read Projects/client-migration.md
-brain edit Projects/client-migration.md --set status=active
-brain edit Projects/client-migration.md --editor nvim
-brain move Projects/client-migration.md Archives/
+brain find --project . auth
+brain search --project . "Supabase auth"
 ```
 
-### 4. Build and query the index
+`find` is path/title/type/content matching.  
+`search` uses the local SQLite index and embeddings over project-managed markdown.
+
+## Brainstorming
 
 ```bash
-brain reindex
-brain find migration
-brain find --type project
-brain search "vendor rollout timeline"
+brain brainstorm start --project . "Event follow-up ideas"
+brain read --project . .brain/brainstorms/event-follow-up-ideas.md
+brain search --project . "follow-up"
 ```
 
-Use `find` for direct vault/path/metadata matching. Use `search` when you want hybrid retrieval over indexed chunks.
+Brainstorms live in `.brain/brainstorms/`.
 
-### 5. Use the safety system
+## Planning
+
+Initialize once:
 
 ```bash
-brain history
-brain undo
-brain organize
-brain organize --apply
+brain plan init --project . --paradigm epics
 ```
 
-Use `history` and `undo` whenever you want a reversible workflow around note changes.
-
-### 6. Turn notes into content
+Create containers and items:
 
 ```bash
-brain content seed Projects/client-migration.md
-brain content gather Projects/client-migration.md -n 5
-brain content outline Projects/client-migration.md -n 5
-brain content publish Projects/client-migration.md --channel blog --repurpose thread
+brain plan group create --project . "Forms API Hardening"
+brain plan item create --project . "Validate API keys" --group "Forms API Hardening" \
+  --body "Harden external submissions before broader rollout." \
+  --criteria "Reject malformed bearer tokens" \
+  --criteria "Return stable 401 responses" \
+  --resource "[[.brain/resources/changes/forms-api-rollout.md]]"
+brain plan item update --project . validate-api-keys --status in_progress
+brain plan status --project .
 ```
 
-### 7. Install agent skills
+## Context Management
+
+Install or refresh project context:
 
 ```bash
-brain skills targets --scope both --agent codex --agent claude --project .
-brain skills install --scope global --agent codex
-brain skills install --scope local --agent codex --project .
-brain skills install --scope both --agent codex --agent zed --project .
-brain skills install --skill-root /path/to/custom/skills --mode copy
-```
-
-Use this when you want a global or project-local `brain` skill available to coding agents.
-
-### 8. Add project context to a repo
-
-```bash
-brain context install --project . --agent codex --agent openclaw
+brain context install --project . --agent codex --agent claude
 brain context refresh --project .
 brain context refresh --project . --dry-run
 ```
 
-This generates a root `AGENTS.md`, `.brain/context/*`, `.brain/policy.yaml`, and optional agent wrappers.
+Use `--force` when adopting an existing unmanaged `AGENTS.md` or docs file into the managed-block model.
 
-### 9. Enforce a session in a repo
+## Sessions
+
+Use sessions when the repo should require explicit verification and durable note updates.
 
 ```bash
-brain session start --project . --task "tighten search ranking"
+brain session start --project . --task "tighten auth flow"
 brain session validate --project .
 brain session run --project . -- go test ./...
 brain session run --project . -- go build ./...
-brain session finish --project . --summary "search update complete"
-brain session abort --project . --reason "switching tasks"
+brain session finish --project . --summary "auth flow tightened"
 ```
 
-Use sessions when you want the repo to require durable note updates, reindexing, and recorded verification commands.
+## Skills
 
-## Command intent
+```bash
+brain skills targets --scope both --agent codex --project .
+brain skills install --scope global --agent codex
+brain skills install --scope local --agent codex --project .
+brain skills install --scope global --agent openclaw --mode copy
+```
 
-- `init`, `doctor`: create and validate the local environment
-- `add`, `capture`, `daily`: create new notes
-- `read`, `edit`, `move`: work on existing notes
-- `reindex`, `find`, `search`: retrieve knowledge
-- `history`, `undo`, `organize`: operate safely
-- `content *`: turn notes into publishing assets
-- `skills *`: install the `brain` skill for agents
-- `context *`: install project-local agent context
-- `session *`: enforce project workflow rules
+## History And Undo
+
+```bash
+brain history --project .
+brain undo --project .
+```
+
+These operate on Brain-managed note changes recorded in the local history log.
+
+## Version And Update
+
+```bash
+brain version
+brain update --check
+brain update
+```

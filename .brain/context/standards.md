@@ -12,6 +12,7 @@ Use this file for implementation and review expectations.
 ## CI
 
 - `.github/workflows/ci.yml`
+- `.github/workflows/release.yml`
 <!-- brain:end context-standards -->
 
 ## Local Notes

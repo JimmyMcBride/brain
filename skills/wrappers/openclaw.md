@@ -1,9 +1,8 @@
 # Brain Wrapper For OpenClaw
 
-Use `brain` as the contract for vault operations.
+Use `brain` as the contract for project-local memory operations.
 
 - Read via `brain read`.
 - Search via `brain find` and `brain search`.
-- Write via `brain add`, `brain edit`, `brain capture`, `brain daily`, and `brain content ...`.
-- Revert mistakes with `brain undo`.
-
+- Update managed notes via `brain edit`.
+- Use `brain plan` and `brain brainstorm` instead of ad hoc project logs.

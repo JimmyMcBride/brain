@@ -17,7 +17,7 @@ This `codex` wrapper delegates to the root project contract.
 - Treat `../AGENTS.md` as the canonical project contract.
 - If no validated session is active, run `brain session start --task "<task>"`.
 - If a session is already active, run `brain session validate` before substantial work.
-- Use the `brain` skill and `brain` CLI when project memory or vault context matters.
+- Use the `brain` skill and `brain` CLI when project memory or project-local context matters.
 - Use `brain session run -- <command>` for required verification commands.
 - Finish with `brain session finish` and mention relevant note updates in the final response.
 <!-- brain:end agent-wrapper-codex -->

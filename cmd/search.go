@@ -20,17 +20,15 @@ func addSearchCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoa
 				return err
 			}
 			defer appCtx.Close()
+			if err := appCtx.SyncIndex(cmd.Context()); err != nil {
+				return err
+			}
 			results, err := appCtx.Search.Search(cmd.Context(), args[0], limit)
 			if err != nil {
 				return err
 			}
 			return appCtx.Output.Print(results, func(w io.Writer) error {
 				if len(results) == 0 {
-					stats, statErr := appCtx.Index.Stats(cmd.Context())
-					if statErr == nil && stats.Chunks == 0 {
-						_, err := io.WriteString(w, "No indexed content. Run `brain reindex` first.\n")
-						return err
-					}
 					_, err := io.WriteString(w, "No results.\n")
 					return err
 				}

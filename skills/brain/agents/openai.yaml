@@ -1,7 +1,7 @@
 interface:
   display_name: "Brain"
-  short_description: "Use the brain CLI for PARA vault operations, retrieval, and safe note workflows."
-  default_prompt: "Use the brain skill and prefer brain CLI commands over direct vault file edits."
+  short_description: "Use the brain CLI for project-local memory, retrieval, planning, context, and safe markdown workflows."
+  default_prompt: "Use the brain skill and prefer repo-local Brain commands over ad hoc project memory files."
 
 policy:
   allow_implicit_invocation: true

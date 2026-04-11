@@ -1,47 +1,42 @@
 ---
 name: brain
-description: Use this skill when working with a local knowledge vault managed by the `brain` CLI, especially for PARA-structured Obsidian markdown workflows, retrieval, capture, content packaging, and safe note edits.
+description: Use this skill when the task depends on a project-local Brain workspace managed by the `brain` CLI.
 user-invocable: true
 args:
   - name: task
-    description: The vault, project memory, retrieval, capture, or content workflow task to perform with brain.
+    description: The Brain or project-memory task to perform.
     required: false
 ---
 
 # Brain Skill
 
-Use this skill when the working source of truth is an Obsidian-style markdown vault managed by `brain`.
+Use this skill when project memory, retrieval, planning, brainstorming, or agent context lives inside the current repo.
 
-## Operating model
+## Operating Model
 
-- Treat the vault as authoritative. Read and write markdown notes instead of inventing parallel state.
-- Keep top-level organization in PARA only: `Projects/`, `Areas/`, `Resources/`, `Archives/`.
-- Prefer explicit note links like `[[Projects/foo.md]]` when packaging related context.
-- Reindex after major note changes when retrieval quality matters.
-- Use `brain search` for semantic-plus-keyword retrieval and `brain find` for path or metadata lookups.
+- Treat the repo-local Brain workspace as authoritative.
+- Keep durable knowledge in `AGENTS.md`, `docs/`, and `.brain/`.
+- Prefer Brain CLI commands over raw file churn when Brain already owns the note.
+- Use `brain search` for ranked retrieval and `brain find` for direct matching.
 
-## High-value commands
+## High-Value Commands
 
-- `brain init`: create config, PARA directories, sqlite index, and data dirs.
-- `brain add`: create structured notes from templates.
-- `brain capture`: add fast inbox-style notes under `Resources/Captures/...`.
-- `brain daily`: create or open a dated daily note.
-- `brain reindex`: rebuild FTS and embedding data from the vault.
-- `brain search "query"`: hybrid retrieval over chunks.
-- `brain content seed|gather|outline|publish`: move notes into a content workflow.
-- `brain history` and `brain undo`: inspect and revert tracked operations.
+- `brain init`
+- `brain doctor`
+- `brain read`
+- `brain edit`
+- `brain find`
+- `brain search`
+- `brain brainstorm`
+- `brain plan`
+- `brain context install|refresh`
+- `brain session start|validate|run|finish`
+- `brain history`
+- `brain undo`
 
-## Suggested agent workflow
+## Suggested Workflow
 
-1. Read config or run `brain doctor`.
-2. Use `brain find` or `brain search` to gather context.
-3. Create or update notes with `brain add`, `brain edit`, `brain capture`, or `brain daily`.
-4. Run `brain reindex` when new material should become searchable.
-5. Use `brain content outline` when turning knowledge into publishable material.
-
-## Guardrails
-
-- Prefer edits through `brain` so backups and history are recorded.
-- Treat `Archives/` as explicit, not automatic, unless the user asks for archiving.
-- Keep filenames stable and human-readable.
-- Avoid creating new top-level folders outside PARA.
+1. Read repo `AGENTS.md` and `.brain/context/*`.
+2. Retrieve relevant context with `brain find` or `brain search`.
+3. Make durable note updates with `brain edit` or Brain-managed generators.
+4. Record required verification through `brain session run -- ...` when sessions are active.

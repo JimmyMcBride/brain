@@ -7,20 +7,23 @@ Use this file for the structural shape of the repository.
 
 - `internal/app/`
 - `internal/backup/`
+- `internal/brainstorm/`
+- `internal/buildinfo/`
 - `internal/config/`
-- `internal/content/`
 - `internal/embeddings/`
 - `internal/history/`
 - `internal/index/`
 - `internal/notes/`
-- `internal/organize/`
 - `internal/output/`
+- `internal/plan/`
+- `internal/project/`
 - `internal/projectcontext/`
 - `internal/search/`
 - `internal/session/`
 - `internal/skills/`
 - `internal/templates/`
-- `internal/vault/`
+- `internal/update/`
+- `internal/workspace/`
 
 ## Architecture Notes
 

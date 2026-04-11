@@ -5,9 +5,12 @@ project:
     runtime: go
     memory:
         accepted_note_globs:
-            - Projects/brain.md
-            - Projects/Brain/**
-            - Resources/Captures/**/brain*.md
+            - AGENTS.md
+            - docs/**
+            - .brain/context/**
+            - .brain/planning/**
+            - .brain/brainstorms/**
+            - .brain/resources/**
 session:
     require_task: true
     single_active: true
@@ -32,7 +35,6 @@ closeout:
         - publish
         - seed
     require_memory_update_on_repo_change: true
-    require_reindex_after_note_updates: true
     verification_profiles:
         - name: tests
           commands:

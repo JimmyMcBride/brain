@@ -44,7 +44,6 @@ type PolicyPreflight struct {
 type PolicyCloseout struct {
 	AcceptableHistoryOperations     []string              `yaml:"acceptable_history_operations" json:"acceptable_history_operations"`
 	RequireMemoryUpdateOnRepoChange bool                  `yaml:"require_memory_update_on_repo_change" json:"require_memory_update_on_repo_change"`
-	RequireReindexAfterNoteUpdates  bool                  `yaml:"require_reindex_after_note_updates" json:"require_reindex_after_note_updates"`
 	VerificationProfiles            []VerificationProfile `yaml:"verification_profiles" json:"verification_profiles"`
 }
 
@@ -55,7 +54,6 @@ type VerificationProfile struct {
 
 func DefaultPolicy(snapshot Snapshot) Policy {
 	slug := policySlug(snapshot.ProjectName)
-	folder := policyFolderName(snapshot.ProjectName)
 	policy := Policy{
 		Version: 1,
 		Project: PolicyProject{
@@ -64,9 +62,12 @@ func DefaultPolicy(snapshot Snapshot) Policy {
 			Runtime: snapshot.PrimaryRuntime,
 			Memory: PolicyProjectMemory{
 				AcceptedNoteGlobs: []string{
-					fmt.Sprintf("Projects/%s.md", slug),
-					fmt.Sprintf("Projects/%s/**", folder),
-					fmt.Sprintf("Resources/Captures/**/%s*.md", slug),
+					"AGENTS.md",
+					"docs/**",
+					".brain/context/**",
+					".brain/planning/**",
+					".brain/brainstorms/**",
+					".brain/resources/**",
 				},
 			},
 		},
@@ -92,7 +93,6 @@ func DefaultPolicy(snapshot Snapshot) Policy {
 		Closeout: PolicyCloseout{
 			AcceptableHistoryOperations:     []string{"create", "update", "move", "rename", "publish", "seed"},
 			RequireMemoryUpdateOnRepoChange: true,
-			RequireReindexAfterNoteUpdates:  true,
 		},
 	}
 	if snapshot.PrimaryRuntime == "go" {
@@ -204,9 +204,6 @@ func mergePolicy(base, override *Policy) {
 	}
 	if override.Closeout.RequireMemoryUpdateOnRepoChange {
 		base.Closeout.RequireMemoryUpdateOnRepoChange = true
-	}
-	if override.Closeout.RequireReindexAfterNoteUpdates {
-		base.Closeout.RequireReindexAfterNoteUpdates = true
 	}
 	if len(override.Closeout.VerificationProfiles) != 0 {
 		base.Closeout.VerificationProfiles = append([]VerificationProfile(nil), override.Closeout.VerificationProfiles...)

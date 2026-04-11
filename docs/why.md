@@ -1,18 +1,21 @@
 # Why
 
-## PARA At The Top
+## One Brain Per Project
 
-The top level stays strict because retrieval, automation, and human navigation all benefit from predictable roots. `brain` keeps the opinionated part small and lets richer conventions live below each PARA folder.
+Project knowledge ages badly when it lives in one global heap. `brain` now treats every repo as its own operating environment so the docs, planning, context, and search index belong to that project instead of to one universal memory pool.
 
-## Hybrid Retrieval
+## Plain Markdown First
 
-Keyword search alone misses related phrasing. Embeddings alone can drift or overgeneralize. Combining SQLite FTS5 with vector similarity gives a practical local retrieval stack that is inspectable, debuggable, and fast enough for personal knowledge workflows.
+Humans should be able to read and edit the durable state without a proprietary interface. `brain` keeps the canonical layer in markdown and uses SQLite, logs, and backups as derived local state.
 
-## Agent-First Design
+## Search Without Centralization
 
-AI agents work better when the system exposes explicit commands with stable side effects. `brain` provides structured creation, search, content packaging, history, and undo so agents can work with a vault safely instead of manipulating raw files blindly.
+Retrieval is still useful, but it does not need a shared global database. A per-project index keeps results focused, avoids accidental cross-project contamination, and makes the system easier to reason about.
 
-## Local-First Trust
+## Explicit Agent Contracts
 
-The vault is plain markdown. Indexes, backups, and logs are local. The default embedder works offline. OpenAI embeddings are optional rather than required.
+Agents behave better when the repo exposes a clear contract. `AGENTS.md`, `.brain/context/*`, and `.brain/policy.yaml` make the expected workflow visible and refreshable.
 
+## Safe Workflow Over Magic
+
+`brain` favors explicit commands, local state, history, undo, and recorded verification over implicit background behavior. The tool should be understandable under pressure.

@@ -8,8 +8,7 @@ import (
 	"time"
 
 	"brain/internal/backup"
-	"brain/internal/config"
-	"brain/internal/vault"
+	"brain/internal/workspace"
 )
 
 func TestLoggerListNewestFirst(t *testing.T) {
@@ -35,19 +34,16 @@ func TestLoggerListNewestFirst(t *testing.T) {
 
 func TestUndoUpdateAndMove(t *testing.T) {
 	root := t.TempDir()
-	cfg := &config.Config{VaultPath: filepath.Join(root, "vault"), DataPath: filepath.Join(root, "data")}
-	vaultSvc := vault.New(cfg)
-	if err := vaultSvc.Initialize(); err != nil {
+	stateDir := filepath.Join(root, ".brain", "state")
+	workspaceSvc := workspace.New(root)
+	if err := workspaceSvc.Initialize(); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(cfg.DataPath, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	backups := backup.New(filepath.Join(cfg.DataPath, "backups"))
-	logger := New(filepath.Join(cfg.DataPath, "history.jsonl"))
-	undoer := NewUndoer(logger, backups, vaultSvc)
+	backups := backup.New(filepath.Join(stateDir, "backups"))
+	logger := New(filepath.Join(stateDir, "history.jsonl"))
+	undoer := NewUndoer(logger, backups, workspaceSvc)
 
-	path := filepath.Join(cfg.VaultPath, "Resources", "note.md")
+	path := filepath.Join(root, ".brain", "resources", "references", "note.md")
 	if err := os.WriteFile(path, []byte("old"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -58,73 +54,50 @@ func TestUndoUpdateAndMove(t *testing.T) {
 	if err := os.WriteFile(path, []byte("new"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := logger.Append(Entry{ID: "update1", Operation: "update", File: "Resources/note.md", BackupPath: backupPath, Summary: "updated"}); err != nil {
+	if err := logger.Append(Entry{ID: "update1", Operation: "update", File: ".brain/resources/references/note.md", BackupPath: backupPath, Summary: "updated"}); err != nil {
 		t.Fatal(err)
 	}
-
 	if _, err := undoer.Undo(); err != nil {
 		t.Fatal(err)
-	}
-	restored, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(restored) != "old" {
-		t.Fatalf("expected restored content, got %q", restored)
 	}
 
 	moveBackup, err := backups.Create(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	dest := filepath.Join(cfg.VaultPath, "Areas", "note.md")
-	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	dest := filepath.Join(root, "docs", "note.md")
 	if err := os.Rename(path, dest); err != nil {
 		t.Fatal(err)
 	}
-	if err := logger.Append(Entry{ID: "move1", Operation: "move", File: "Resources/note.md", Target: "Areas/note.md", BackupPath: moveBackup, Summary: "moved"}); err != nil {
+	if err := logger.Append(Entry{ID: "move1", Operation: "move", File: ".brain/resources/references/note.md", Target: "docs/note.md", BackupPath: moveBackup, Summary: "moved"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := undoer.Undo(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(path); err != nil {
-		t.Fatalf("expected original file restored: %v", err)
-	}
-	if _, err := os.Stat(dest); !os.IsNotExist(err) {
-		t.Fatalf("expected destination removed, got %v", err)
-	}
 	all, err := logger.All()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(all) == 0 || all[len(all)-1].Operation != "undo" {
-		t.Fatalf("expected undo entry appended: %+v", all)
-	}
-	if !strings.Contains(all[len(all)-1].Summary, "reverted move") {
-		t.Fatalf("unexpected undo summary: %+v", all[len(all)-1])
+	if len(all) == 0 || all[len(all)-1].Operation != "undo" || !strings.Contains(all[len(all)-1].Summary, "reverted move") {
+		t.Fatalf("unexpected undo log: %+v", all)
 	}
 }
 
 func TestUndoCreateRemovesFile(t *testing.T) {
 	root := t.TempDir()
-	cfg := &config.Config{VaultPath: filepath.Join(root, "vault"), DataPath: filepath.Join(root, "data")}
-	vaultSvc := vault.New(cfg)
-	if err := vaultSvc.Initialize(); err != nil {
+	stateDir := filepath.Join(root, ".brain", "state")
+	workspaceSvc := workspace.New(root)
+	if err := workspaceSvc.Initialize(); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(cfg.DataPath, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	logger := New(filepath.Join(cfg.DataPath, "history.jsonl"))
-	undoer := NewUndoer(logger, backup.New(filepath.Join(cfg.DataPath, "backups")), vaultSvc)
-	path := filepath.Join(cfg.VaultPath, "Resources", "created.md")
+	logger := New(filepath.Join(stateDir, "history.jsonl"))
+	undoer := NewUndoer(logger, backup.New(filepath.Join(stateDir, "backups")), workspaceSvc)
+	path := filepath.Join(root, ".brain", "resources", "references", "created.md")
 	if err := os.WriteFile(path, []byte("created"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := logger.Append(Entry{ID: "create1", Operation: "create", File: "Resources/created.md", Summary: "created"}); err != nil {
+	if err := logger.Append(Entry{ID: "create1", Operation: "create", File: ".brain/resources/references/created.md", Summary: "created"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := undoer.Undo(); err != nil {

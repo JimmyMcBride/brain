@@ -6,20 +6,20 @@ import (
 	"os"
 
 	"brain/internal/backup"
-	"brain/internal/vault"
+	"brain/internal/workspace"
 )
 
 type Undoer struct {
 	Logger  *Logger
 	Backups *backup.Manager
-	Vault   *vault.Service
+	Workspace   *workspace.Service
 }
 
-func NewUndoer(logger *Logger, backups *backup.Manager, vaultSvc *vault.Service) *Undoer {
+func NewUndoer(logger *Logger, backups *backup.Manager, workspaceSvc *workspace.Service) *Undoer {
 	return &Undoer{
 		Logger:  logger,
 		Backups: backups,
-		Vault:   vaultSvc,
+		Workspace:   workspaceSvc,
 	}
 }
 
@@ -53,25 +53,25 @@ func (u *Undoer) Undo() (*Entry, error) {
 
 	switch target.Operation {
 	case "create":
-		if err := os.Remove(u.Vault.Abs(target.File)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := os.Remove(u.Workspace.Abs(target.File)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return nil, fmt.Errorf("remove created file: %w", err)
 		}
 	case "update", "publish", "seed":
 		if target.BackupPath == "" {
 			return nil, fmt.Errorf("history entry %s has no backup", target.ID)
 		}
-		if err := u.Backups.Restore(target.BackupPath, u.Vault.Abs(target.File)); err != nil {
+		if err := u.Backups.Restore(target.BackupPath, u.Workspace.Abs(target.File)); err != nil {
 			return nil, err
 		}
 	case "move", "rename", "archive":
 		if target.BackupPath == "" {
 			return nil, fmt.Errorf("history entry %s has no backup", target.ID)
 		}
-		if err := u.Backups.Restore(target.BackupPath, u.Vault.Abs(target.File)); err != nil {
+		if err := u.Backups.Restore(target.BackupPath, u.Workspace.Abs(target.File)); err != nil {
 			return nil, err
 		}
 		if target.Target != "" {
-			if err := os.Remove(u.Vault.Abs(target.Target)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			if err := os.Remove(u.Workspace.Abs(target.Target)); err != nil && !errors.Is(err, os.ErrNotExist) {
 				return nil, fmt.Errorf("remove moved file: %w", err)
 			}
 		}
@@ -79,7 +79,7 @@ func (u *Undoer) Undo() (*Entry, error) {
 		if target.BackupPath == "" {
 			return nil, fmt.Errorf("cannot undo operation %s", target.Operation)
 		}
-		if err := u.Backups.Restore(target.BackupPath, u.Vault.Abs(target.File)); err != nil {
+		if err := u.Backups.Restore(target.BackupPath, u.Workspace.Abs(target.File)); err != nil {
 			return nil, err
 		}
 	}

@@ -1,9 +1,7 @@
 # Brain Wrapper For Pi
 
-Operate against the markdown vault through `brain` rather than direct file edits whenever possible.
+Operate against the repo-local Brain workspace rather than inventing a parallel memory process.
 
-- PARA is the only top-level taxonomy.
-- Search first, then write.
-- Reindex when retrieval should incorporate new content.
-- Use history and undo instead of manual rollback.
-
+- Search first, then update durable notes.
+- Prefer Brain-managed files over temporary scratch memory.
+- Use history and undo instead of manual rollback when Brain owns the note.

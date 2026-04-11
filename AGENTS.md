@@ -19,8 +19,11 @@ Read the linked context files before substantial work. Prefer the `brain` skill 
 
 - [README.md](./README.md)
 - [architecture.md](./docs/architecture.md)
-- [usage.md](./docs/usage.md)
+- [project-architecture.md](./docs/project-architecture.md)
+- [project-overview.md](./docs/project-overview.md)
+- [project-workflows.md](./docs/project-workflows.md)
 - [skills.md](./docs/skills.md)
+- [usage.md](./docs/usage.md)
 - [why.md](./docs/why.md)
 
 ## Required Workflow
@@ -29,9 +32,9 @@ Read the linked context files before substantial work. Prefer the `brain` skill 
 2. If a session is already active, run `brain session validate` before substantial work.
 3. Read this file and the linked context files needed for the task.
 4. Retrieve project memory with `brain find brain` or `brain search "brain <task>"`.
-5. Use `brain capture`, `brain add`, or `brain edit` for durable context updates.
+5. Use `brain edit` for durable context updates to AGENTS.md, docs, or .brain notes.
 6. Use `brain session run -- <command>` for required verification commands.
-7. Finish with `brain session finish` so policy checks can enforce memory updates, reindexing, and required command runs.
+7. Finish with `brain session finish` so policy checks can enforce memory updates and required command runs.
 <!-- brain:end agents-contract -->
 
 ## Local Notes

@@ -1,0 +1,6 @@
+name: brain
+paradigm: epics
+container_type: epic
+container_plural: epics
+item_type: story
+item_plural: stories

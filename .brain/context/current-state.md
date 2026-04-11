@@ -11,14 +11,17 @@ This file is a deterministic snapshot of the repository state at the last refres
 - Go module: `brain`
 - Current branch: `main`
 - Remote: `https://github.com/JimmyMcBride/brain.git`
-- Go test files: `14`
+- Go test files: `18`
 
 ## Docs
 
 - `README.md`
 - `docs/architecture.md`
-- `docs/usage.md`
+- `docs/project-architecture.md`
+- `docs/project-overview.md`
+- `docs/project-workflows.md`
 - `docs/skills.md`
+- `docs/usage.md`
 - `docs/why.md`
 <!-- brain:end context-current-state -->
 

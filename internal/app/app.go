@@ -1,43 +1,49 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"brain/internal/backup"
+	"brain/internal/brainstorm"
 	"brain/internal/config"
-	"brain/internal/content"
 	"brain/internal/embeddings"
 	"brain/internal/history"
 	"brain/internal/index"
 	"brain/internal/notes"
 	"brain/internal/output"
+	"brain/internal/plan"
+	"brain/internal/project"
 	"brain/internal/projectcontext"
 	"brain/internal/search"
 	"brain/internal/session"
 	"brain/internal/skills"
 	"brain/internal/templates"
-	"brain/internal/vault"
+	"brain/internal/workspace"
 )
 
 type App struct {
-	Config    *config.Config
-	Paths     config.Paths
-	Vault     *vault.Service
-	Templates *templates.Manager
-	Notes     *notes.Manager
-	Backups   *backup.Manager
-	History   *history.Logger
-	Undoer    *history.Undoer
-	Index     *index.Store
-	Embedder  embeddings.Provider
-	Search    *search.Engine
-	Content   *content.Manager
-	Skills    *skills.Installer
-	Context   *projectcontext.Manager
-	Session   *session.Manager
-	Output    *output.Printer
+	Config     *config.Config
+	Paths      config.Paths
+	Workspace  *workspace.Service
+	Templates  *templates.Manager
+	Notes      *notes.Manager
+	Backups    *backup.Manager
+	History    *history.Logger
+	Undoer     *history.Undoer
+	Index      *index.Store
+	Embedder   embeddings.Provider
+	Search     *search.Engine
+	Project    *project.Manager
+	Brainstorm *brainstorm.Manager
+	Plan       *plan.Manager
+	Skills     *skills.Installer
+	Context    *projectcontext.Manager
+	Session    *session.Manager
+	Output     *output.Printer
 }
 
 type Options struct {
@@ -45,8 +51,8 @@ type Options struct {
 	Stderr io.Writer
 }
 
-func New(configPath string, jsonOutput bool, opts Options) (*App, error) {
-	cfg, paths, err := config.LoadOrCreate(configPath)
+func New(configPath, projectPath string, jsonOutput bool, opts Options) (*App, error) {
+	cfg, globalPaths, err := config.LoadOrCreate(configPath)
 	if err != nil {
 		return nil, err
 	}
@@ -60,8 +66,17 @@ func New(configPath string, jsonOutput bool, opts Options) (*App, error) {
 		opts.Stderr = os.Stderr
 	}
 
-	vaultSvc := vault.New(cfg)
-	tpl := templates.New(filepathIfExists(vaultSvc.Root, "templates"))
+	projectDir, err := filepath.Abs(projectPath)
+	if err != nil {
+		return nil, err
+	}
+	paths := config.ProjectPaths(globalPaths, projectDir)
+	if err := config.EnsureProjectPaths(paths); err != nil {
+		return nil, err
+	}
+
+	workspaceSvc := workspace.New(projectDir)
+	tpl := templates.New(filepathIfExists(workspaceSvc.Root, "templates"))
 	backups := backup.New(paths.BackupDir)
 	historyLog := history.New(paths.LogFile)
 	embedder, err := embeddings.New(cfg)
@@ -73,27 +88,31 @@ func New(configPath string, jsonOutput bool, opts Options) (*App, error) {
 		return nil, err
 	}
 	searchEngine := search.New(store, embedder)
-	notesManager := notes.New(vaultSvc, tpl, backups, historyLog)
-	contentManager := content.New(notesManager, searchEngine)
+	notesManager := notes.New(workspaceSvc, tpl, backups, historyLog)
+	projectManager := project.New(notesManager, workspaceSvc)
+	brainstormManager := brainstorm.New(notesManager, searchEngine, projectManager)
+	planManager := plan.New(notesManager, projectManager)
 	userHome, _ := os.UserHomeDir()
 
 	return &App{
-		Config:    cfg,
-		Paths:     paths,
-		Vault:     vaultSvc,
-		Templates: tpl,
-		Notes:     notesManager,
-		Backups:   backups,
-		History:   historyLog,
-		Undoer:    history.NewUndoer(historyLog, backups, vaultSvc),
-		Index:     store,
-		Embedder:  embedder,
-		Search:    searchEngine,
-		Content:   contentManager,
-		Skills:    skills.NewInstaller(userHome),
-		Context:   projectcontext.New(userHome),
-		Session:   session.New(historyLog),
-		Output:    output.New(cfg.OutputMode, opts.Stdout),
+		Config:     cfg,
+		Paths:      paths,
+		Workspace:  workspaceSvc,
+		Templates:  tpl,
+		Notes:      notesManager,
+		Backups:    backups,
+		History:    historyLog,
+		Undoer:     history.NewUndoer(historyLog, backups, workspaceSvc),
+		Index:      store,
+		Embedder:   embedder,
+		Search:     searchEngine,
+		Project:    projectManager,
+		Brainstorm: brainstormManager,
+		Plan:       planManager,
+		Skills:     skills.NewInstaller(userHome),
+		Context:    projectcontext.New(userHome),
+		Session:    session.New(historyLog),
+		Output:     output.New(cfg.OutputMode, opts.Stdout),
 	}, nil
 }
 
@@ -118,9 +137,17 @@ func filepathIfExists(base, child string) string {
 	return ""
 }
 
-func (a *App) EnsureVault() error {
-	if err := a.Vault.Validate(); err != nil {
-		return fmt.Errorf("%w; run `brain init` first", err)
+func (a *App) EnsureWorkspace() error {
+	if err := a.Workspace.Validate(); err != nil {
+		return fmt.Errorf("%w; run `brain init --project %s` first", err, a.Paths.ProjectDir)
 	}
 	return nil
+}
+
+func (a *App) SyncIndex(ctx context.Context) error {
+	if a == nil || a.Index == nil || a.Workspace == nil {
+		return nil
+	}
+	_, err := a.Index.Reindex(ctx, a.Workspace, a.Embedder)
+	return err
 }

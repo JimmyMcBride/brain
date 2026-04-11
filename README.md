@@ -1,75 +1,42 @@
 # brain
 
-`brain` is a local-first CLI that turns your Obsidian vault into working memory for you and your coding agents.
+`brain` is a local-first CLI that gives each software project its own markdown-based operating layer.
 
-It does four things:
+It keeps human docs at the repo root, keeps machine-managed state under `.brain/`, builds a local SQLite search index, and provides explicit workflows for planning, brainstorming, context, history, and session enforcement.
 
-1. stores knowledge as plain markdown in a PARA vault
-2. builds a local search layer on top with SQLite FTS5 and embeddings
-3. gives agents safe commands for capture, retrieval, updates, history, and undo
-4. adds project-local context and session enforcement so repo work stays accountable
+## What It Does
 
-If you want the shortest possible explanation: `brain` is a command line memory system for markdown notes and AI-assisted software work.
+- initializes a project-local Brain workspace in any repo or folder
+- keeps durable project knowledge in plain markdown
+- indexes `AGENTS.md`, `docs/**/*.md`, and `.brain/**/*.md` with SQLite FTS plus embeddings
+- provides project-scoped planning and brainstorming commands
+- generates deterministic agent context and optional wrappers
+- tracks note history and supports undo
+- enforces repo workflows through session policy
 
-## Read this next
+## Mental Model
 
-- Read [`docs/usage.md`](docs/usage.md) if you want to use the CLI day to day.
-- Read [`docs/architecture.md`](docs/architecture.md) if you want to understand the internals.
-- Read [`docs/skills.md`](docs/skills.md) if you want to install skills, project context, and sessions for agents.
+`brain` is not a shared global memory store anymore. Every project gets its own Brain.
 
-## Mental model
-
-You keep your notes in Obsidian-compatible markdown. `brain` indexes and searches them locally. In coding repos, `brain` can also install project context and enforce a session workflow so agents do not just improvise.
-
-```mermaid
-flowchart LR
-    V["Obsidian PARA Vault<br/>Projects / Areas / Resources / Archives"] --> B["brain CLI"]
-    B --> N["Note commands<br/>add / read / edit / move / capture / daily"]
-    B --> I["Local index<br/>SQLite + FTS5 + embeddings"]
-    B --> C["Content workflow<br/>seed / gather / outline / publish"]
-    B --> P["Project context<br/>AGENTS.md + .brain/context + policy"]
-    I --> S["Hybrid search results"]
-    P --> A["Coding agents<br/>Codex / OpenClaw / Claude / others"]
-    S --> A
-    N --> A
+```text
+my-project/
+  AGENTS.md
+  docs/
+  .brain/
+    context/
+    brainstorms/
+    planning/
+    resources/
+    state/
 ```
 
-## What `brain` is for
-
-- keeping an Obsidian vault useful from the terminal
-- finding related notes with both keyword and semantic retrieval
-- capturing project decisions and discoveries as durable notes
-- giving agents a safe interface instead of raw file edits
-- enforcing project workflows when you want stricter control
-
-## What `brain` is not
-
-- a hosted SaaS knowledge base
-- a replacement for Obsidian
-- a background daemon that watches everything by itself
-- a generic vector database
-
-## Core capabilities
-
-- Linux-first, Arch-friendly
-- Obsidian-compatible markdown vault as source of truth
-- PARA at the top level
-- Hybrid retrieval with SQLite FTS5 plus embeddings
-- Agent-friendly commands
-- Project-local context bundles for coding agents
-- Session enforcement with repo-local policy and ledgers
-- Backups, history, undo, and diffable organize workflows
-
-## Start here
-
-If you are new to `brain`, this is the simplest path:
-
-1. run `brain init`
-2. create or capture a few notes
-3. run `brain reindex`
-4. use `brain search` and `brain find`
-5. if you want agents to use the repo consistently, run `brain context install`
-6. if you want hard enforcement, use `brain session start`
+- `AGENTS.md` is the root contract for humans and agents.
+- `docs/` is the human-readable project documentation layer.
+- `.brain/context/` is the generated modular context bundle.
+- `.brain/planning/` holds epics/stories or other planning structures.
+- `.brain/brainstorms/` holds project-local ideation notes.
+- `.brain/resources/` holds durable references, captures, and change history.
+- `.brain/state/` holds SQLite, history logs, backups, and other local state.
 
 ## Install
 
@@ -79,184 +46,88 @@ If you are new to `brain`, this is the simplest path:
 git clone https://github.com/JimmyMcBride/brain.git
 cd brain
 go build -o brain .
-sudo install -m 0755 brain /usr/local/bin/brain
+install -Dm0755 brain ~/.local/bin/brain
 ```
 
-### Go install
+### Go run during development
 
 ```bash
-go install .
+go run . --help
 ```
 
-## Quick start
+Use `go run .` when working on the CLI itself before replacing the installed binary.
+
+## Quick Start
+
+In any project directory:
 
 ```bash
-brain init
-brain doctor
-brain add "AI Agent Workflow" --section Projects --type project
-brain capture "Interesting idea" --body "A short note about retrieval and agents."
-brain daily
-brain reindex
-brain search "retrieval agents"
+brain init --project .
+brain doctor --project .
+brain context install --project .
+brain plan init --project . --paradigm epics
+brain brainstorm start --project . "Initial ideas"
+brain search --project . "architecture"
 ```
 
-## How it works
+## Main Commands
 
-`brain` keeps the vault as the source of truth. The database is just a local search index and ledger layer built on top of the markdown files.
+- `brain init`: bootstrap a project-local Brain workspace
+- `brain doctor`: validate local Brain setup
+- `brain read`, `brain edit`: inspect and update managed markdown
+- `brain find`, `brain search`: project-local retrieval
+- `brain brainstorm ...`: project-local brainstorming
+- `brain plan ...`: project-local planning and work tracking
+- `brain context ...`: install or refresh project context files
+- `brain session ...`: enforce workflow and verification rules
+- `brain skills ...`: install the Brain skill bundle for agent runtimes
+- `brain history`, `brain undo`: inspect and revert tracked note changes
+- `brain version`, `brain update`: inspect or update the CLI
 
-```mermaid
-flowchart TD
-    A["Markdown note in vault"] --> B["brain reindex"]
-    B --> C["Chunk by headings"]
-    C --> D["Store chunks in SQLite"]
-    D --> E["FTS5 index"]
-    D --> F["Embeddings"]
-    G["brain search \"query\""] --> E
-    G --> F
-    E --> H["Keyword candidates"]
-    F --> I["Semantic candidates"]
-    H --> J["Normalize + merge + rerank"]
-    I --> J
-    J --> K["Result with note path, heading, snippet, score"]
-```
+## Search Model
+
+`brain` indexes project-managed markdown only:
+
+- `AGENTS.md`
+- `docs/**/*.md`
+- `.brain/**/*.md`
+
+It excludes local runtime state such as:
+
+- `.brain/state/**`
+- `.brain/sessions/**`
+
+This keeps retrieval focused on durable project knowledge instead of transient internals.
 
 ## Config
 
-Config lives at `~/.config/brain/config.yaml` by default.
+Config lives at `~/.config/brain/config.yaml`.
 
 Supported fields:
 
-- `vault_path`
-- `data_path`
 - `embedding_provider`
 - `embedding_model`
 - `output_mode`
 
 Environment overrides:
 
-- `BRAIN_VAULT_PATH`
-- `BRAIN_DATA_PATH`
 - `BRAIN_EMBEDDING_PROVIDER`
 - `BRAIN_EMBEDDING_MODEL`
 - `BRAIN_OUTPUT_MODE`
 
-## Command examples
+Project state is derived from `--project` and `.brain/state`. It is not configured globally.
 
-```bash
-brain add "Client migration" --section Projects --type project
-brain read Projects/client-migration.md
-brain edit Projects/client-migration.md --set status=active
-brain find migration
-brain search "vendor rollout plan"
-brain move Projects/client-migration.md Archives/
-brain history
-brain undo
-```
+## Update Model
 
-## Content workflow
+`brain update` downloads the newest matching GitHub Release, verifies checksums, and installs the binary.
 
-```bash
-brain content seed Projects/client-migration.md
-brain content gather Projects/client-migration.md -n 5
-brain content outline Projects/client-migration.md -n 5
-brain content publish Projects/client-migration.md --channel blog --repurpose thread
-```
+- if the current binary is writable, it updates in place
+- otherwise it installs to `~/.local/bin/brain`
+- replaced binaries are backed up under the global Brain app data directory
 
-## Skills
+## Read Next
 
-```bash
-brain skills install --scope global --agent codex
-brain skills install --scope local --agent codex --project .
-brain skills install --scope both --agent codex --agent claude --project .
-brain skills install --scope global --agent openclaw
-brain skills install --skill-root /path/to/custom/skills --mode copy
-brain context install --project . --agent codex --agent openclaw
-brain context refresh --project .
-brain session start --project . --task "implement feature"
-brain session run --project . -- go test ./...
-brain session finish --project .
-```
-
-OpenClaw installs are copied into `~/.openclaw/skills/brain` because OpenClaw's managed skill loader does not currently detect symlinked skill directories.
-
-`brain context install` creates a root `AGENTS.md`, a modular `.brain/context` bundle, a generated `.brain/policy.yaml`, and thin agent-specific wrappers so coding agents can follow a consistent project contract.
-
-## Sessions
-
-Use sessions when you want hard enforcement instead of best-effort agent obedience:
-
-```bash
-brain session start --project . --task "tighten retrieval UX"
-brain session validate --project .
-brain session run --project . -- go test ./...
-brain session run --project . -- go build ./...
-brain session finish --project . --summary "completed retrieval update"
-```
-
-This writes local-only state under:
-
-- `.brain/session.json`
-- `.brain/sessions/`
-
-and uses `.brain/policy.yaml` to enforce:
-
-- required startup contract
-- durable note updates for repo changes
-- reindex after note changes
-- recorded verification commands through `brain session run`
-
-```mermaid
-flowchart LR
-    A["session start"] --> B["preflight checks"]
-    B --> C["do repo work"]
-    C --> D["capture durable notes if repo changed"]
-    D --> E["reindex if notes changed"]
-    E --> F["session run -- tests/build"]
-    F --> G["session finish"]
-    G --> H["ledger written and session cleared"]
-```
-
-## Example vault structure
-
-```text
-vault/
-  Projects/
-    ai-agent-workflow.md
-  Areas/
-    Daily/
-      2026/
-        2026-04-09.md
-  Resources/
-    Captures/
-      2026/
-        04/
-          interesting-idea.md
-    Content/
-      Outlines/
-        ai-agent-workflow-outline.md
-  Archives/
-```
-
-## Example search queries
-
-```bash
-brain search "retrieval agents"
-brain search "weekly review"
-brain search "publishing workflow"
-brain find --type project
-```
-
-## Linux setup
-
-1. Install Go and a C toolchain only if you want to build other CGO-based tooling; `brain` itself uses a pure-Go SQLite driver.
-2. Build and place `brain` on your `PATH`.
-3. Run `brain init` and confirm with `brain doctor`.
-4. Point Obsidian at the configured `vault_path`.
-5. Run `brain reindex` after meaningful note imports or edits.
-
-## More docs
-
-- [Architecture](docs/architecture.md)
-- [Usage](docs/usage.md)
-- [Skills](docs/skills.md)
-- [Why](docs/why.md)
+- [`docs/usage.md`](docs/usage.md)
+- [`docs/architecture.md`](docs/architecture.md)
+- [`docs/skills.md`](docs/skills.md)
+- [`docs/why.md`](docs/why.md)

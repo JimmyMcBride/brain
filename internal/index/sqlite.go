@@ -15,7 +15,7 @@ import (
 
 	"brain/internal/embeddings"
 	"brain/internal/notes"
-	"brain/internal/vault"
+	"brain/internal/workspace"
 
 	_ "modernc.org/sqlite"
 )
@@ -108,8 +108,8 @@ func (s *Store) InitSchema() error {
 	return nil
 }
 
-func (s *Store) Reindex(ctx context.Context, vaultSvc *vault.Service, provider embeddings.Provider) (Stats, error) {
-	files, err := vaultSvc.WalkMarkdownFiles()
+func (s *Store) Reindex(ctx context.Context, workspaceSvc *workspace.Service, provider embeddings.Provider) (Stats, error) {
+	files, err := workspaceSvc.WalkMarkdownFiles()
 	if err != nil {
 		return Stats{}, err
 	}
@@ -188,7 +188,7 @@ func (s *Store) Reindex(ctx context.Context, vaultSvc *vault.Service, provider e
 		if err != nil {
 			return Stats{}, err
 		}
-		rel, err := vaultSvc.Rel(file)
+		rel, err := workspaceSvc.Rel(file)
 		if err != nil {
 			return Stats{}, err
 		}

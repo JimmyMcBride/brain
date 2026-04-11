@@ -18,7 +18,7 @@ func addReadCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoade
 				return err
 			}
 			defer appCtx.Close()
-			if err := appCtx.EnsureVault(); err != nil {
+			if err := appCtx.EnsureWorkspace(); err != nil {
 				return err
 			}
 			note, err := appCtx.Notes.Read(args[0])

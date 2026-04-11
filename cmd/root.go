@@ -16,12 +16,13 @@ type rootOptions struct {
 	in      io.Reader
 	out     io.Writer
 	errOut  io.Writer
-	appLoad func(configPath string, jsonOutput bool, out io.Writer, errOut io.Writer) (*app.App, error)
+	appLoad func(configPath, projectPath string, jsonOutput bool, out io.Writer, errOut io.Writer) (*app.App, error)
 }
 
 type rootFlagsState struct {
-	configPath string
-	jsonOutput bool
+	configPath  string
+	projectPath string
+	jsonOutput  bool
 }
 
 type appLoader func() (*app.App, error)
@@ -43,8 +44,8 @@ func newRootCommand(opts rootOptions) *cobra.Command {
 		opts.errOut = os.Stderr
 	}
 	if opts.appLoad == nil {
-		opts.appLoad = func(configPath string, jsonOutput bool, out io.Writer, errOut io.Writer) (*app.App, error) {
-			return app.New(configPath, jsonOutput, app.Options{
+		opts.appLoad = func(configPath, projectPath string, jsonOutput bool, out io.Writer, errOut io.Writer) (*app.App, error) {
+			return app.New(configPath, projectPath, jsonOutput, app.Options{
 				Stdout: out,
 				Stderr: errOut,
 			})
@@ -54,7 +55,7 @@ func newRootCommand(opts rootOptions) *cobra.Command {
 	flags := &rootFlagsState{}
 	cmd := &cobra.Command{
 		Use:           "brain",
-		Short:         "Local-first knowledge CLI for PARA-style markdown vaults",
+		Short:         "Project-local brain for docs, planning, context, and workflow",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
@@ -62,10 +63,11 @@ func newRootCommand(opts rootOptions) *cobra.Command {
 	cmd.SetOut(opts.out)
 	cmd.SetErr(opts.errOut)
 	cmd.PersistentFlags().StringVar(&flags.configPath, "config", "", "config file path")
+	cmd.PersistentFlags().StringVar(&flags.projectPath, "project", ".", "project root path")
 	cmd.PersistentFlags().BoolVar(&flags.jsonOutput, "json", false, "render output as JSON")
 
 	loadApp := func() (*app.App, error) {
-		return opts.appLoad(flags.configPath, flags.jsonOutput, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return opts.appLoad(flags.configPath, flags.projectPath, flags.jsonOutput, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	}
 
 	addCommands(cmd, flags, loadApp)
@@ -75,17 +77,14 @@ func newRootCommand(opts rootOptions) *cobra.Command {
 func addCommands(root *cobra.Command, flags *rootFlagsState, loadApp appLoader) {
 	addInitCommand(root, flags)
 	addDoctorCommand(root, flags)
-	addAddCommand(root, flags, loadApp)
+	addVersionCommand(root, flags)
+	addUpdateCommand(root, flags)
 	addReadCommand(root, flags, loadApp)
 	addEditCommand(root, flags, loadApp)
 	addFindCommand(root, flags, loadApp)
 	addSearchCommand(root, flags, loadApp)
-	addMoveCommand(root, flags, loadApp)
-	addOrganizeCommand(root, flags, loadApp)
-	addCaptureCommand(root, flags, loadApp)
-	addContentCommand(root, flags, loadApp)
-	addDailyCommand(root, flags, loadApp)
-	addReindexCommand(root, flags, loadApp)
+	addBrainstormCommand(root, flags, loadApp)
+	addPlanCommand(root, flags, loadApp)
 	addHistoryCommand(root, flags, loadApp)
 	addUndoCommand(root, flags, loadApp)
 	addContextCommand(root, flags, loadApp)
@@ -150,7 +149,7 @@ func userHomeDir() string {
 
 func chooseSection(section string) string {
 	if section == "" {
-		return "Resources"
+		return ".brain"
 	}
 	return section
 }
@@ -159,16 +158,7 @@ func chooseType(section, noteType string) string {
 	if noteType != "" {
 		return noteType
 	}
-	switch chooseSection(section) {
-	case "Projects":
-		return "project"
-	case "Areas":
-		return "area"
-	case "Archives":
-		return "archive"
-	default:
-		return "resource"
-	}
+	return "resource"
 }
 
 func chooseTemplate(noteType, templateName string) string {
@@ -176,18 +166,12 @@ func chooseTemplate(noteType, templateName string) string {
 		return templateName
 	}
 	switch noteType {
-	case "project":
-		return "project.md"
-	case "area":
-		return "area.md"
-	case "capture":
-		return "capture.md"
-	case "lesson":
-		return "lesson.md"
-	case "content_seed":
-		return "content_seed.md"
-	case "daily":
-		return "daily.md"
+	case "brainstorm", "brainstorm_distill":
+		return "brainstorm.md"
+	case "epic", "milestone", "cycle":
+		return "container.md"
+	case "story", "task":
+		return "work_item.md"
 	default:
 		return "resource.md"
 	}

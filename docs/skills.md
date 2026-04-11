@@ -1,80 +1,59 @@
 # Skills
 
-`brain` ships with a canonical skill bundle:
+`brain` ships a canonical skill bundle for agent runtimes.
+
+## Bundle Layout
 
 - `skills/brain/SKILL.md`
 - `skills/brain/agents/openai.yaml`
 - `skills/brain/agents/openclaw.yaml`
+- `skills/wrappers/*.md`
 
-## Install
+## Install Targets
+
+Preview install targets:
+
+```bash
+brain skills targets --scope both --agent codex --agent claude --project .
+```
+
+Install globally:
 
 ```bash
 brain skills install --scope global --agent codex
 ```
 
-This installs:
-
-- `brain/SKILL.md`
-- `brain/agents/openai.yaml`
-
-into the target skill roots.
-
-Examples:
+Install into a project:
 
 ```bash
-brain skills targets --scope both --agent codex --agent claude --project .
 brain skills install --scope local --agent codex --project .
-brain skills install --scope both --agent codex --agent zed --project .
-brain skills install --scope global --agent openclaw
-brain skills install --skill-root /path/to/custom/skills --mode copy
 ```
 
-Known agents use conventional roots:
+Use `--mode copy` when the target runtime does not support symlinked skill directories well. OpenClaw should generally use copy mode.
 
-- global: `~/.<agent>/skills`
-- local: `<project>/.<agent>/skills`
+## Relationship To Project Context
 
-Use `--skill-root` for nonstandard tools. Use `--mode copy` when symlinks are undesirable. Symlinks are preferable during local development because changes in the repo propagate immediately to the installed skill files.
+The skill is the generic fallback.  
+Repo-local context is the project-specific contract.
 
-OpenClaw note: OpenClaw's managed skill loader expects a real directory under `~/.openclaw/skills`, so `brain skills install --agent openclaw` uses copy mode even if `--mode symlink` is requested.
+Expected order:
 
-## Project Context
+1. read repo `AGENTS.md`
+2. read `.brain/policy.yaml`
+3. read the relevant `.brain/context/*.md` files
+4. fall back to the generic Brain skill only when repo-local context is absent or insufficient
 
-Use the context commands when you want a repository to carry its own agent contract instead of relying only on a global skill:
+## Wrappers
 
-```bash
-brain context install --project . --agent codex --agent openclaw
-brain context refresh --project .
-```
+Agent-specific wrappers such as `.codex/AGENTS.md` or `.claude/CLAUDE.md` are intentionally thin. They should point back to the root contract instead of duplicating policy.
 
-This creates:
+## Sessions And Verification
 
-- `AGENTS.md`
-- `.brain/context/overview.md`
-- `.brain/context/architecture.md`
-- `.brain/context/standards.md`
-- `.brain/context/workflows.md`
-- `.brain/context/memory-policy.md`
-- `.brain/context/current-state.md`
-- `.brain/policy.yaml`
+When a repo uses sessions, the skill should steer agents toward:
 
-If an agent wrapper is requested, `brain` also generates a thin wrapper such as `.codex/AGENTS.md` or `.claude/CLAUDE.md` that points back to the root project contract.
+- `brain session start`
+- `brain session validate`
+- `brain session run -- <command>`
+- `brain session finish`
 
-## Sessions
-
-When you want actual enforcement instead of soft guidance, use sessions:
-
-```bash
-brain session start --project . --task "ship auth fix"
-brain session validate --project .
-brain session run --project . -- go test ./...
-brain session finish --project .
-```
-
-The generated policy file defines:
-
-- required docs and suggested startup commands
-- accepted project-memory note paths
-- whether repo changes require durable note updates
-- whether reindex is required after note changes
-- required verification command profiles
+That keeps verification and durable memory updates visible and enforceable.

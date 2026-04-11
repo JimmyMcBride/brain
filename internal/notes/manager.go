@@ -14,7 +14,7 @@ import (
 	"brain/internal/backup"
 	"brain/internal/history"
 	"brain/internal/templates"
-	"brain/internal/vault"
+	"brain/internal/workspace"
 )
 
 var slugPattern = regexp.MustCompile(`[^a-z0-9]+`)
@@ -39,16 +39,16 @@ type UpdateInput struct {
 }
 
 type Manager struct {
-	vault     *vault.Service
+	workspace *workspace.Service
 	templates *templates.Manager
 	backups   *backup.Manager
 	history   *history.Logger
 	editorRun func(editor, path string) error
 }
 
-func New(vaultSvc *vault.Service, tpl *templates.Manager, backups *backup.Manager, historyLog *history.Logger) *Manager {
+func New(workspaceSvc *workspace.Service, tpl *templates.Manager, backups *backup.Manager, historyLog *history.Logger) *Manager {
 	return &Manager{
-		vault:     vaultSvc,
+		workspace: workspaceSvc,
 		templates: tpl,
 		backups:   backups,
 		history:   historyLog,
@@ -56,18 +56,26 @@ func New(vaultSvc *vault.Service, tpl *templates.Manager, backups *backup.Manage
 	}
 }
 
+// WorkspaceAbs resolves a workspace-relative path to an absolute path.
+func (m *Manager) WorkspaceAbs(rel string) string {
+	return m.workspace.Abs(rel)
+}
+
 func (m *Manager) Create(input CreateInput) (*Note, error) {
-	if err := m.vault.Validate(); err != nil {
+	if err := m.workspace.Validate(); err != nil {
 		return nil, err
 	}
 	if input.Title == "" {
 		return nil, errors.New("title is required")
 	}
 	if input.Section == "" {
-		input.Section = "Resources"
+		input.Section = ".brain"
 	}
 	if input.Template == "" {
 		input.Template = "resource.md"
+	}
+	if input.Subdir == "" && input.Section == ".brain" {
+		input.Subdir = "resources/references"
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	relDir := filepath.ToSlash(filepath.Join(input.Section, input.Subdir))
@@ -79,7 +87,7 @@ func (m *Manager) Create(input CreateInput) (*Note, error) {
 		filename += ".md"
 	}
 	relPath := filepath.ToSlash(filepath.Join(relDir, filename))
-	absPath := m.vault.Abs(relPath)
+	absPath := m.workspace.Abs(relPath)
 	if _, err := os.Stat(absPath); err == nil && !input.Overwrite {
 		return nil, fmt.Errorf("note already exists: %s", relPath)
 	}
@@ -128,7 +136,7 @@ func (m *Manager) Create(input CreateInput) (*Note, error) {
 }
 
 func (m *Manager) Read(path string) (*Note, error) {
-	abs, rel, err := m.vault.ResolveMarkdown(path)
+	abs, rel, err := m.workspace.ResolveMarkdown(path)
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +171,7 @@ func (m *Manager) Update(path string, input UpdateInput) (*Note, error) {
 	if err != nil {
 		return nil, err
 	}
-	abs := m.vault.Abs(note.Path)
+	abs := m.workspace.Abs(note.Path)
 	backupPath, err := m.backups.Create(abs)
 	if err != nil {
 		return nil, err
@@ -206,7 +214,7 @@ func (m *Manager) EditInEditor(path, editor string) (*Note, error) {
 	if err != nil {
 		return nil, err
 	}
-	abs := m.vault.Abs(note.Path)
+	abs := m.workspace.Abs(note.Path)
 	before, err := os.ReadFile(abs)
 	if err != nil {
 		return nil, err
@@ -247,13 +255,13 @@ func (m *Manager) Rename(path, newTitle string) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	oldAbs := m.vault.Abs(note.Path)
+	oldAbs := m.workspace.Abs(note.Path)
 	backupPath, err := m.backups.Create(oldAbs)
 	if err != nil {
 		return "", "", err
 	}
 	newRel := filepath.ToSlash(filepath.Join(filepath.Dir(note.Path), slugify(newTitle)+".md"))
-	newAbs := m.vault.Abs(newRel)
+	newAbs := m.workspace.Abs(newRel)
 	if err := os.MkdirAll(filepath.Dir(newAbs), 0o755); err != nil {
 		return "", "", err
 	}
@@ -284,7 +292,7 @@ func (m *Manager) Move(path, destination string) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	oldAbs := m.vault.Abs(note.Path)
+	oldAbs := m.workspace.Abs(note.Path)
 	backupPath, err := m.backups.Create(oldAbs)
 	if err != nil {
 		return "", "", err
@@ -296,7 +304,7 @@ func (m *Manager) Move(path, destination string) (string, string, error) {
 	if !strings.HasSuffix(destRel, ".md") {
 		destRel += ".md"
 	}
-	destAbs := m.vault.Abs(destRel)
+	destAbs := m.workspace.Abs(destRel)
 	if err := os.MkdirAll(filepath.Dir(destAbs), 0o755); err != nil {
 		return "", "", err
 	}
@@ -316,7 +324,7 @@ func (m *Manager) Move(path, destination string) (string, string, error) {
 }
 
 func (m *Manager) Find(query, noteType, pathFilter string, limit int) ([]map[string]any, error) {
-	files, err := m.vault.WalkMarkdownFiles()
+	files, err := m.workspace.WalkMarkdownFiles()
 	if err != nil {
 		return nil, err
 	}
@@ -326,7 +334,7 @@ func (m *Manager) Find(query, noteType, pathFilter string, limit int) ([]map[str
 
 	results := make([]map[string]any, 0, len(files))
 	for _, file := range files {
-		rel, err := m.vault.Rel(file)
+		rel, err := m.workspace.Rel(file)
 		if err != nil {
 			return nil, err
 		}
@@ -374,14 +382,12 @@ func inferTypeFromPath(path string) string {
 		return "note"
 	}
 	switch parts[0] {
-	case "Projects":
-		return "project"
-	case "Areas":
-		return "area"
-	case "Resources":
+	case ".brain":
 		return "resource"
-	case "Archives":
-		return "archive"
+	case "docs":
+		return "doc"
+	case "AGENTS.md":
+		return "contract"
 	default:
 		return "note"
 	}

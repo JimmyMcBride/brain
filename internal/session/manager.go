@@ -15,12 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"brain/internal/config"
-	"brain/internal/embeddings"
 	"brain/internal/history"
-	"brain/internal/index"
 	"brain/internal/projectcontext"
-	"brain/internal/vault"
 )
 
 type Manager struct {
@@ -117,17 +113,16 @@ type RunResult struct {
 }
 
 type ValidationResult struct {
-	OK               bool     `json:"ok"`
-	Stage            string   `json:"stage"`
-	SessionID        string   `json:"session_id,omitempty"`
-	Task             string   `json:"task,omitempty"`
-	RepoChanged      bool     `json:"repo_changed"`
-	NotesChanged     bool     `json:"notes_changed"`
-	ReindexPerformed bool     `json:"reindex_performed"`
-	MissingCommands  []string `json:"missing_commands,omitempty"`
-	Obligations      []string `json:"obligations,omitempty"`
-	Remediation      []string `json:"remediation,omitempty"`
-	Checks           []Check  `json:"checks,omitempty"`
+	OK              bool     `json:"ok"`
+	Stage           string   `json:"stage"`
+	SessionID       string   `json:"session_id,omitempty"`
+	Task            string   `json:"task,omitempty"`
+	RepoChanged     bool     `json:"repo_changed"`
+	NotesChanged    bool     `json:"notes_changed"`
+	MissingCommands []string `json:"missing_commands,omitempty"`
+	Obligations     []string `json:"obligations,omitempty"`
+	Remediation     []string `json:"remediation,omitempty"`
+	Checks          []Check  `json:"checks,omitempty"`
 }
 
 type FinishResult struct {
@@ -416,23 +411,20 @@ func (m *Manager) RunCommand(ctx context.Context, req RunRequest, stdout, stderr
 func (m *Manager) preflightChecks(ctx context.Context, projectDir, configPath string, policy *projectcontext.Policy) ([]Check, error) {
 	var checks []Check
 	if policy.Preflight.RequireBrainDoctor {
-		cfg, paths, err := config.LoadOrCreate(configPath)
+		projectRoot, err := filepath.Abs(defaultProjectDir(projectDir))
 		if err != nil {
 			checks = append(checks, Check{Name: "brain_doctor", OK: false, Details: err.Error()})
 			return checks, nil
 		}
-		vaultSvc := vault.New(cfg)
-		if err := vaultSvc.Validate(); err != nil {
-			checks = append(checks, Check{Name: "brain_doctor", OK: false, Details: err.Error()})
-		} else if _, err := embeddings.New(cfg); err != nil {
-			checks = append(checks, Check{Name: "brain_doctor", OK: false, Details: err.Error()})
-		} else if store, err := index.New(paths.DBFile); err != nil {
-			checks = append(checks, Check{Name: "brain_doctor", OK: false, Details: err.Error()})
-		} else {
-			_ = store.Close()
-			checks = append(checks, Check{Name: "brain_doctor", OK: true, Details: "config, vault, sqlite, index dir, and embeddings are available"})
+		for _, rel := range []string{".brain", ".brain/state"} {
+			if _, err := os.Stat(filepath.Join(projectRoot, rel)); err != nil {
+				checks = append(checks, Check{Name: "brain_doctor", OK: false, Details: fmt.Sprintf("missing %s", rel)})
+				goto docs
+			}
 		}
+		checks = append(checks, Check{Name: "brain_doctor", OK: true, Details: "project-local brain workspace present"})
 	}
+docs:
 	for _, doc := range policy.Preflight.RequiredDocs {
 		if _, err := os.Stat(filepath.Join(projectDir, filepath.FromSlash(doc))); err != nil {
 			checks = append(checks, Check{Name: "required_doc", OK: false, Details: doc})
@@ -457,23 +449,13 @@ func (m *Manager) evaluateFinish(ctx context.Context, policy *projectcontext.Pol
 	if err != nil {
 		return nil, err
 	}
-	qualifyingNotes, noteIndexes := filterHistoryEntries(entries, policy.Closeout.AcceptableHistoryOperations, policy.Project.Memory.AcceptedNoteGlobs)
+	qualifyingNotes, _ := filterHistoryEntries(entries, policy.Closeout.AcceptableHistoryOperations, policy.Project.Memory.AcceptedNoteGlobs)
 	result.NotesChanged = len(qualifyingNotes) != 0
-	if result.NotesChanged && policy.Closeout.RequireReindexAfterNoteUpdates {
-		result.ReindexPerformed = reindexAfter(entries, noteIndexes[len(noteIndexes)-1])
-	} else {
-		result.ReindexPerformed = !result.NotesChanged
-	}
 
 	if result.RepoChanged && policy.Closeout.RequireMemoryUpdateOnRepoChange && !result.NotesChanged {
 		result.OK = false
 		result.Obligations = append(result.Obligations, "durable note update required for repo changes")
-		result.Remediation = append(result.Remediation, fmt.Sprintf("run `brain capture \"%s: <title>\" --body \"...\"` or update an existing project note", policy.Project.Name))
-	}
-	if result.NotesChanged && policy.Closeout.RequireReindexAfterNoteUpdates && !result.ReindexPerformed {
-		result.OK = false
-		result.Obligations = append(result.Obligations, "reindex required after note updates")
-		result.Remediation = append(result.Remediation, "run `brain reindex`")
+		result.Remediation = append(result.Remediation, fmt.Sprintf("run `brain edit AGENTS.md ...` or update docs/.brain notes for %s", policy.Project.Name))
 	}
 	if result.RepoChanged {
 		for _, profile := range policy.Closeout.VerificationProfiles {
@@ -661,15 +643,6 @@ func filterHistoryEntries(entries []history.Entry, acceptableOps, globs []string
 		}
 	}
 	return out, indexes
-}
-
-func reindexAfter(entries []history.Entry, after int) bool {
-	for i := after + 1; i < len(entries); i++ {
-		if entries[i].Operation == "reindex" {
-			return true
-		}
-	}
-	return false
 }
 
 func commandProfileSatisfied(profile projectcontext.VerificationProfile, runs []CommandRun) bool {

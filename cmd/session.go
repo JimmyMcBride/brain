@@ -12,8 +12,6 @@ import (
 )
 
 func addSessionCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoader) {
-	var project string
-
 	sessionCmd := &cobra.Command{
 		Use:   "session",
 		Short: "Manage enforced project work sessions",
@@ -30,7 +28,7 @@ func addSessionCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLo
 			}
 			defer appCtx.Close()
 			result, err := appCtx.Session.Start(cmd.Context(), session.StartRequest{
-				ProjectDir: project,
+				ProjectDir: flags.projectPath,
 				Task:       startTask,
 				ConfigPath: flags.configPath,
 			})
@@ -74,7 +72,7 @@ func addSessionCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLo
 			}
 			defer appCtx.Close()
 			result, err := appCtx.Session.Validate(cmd.Context(), session.ValidateRequest{
-				ProjectDir: project,
+				ProjectDir: flags.projectPath,
 				Stage:      validateStage,
 			})
 			if err != nil {
@@ -129,7 +127,7 @@ func addSessionCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLo
 			}
 			defer appCtx.Close()
 			result, err := appCtx.Session.Finish(cmd.Context(), session.FinishRequest{
-				ProjectDir: project,
+				ProjectDir: flags.projectPath,
 				Summary:    finishSummary,
 				Force:      finishForce,
 				Reason:     finishReason,
@@ -182,7 +180,7 @@ func addSessionCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLo
 			}
 			defer appCtx.Close()
 			result, err := appCtx.Session.Abort(cmd.Context(), session.AbortRequest{
-				ProjectDir: project,
+				ProjectDir: flags.projectPath,
 				Reason:     abortReason,
 			})
 			if err != nil {
@@ -213,7 +211,7 @@ func addSessionCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLo
 			defer appCtx.Close()
 			capture := appCtx.Output.JSONEnabled()
 			result, runErr := appCtx.Session.RunCommand(cmd.Context(), session.RunRequest{
-				ProjectDir:    project,
+				ProjectDir:    flags.projectPath,
 				Argv:          args,
 				CaptureOutput: capture,
 			}, cmd.OutOrStdout(), cmd.ErrOrStderr())
@@ -242,10 +240,6 @@ Usage:
   brain session run -- <command> [args...]
 `)+"\n")
 	})
-
-	for _, sub := range []*cobra.Command{startCmd, validateCmd, finishCmd, abortCmd, runCmd} {
-		sub.Flags().StringVar(&project, "project", ".", "project root for the session")
-	}
 
 	sessionCmd.AddCommand(startCmd, validateCmd, runCmd, finishCmd, abortCmd)
 	root.AddCommand(sessionCmd)

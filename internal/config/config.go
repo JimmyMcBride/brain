@@ -17,21 +17,23 @@ const (
 )
 
 type Config struct {
-	VaultPath         string `yaml:"vault_path" json:"vault_path"`
-	DataPath          string `yaml:"data_path" json:"data_path"`
 	EmbeddingProvider string `yaml:"embedding_provider" json:"embedding_provider"`
 	EmbeddingModel    string `yaml:"embedding_model" json:"embedding_model"`
 	OutputMode        string `yaml:"output_mode" json:"output_mode"`
 }
 
 type Paths struct {
-	ConfigFile string `json:"config_file"`
-	ConfigDir  string `json:"config_dir"`
-	DataDir    string `json:"data_dir"`
-	BackupDir  string `json:"backup_dir"`
-	LogFile    string `json:"log_file"`
-	DBFile     string `json:"db_file"`
-	IndexDir   string `json:"index_dir"`
+	ConfigFile      string `json:"config_file"`
+	ConfigDir       string `json:"config_dir"`
+	AppDataDir      string `json:"app_data_dir"`
+	ProjectDir      string `json:"project_dir,omitempty"`
+	BrainDir        string `json:"brain_dir,omitempty"`
+	StateDir        string `json:"state_dir,omitempty"`
+	BackupDir       string `json:"backup_dir,omitempty"`
+	UpdateBackupDir string `json:"update_backup_dir"`
+	LogFile         string `json:"log_file,omitempty"`
+	DBFile          string `json:"db_file,omitempty"`
+	IndexDir        string `json:"index_dir,omitempty"`
 }
 
 func LoadOrCreate(configPath string) (*Config, Paths, error) {
@@ -39,9 +41,14 @@ func LoadOrCreate(configPath string) (*Config, Paths, error) {
 	if err != nil {
 		return nil, Paths{}, err
 	}
-
 	if err := os.MkdirAll(paths.ConfigDir, 0o755); err != nil {
 		return nil, Paths{}, fmt.Errorf("create config dir: %w", err)
+	}
+	if err := os.MkdirAll(paths.AppDataDir, 0o755); err != nil {
+		return nil, Paths{}, fmt.Errorf("create app data dir: %w", err)
+	}
+	if err := os.MkdirAll(paths.UpdateBackupDir, 0o755); err != nil {
+		return nil, Paths{}, fmt.Errorf("create update backup dir: %w", err)
 	}
 
 	cfg := Default()
@@ -65,15 +72,9 @@ func LoadOrCreate(configPath string) (*Config, Paths, error) {
 
 	applyEnvOverrides(cfg)
 	cfg.normalize()
-
-	paths = BuildPaths(cfg, paths.ConfigFile)
-	if err := ensureDataPaths(paths); err != nil {
-		return nil, Paths{}, err
-	}
 	if err := Save(cfg, paths.ConfigFile); err != nil {
 		return nil, Paths{}, err
 	}
-
 	return cfg, paths, nil
 }
 
@@ -96,36 +97,42 @@ func Save(cfg *Config, configFile string) error {
 }
 
 func Default() *Config {
-	home, _ := os.UserHomeDir()
-	vault := filepath.Join(home, "Documents", "brain")
-	data := filepath.Join(userDataDir(home), "brain")
 	return &Config{
-		VaultPath:         vault,
-		DataPath:          data,
 		EmbeddingProvider: defaultEmbedder,
 		EmbeddingModel:    defaultModel,
 		OutputMode:        defaultOutputMode,
 	}
 }
 
-func userDataDir(home string) string {
-	if v := os.Getenv("XDG_DATA_HOME"); v != "" {
-		return expandHome(v)
+func ProjectPaths(global Paths, projectDir string) Paths {
+	projectDir = filepath.Clean(expandHome(projectDir))
+	brainDir := filepath.Join(projectDir, ".brain")
+	stateDir := filepath.Join(brainDir, "state")
+	return Paths{
+		ConfigFile:      global.ConfigFile,
+		ConfigDir:       global.ConfigDir,
+		AppDataDir:      global.AppDataDir,
+		ProjectDir:      projectDir,
+		BrainDir:        brainDir,
+		StateDir:        stateDir,
+		BackupDir:       filepath.Join(stateDir, "backups"),
+		UpdateBackupDir: global.UpdateBackupDir,
+		LogFile:         filepath.Join(stateDir, "history.jsonl"),
+		DBFile:          filepath.Join(stateDir, "brain.sqlite3"),
+		IndexDir:        filepath.Join(stateDir, "index"),
 	}
-	return filepath.Join(home, ".local", "share")
 }
 
-func BuildPaths(cfg *Config, configFile string) Paths {
-	dataDir := filepath.Clean(cfg.DataPath)
-	return Paths{
-		ConfigFile: configFile,
-		ConfigDir:  filepath.Dir(configFile),
-		DataDir:    dataDir,
-		BackupDir:  filepath.Join(dataDir, "backups"),
-		LogFile:    filepath.Join(dataDir, "history.jsonl"),
-		DBFile:     filepath.Join(dataDir, "brain.sqlite3"),
-		IndexDir:   filepath.Join(dataDir, "index"),
+func EnsureProjectPaths(paths Paths) error {
+	for _, dir := range []string{paths.BrainDir, paths.StateDir, paths.BackupDir, paths.IndexDir} {
+		if strings.TrimSpace(dir) == "" {
+			continue
+		}
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return fmt.Errorf("create %s: %w", dir, err)
+		}
 	}
+	return nil
 }
 
 func resolvePaths(configPath string) (Paths, error) {
@@ -137,28 +144,24 @@ func resolvePaths(configPath string) (Paths, error) {
 		configPath = filepath.Join(dir, "brain", "config.yaml")
 	}
 	configPath = expandHome(configPath)
+	home, _ := os.UserHomeDir()
+	appDataDir := filepath.Join(userDataDir(home), "brain")
 	return Paths{
-		ConfigFile: configPath,
-		ConfigDir:  filepath.Dir(configPath),
+		ConfigFile:      configPath,
+		ConfigDir:       filepath.Dir(configPath),
+		AppDataDir:      appDataDir,
+		UpdateBackupDir: filepath.Join(appDataDir, "updates", "backups"),
 	}, nil
 }
 
-func ensureDataPaths(paths Paths) error {
-	for _, dir := range []string{paths.DataDir, paths.BackupDir, paths.IndexDir} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return fmt.Errorf("create %s: %w", dir, err)
-		}
+func userDataDir(home string) string {
+	if v := os.Getenv("XDG_DATA_HOME"); v != "" {
+		return expandHome(v)
 	}
-	return nil
+	return filepath.Join(home, ".local", "share")
 }
 
 func applyEnvOverrides(cfg *Config) {
-	if v := os.Getenv("BRAIN_VAULT_PATH"); v != "" {
-		cfg.VaultPath = v
-	}
-	if v := os.Getenv("BRAIN_DATA_PATH"); v != "" {
-		cfg.DataPath = v
-	}
 	if v := os.Getenv("BRAIN_EMBEDDING_PROVIDER"); v != "" {
 		cfg.EmbeddingProvider = v
 	}
@@ -174,12 +177,6 @@ func (c *Config) normalize() {
 	if c == nil {
 		return
 	}
-	if c.VaultPath == "" {
-		c.VaultPath = Default().VaultPath
-	}
-	if c.DataPath == "" {
-		c.DataPath = Default().DataPath
-	}
 	if c.EmbeddingProvider == "" {
 		c.EmbeddingProvider = defaultEmbedder
 	}
@@ -189,8 +186,6 @@ func (c *Config) normalize() {
 	if c.OutputMode == "" {
 		c.OutputMode = defaultOutputMode
 	}
-	c.VaultPath = filepath.Clean(expandHome(c.VaultPath))
-	c.DataPath = filepath.Clean(expandHome(c.DataPath))
 }
 
 func expandHome(p string) string {

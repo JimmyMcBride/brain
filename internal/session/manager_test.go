@@ -7,10 +7,10 @@ import (
 )
 
 func TestPathMatchesAny(t *testing.T) {
-	if !pathMatchesAny("Resources/Captures/2026/04/project-change.md", []string{"Resources/Captures/**/project*.md"}) {
+	if !pathMatchesAny(".brain/resources/changes/project-change.md", []string{".brain/resources/**/project*.md"}) {
 		t.Fatal("expected glob to match capture path")
 	}
-	if pathMatchesAny("Resources/Elsewhere/note.md", []string{"Projects/Project/**"}) {
+	if pathMatchesAny(".brain/resources/elsewhere/note.md", []string{"docs/project/**"}) {
 		t.Fatal("did not expect glob to match unrelated path")
 	}
 }

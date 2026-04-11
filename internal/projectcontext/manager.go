@@ -149,6 +149,33 @@ func bundleSpecs(snapshot Snapshot, agents []string, policyBody string) []fileSp
 			LocalNote: true,
 		},
 		{
+			Path:      filepath.Join(snapshot.ProjectDir, "docs", "project-overview.md"),
+			Kind:      "doc",
+			Title:     "Project Overview",
+			BlockID:   "project-doc-overview",
+			Body:      renderOverview(snapshot),
+			Style:     "markdown",
+			LocalNote: true,
+		},
+		{
+			Path:      filepath.Join(snapshot.ProjectDir, "docs", "project-architecture.md"),
+			Kind:      "doc",
+			Title:     "Project Architecture",
+			BlockID:   "project-doc-architecture",
+			Body:      renderArchitecture(snapshot),
+			Style:     "markdown",
+			LocalNote: true,
+		},
+		{
+			Path:      filepath.Join(snapshot.ProjectDir, "docs", "project-workflows.md"),
+			Kind:      "doc",
+			Title:     "Project Workflows",
+			BlockID:   "project-doc-workflows",
+			Body:      renderWorkflows(snapshot),
+			Style:     "markdown",
+			LocalNote: true,
+		},
+		{
 			Path:      filepath.Join(snapshot.ProjectDir, ".brain", "context", "overview.md"),
 			Kind:      "context",
 			Title:     "Overview",
@@ -559,11 +586,20 @@ func existingFiles(projectDir string, names ...string) []string {
 
 func discoverDocs(projectDir string) []string {
 	var docs []string
-	for _, file := range []string{"README.md", "docs/architecture.md", "docs/usage.md", "docs/skills.md", "docs/why.md"} {
-		if _, err := os.Stat(filepath.Join(projectDir, filepath.FromSlash(file))); err == nil {
-			docs = append(docs, file)
-		}
+	if _, err := os.Stat(filepath.Join(projectDir, "README.md")); err == nil {
+		docs = append(docs, "README.md")
 	}
+	entries, err := os.ReadDir(filepath.Join(projectDir, "docs"))
+	if err != nil {
+		return docs
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+			continue
+		}
+		docs = append(docs, filepath.ToSlash(filepath.Join("docs", entry.Name())))
+	}
+	sort.Strings(docs)
 	return docs
 }
 
@@ -711,9 +747,9 @@ func renderAgents(snapshot Snapshot) string {
 	b.WriteString("2. If a session is already active, run `brain session validate` before substantial work.\n")
 	b.WriteString("3. Read this file and the linked context files needed for the task.\n")
 	fmt.Fprintf(&b, "4. Retrieve project memory with `brain find %s` or `brain search \"%s <task>\"`.\n", slug, slug)
-	b.WriteString("5. Use `brain capture`, `brain add`, or `brain edit` for durable context updates.\n")
+	b.WriteString("5. Use `brain edit` for durable context updates to AGENTS.md, docs, or .brain notes.\n")
 	b.WriteString("6. Use `brain session run -- <command>` for required verification commands.\n")
-	b.WriteString("7. Finish with `brain session finish` so policy checks can enforce memory updates, reindexing, and required command runs.\n")
+	b.WriteString("7. Finish with `brain session finish` so policy checks can enforce memory updates and required command runs.\n")
 	return b.String()
 }
 
@@ -795,13 +831,12 @@ func renderWorkflows(snapshot Snapshot) string {
 	b.WriteString("3. Read `AGENTS.md`, `.brain/policy.yaml`, and the linked context files needed for the task.\n")
 	fmt.Fprintf(&b, "4. If project memory matters, run `brain find %s` or `brain search \"%s <task>\"`.\n\n", slug, slug)
 	b.WriteString("## During Work\n\n")
-	b.WriteString("- Capture durable discoveries, decisions, and risks with `brain capture`.\n")
+	b.WriteString("- Keep durable discoveries, decisions, and risks in AGENTS.md, /docs, or .brain notes.\n")
 	b.WriteString("- Update existing durable notes instead of duplicating context.\n")
 	b.WriteString("- Run required verification commands through `brain session run -- <command>`.\n")
 	b.WriteString("- Re-read context before large changes if the task shifts.\n\n")
 	b.WriteString("## Close-Out\n\n")
 	b.WriteString("- Refresh or update durable notes for meaningful behavior, config, or architecture changes.\n")
-	b.WriteString("- Run `brain reindex` after note changes when search quality matters.\n")
 	b.WriteString("- Finish with `brain session finish`.\n")
 	b.WriteString("- If you must bypass enforcement, use `brain session finish --force --reason \"...\"` so the override is recorded.\n")
 	return b.String()
@@ -870,7 +905,7 @@ func renderWrapper(agent string) string {
 	b.WriteString("- Treat `../AGENTS.md` as the canonical project contract.\n")
 	b.WriteString("- If no validated session is active, run `brain session start --task \"<task>\"`.\n")
 	b.WriteString("- If a session is already active, run `brain session validate` before substantial work.\n")
-	b.WriteString("- Use the `brain` skill and `brain` CLI when project memory or vault context matters.\n")
+	b.WriteString("- Use the `brain` skill and `brain` CLI when project memory or project-local context matters.\n")
 	b.WriteString("- Use `brain session run -- <command>` for required verification commands.\n")
 	b.WriteString("- Finish with `brain session finish` and mention relevant note updates in the final response.\n")
 	return b.String()

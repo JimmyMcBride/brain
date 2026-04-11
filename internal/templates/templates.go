@@ -69,6 +69,62 @@ Captured: {{ .Now }}
 
 ## Wins
 `,
+	"brainstorm.md": `# Brainstorm: {{ .Title }}
+
+Started: {{ .Now }}
+
+## Focus Question
+
+What are we exploring?
+
+## Ideas
+
+## Related
+
+## Raw Notes
+`,
+	"plan.md": `# Plan: {{ .Title }}
+
+Created: {{ .Now }}
+
+## Goals
+
+## Milestones
+
+## Tasks
+
+## Notes
+`,
+	"project_meta.md": `# {{ .Title }}
+
+## Outcome
+
+## Current Status
+
+## Notes
+`,
+	"container.md": `# {{ .Title }}
+
+Created: {{ .Now }}
+
+## Description
+
+## Work Items
+
+## Notes
+`,
+	"work_item.md": `# {{ .Title }}
+
+Created: {{ .Now }}
+
+## Description
+
+## Acceptance Criteria
+
+## Resources
+
+## Notes
+`,
 }
 
 type Manager struct {
