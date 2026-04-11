@@ -148,6 +148,30 @@ func (a *App) SyncIndex(ctx context.Context) error {
 	if a == nil || a.Index == nil || a.Workspace == nil {
 		return nil
 	}
-	_, err := a.Index.Reindex(ctx, a.Workspace, a.Embedder)
+	_, err := a.EnsureFreshIndex(ctx)
 	return err
+}
+
+func (a *App) IndexStatus(ctx context.Context) (*index.FreshnessStatus, error) {
+	if a == nil || a.Index == nil || a.Workspace == nil {
+		return nil, nil
+	}
+	return a.Index.Freshness(ctx, a.Workspace, a.Embedder)
+}
+
+func (a *App) EnsureFreshIndex(ctx context.Context) (*index.FreshnessStatus, error) {
+	if a == nil || a.Index == nil || a.Workspace == nil {
+		return nil, nil
+	}
+	status, err := a.IndexStatus(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if status != nil && status.State == "fresh" {
+		return status, nil
+	}
+	if _, err := a.Index.Reindex(ctx, a.Workspace, a.Embedder); err != nil {
+		return nil, err
+	}
+	return a.IndexStatus(ctx)
 }

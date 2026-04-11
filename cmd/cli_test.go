@@ -139,6 +139,33 @@ func TestCLIProjectLifecycle(t *testing.T) {
 	}
 }
 
+func TestCLISearchStatusAndExplain(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+
+	missing := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "search", "status"))
+	if !strings.Contains(missing, "state: missing") {
+		t.Fatalf("expected missing index status before search:\n%s", missing)
+	}
+
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "edit", "docs/project-overview.md", "-b", "# Project Overview\n\nRetrieval status should become observable."))
+	searchOutput := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "search", "--explain", "retrieval observable"))
+	if !strings.Contains(searchOutput, "[") || !strings.Contains(searchOutput, "lex=") || !strings.Contains(searchOutput, "sem=") {
+		t.Fatalf("expected explain output:\n%s", searchOutput)
+	}
+
+	fresh := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "search", "status"))
+	if !strings.Contains(fresh, "state: fresh") {
+		t.Fatalf("expected fresh index status after search:\n%s", fresh)
+	}
+
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "edit", "docs/project-overview.md", "-b", "# Project Overview\n\nRetrieval status should become stale after a managed edit."))
+	stale := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "search", "status"))
+	if !strings.Contains(stale, "state: stale") || !strings.Contains(stale, "workspace signature changed") {
+		t.Fatalf("expected stale index status after managed markdown change:\n%s", stale)
+	}
+}
+
 func TestCLIProjectPlanningWorkflow(t *testing.T) {
 	env := newCLIEnv(t)
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
@@ -228,6 +255,22 @@ func TestCLIDoctorDetectsBrokenNotes(t *testing.T) {
 	doctor := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "doctor"))
 	if !strings.Contains(doctor, "note_integrity: fail") {
 		t.Fatalf("expected doctor to report note integrity failure:\n%s", doctor)
+	}
+}
+
+func TestCLIDoctorReportsIndexFreshness(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+
+	before := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "doctor"))
+	if !strings.Contains(before, "index_freshness: fail (missing") {
+		t.Fatalf("expected missing freshness in doctor output:\n%s", before)
+	}
+
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "search", "project overview"))
+	after := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "doctor"))
+	if !strings.Contains(after, "index_freshness: ok (fresh") {
+		t.Fatalf("expected fresh index status in doctor output:\n%s", after)
 	}
 }
 

@@ -10,10 +10,13 @@ import (
 )
 
 type Result struct {
-	NotePath string  `json:"note_path"`
-	Heading  string  `json:"heading"`
-	Snippet  string  `json:"snippet"`
-	Score    float64 `json:"score"`
+	NotePath      string  `json:"note_path"`
+	Heading       string  `json:"heading"`
+	Snippet       string  `json:"snippet"`
+	Score         float64 `json:"score"`
+	LexicalScore  float64 `json:"lexical_score,omitempty"`
+	SemanticScore float64 `json:"semantic_score,omitempty"`
+	Source        string  `json:"source,omitempty"`
 }
 
 type Engine struct {
@@ -26,6 +29,14 @@ func New(store *index.Store, embedder embeddings.Provider) *Engine {
 }
 
 func (e *Engine) Search(ctx context.Context, query string, limit int) ([]Result, error) {
+	return e.search(ctx, query, limit, false)
+}
+
+func (e *Engine) SearchWithExplain(ctx context.Context, query string, limit int) ([]Result, error) {
+	return e.search(ctx, query, limit, true)
+}
+
+func (e *Engine) search(ctx context.Context, query string, limit int, explain bool) ([]Result, error) {
 	fts, err := e.store.SearchFTS(ctx, query, max(limit*3, 15))
 	if err != nil {
 		return nil, err
@@ -34,11 +45,15 @@ func (e *Engine) Search(ctx context.Context, query string, limit int) ([]Result,
 	combined := map[int64]*Result{}
 	ftsScores := normalizeFTS(fts)
 	for i, rec := range fts {
+		lexicalScore := ftsScores[i] * 0.45
 		combined[rec.ChunkID] = &Result{
 			NotePath: rec.NotePath,
 			Heading:  rec.Heading,
 			Snippet:  rec.Snippet,
-			Score:    ftsScores[i] * 0.45,
+			Score:    lexicalScore,
+		}
+		if explain {
+			combined[rec.ChunkID].LexicalScore = lexicalScore
 		}
 	}
 
@@ -56,10 +71,14 @@ func (e *Engine) Search(ctx context.Context, query string, limit int) ([]Result,
 					if norm[i] <= 0 {
 						continue
 					}
+					semanticScore := norm[i] * 0.55
 					if existing, ok := combined[rec.ChunkID]; ok {
-						existing.Score += norm[i] * 0.55
+						existing.Score += semanticScore
 						if existing.Snippet == "" {
 							existing.Snippet = rec.Snippet
+						}
+						if explain {
+							existing.SemanticScore = semanticScore
 						}
 						continue
 					}
@@ -67,7 +86,10 @@ func (e *Engine) Search(ctx context.Context, query string, limit int) ([]Result,
 						NotePath: rec.NotePath,
 						Heading:  rec.Heading,
 						Snippet:  rec.Snippet,
-						Score:    norm[i] * 0.55,
+						Score:    semanticScore,
+					}
+					if explain {
+						combined[rec.ChunkID].SemanticScore = semanticScore
 					}
 				}
 			}
@@ -76,6 +98,16 @@ func (e *Engine) Search(ctx context.Context, query string, limit int) ([]Result,
 
 	results := make([]Result, 0, len(combined))
 	for _, result := range combined {
+		if explain {
+			switch {
+			case result.LexicalScore > 0 && result.SemanticScore > 0:
+				result.Source = "hybrid"
+			case result.LexicalScore > 0:
+				result.Source = "lexical"
+			case result.SemanticScore > 0:
+				result.Source = "semantic"
+			}
+		}
 		results = append(results, *result)
 	}
 	sort.Slice(results, func(i, j int) bool {

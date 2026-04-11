@@ -36,7 +36,8 @@ func addDoctorCommand(root *cobra.Command, flags *rootFlagsState) {
 				check("brain", exists(paths.BrainDir)),
 				check("sqlite", exists(paths.DBFile)),
 			}
-			if _, err := embeddings.New(cfg); err != nil {
+			var provider embeddings.Provider
+			if provider, err = embeddings.New(cfg); err != nil {
 				checks = append(checks, map[string]any{"name": "embedding", "ok": false, "details": err.Error()})
 			} else {
 				checks = append(checks, map[string]any{"name": "embedding", "ok": true, "details": cfg.EmbeddingProvider + "/" + cfg.EmbeddingModel})
@@ -56,6 +57,14 @@ func addDoctorCommand(root *cobra.Command, flags *rootFlagsState) {
 				store, err := index.New(paths.DBFile)
 				if err == nil {
 					defer store.Close()
+					if freshness, err := store.Freshness(cmd.Context(), workspaceSvc, provider); err == nil {
+						ok := freshness.State == "fresh"
+						details := freshness.State
+						if freshness.Reason != "" {
+							details += " (" + freshness.Reason + ")"
+						}
+						checks = append(checks, map[string]any{"name": "index_freshness", "ok": ok, "details": details})
+					}
 					stats, err := store.Stats(cmd.Context())
 					if err == nil {
 						checks = append(checks,

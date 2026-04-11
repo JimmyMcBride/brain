@@ -37,8 +37,10 @@ If the current repository has Brain context, treat it as canonical:
 When starting work in a repo that uses Brain:
 
 1. Run `brain doctor`.
-2. Run `brain find <project>` or `brain search "<project> <task>"` when project memory matters.
-3. Read the repo contract and relevant docs before substantial work.
+2. Read `index_freshness` in `brain doctor` when retrieval matters.
+3. Run `brain find <project>` or `brain search "<project> <task>"` when project memory matters.
+4. Use `brain search status` before retrieval debugging so you know whether the local index is `fresh`, `stale`, or `missing`.
+5. Read the repo contract and relevant docs before substantial work.
 
 ## Command Guide
 
@@ -56,6 +58,10 @@ Use these commands by default:
   - Search path, title, type, or note content.
 - `brain search "query"`
   - Run hybrid retrieval over the local project index.
+- `brain search status`
+  - Inspect index freshness, indexed counts, and the local sqlite path without mutating the index.
+- `brain search --explain "query"`
+  - Show lexical and semantic score contributions plus the retrieval source classification for each result.
 - `brain brainstorm ...`
   - Manage project-local brainstorming notes.
 - `brain plan ...`
@@ -87,8 +93,10 @@ Use these commands by default:
 
 1. `brain find <keyword>` for quick narrowing.
 2. `brain search "<task or concept>"` for ranked results.
-3. `brain read <path>` for the winning notes.
-4. Re-run search after meaningful note updates when you need the latest local state reflected.
+3. `brain search status` when results look stale, missing, or surprising.
+4. `brain search --explain "<task or concept>"` when you need to inspect ranking behavior.
+5. `brain read <path>` for the winning notes.
+6. Re-run search after meaningful note updates when you need the latest local state reflected. Brain will rebuild the local index automatically only when it is stale or missing.
 
 ## When Not To Use This Skill
 

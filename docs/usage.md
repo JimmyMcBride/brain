@@ -48,10 +48,12 @@ brain edit --project . AGENTS.md --editor nvim
 ```bash
 brain find --project . auth
 brain search --project . "Supabase auth"
+brain search --project . status
+brain search --project . --explain "Supabase auth"
 ```
 
 `find` is path/title/type/content matching.  
-`search` uses the local SQLite index and embeddings over project-managed markdown.
+`search` uses the local SQLite index and embeddings over project-managed markdown. The index lives in `.brain/state/brain.sqlite3`, tracks its own freshness, rebuilds automatically when it is missing or stale, and can explain how lexical and semantic scores contributed to a result with `--explain`.
 
 ## Brainstorming
 

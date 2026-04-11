@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-11T06:57:32Z"
+updated: "2026-04-11T14:26:14Z"
 ---
 # Current State
 
@@ -36,3 +36,6 @@ Add repo-specific notes here. `brain context refresh` preserves content outside 
 - 2026-04-11: Hardened note updates to normalize full-note stdin/frontmatter safely and made `brain skills` install repo-owned skills as a bundle by default.
 - 2026-04-11: Installed the updated global `brain` binary from commit `93e71a6` and pushed the note-integrity plus multi-skill install changes to `main`.
 - 2026-04-11: Added the brain emoji to the README title and published the change to `main`.
+- 2026-04-11: Rewrote the README and why-doc wording to describe Brain in the present tense without historical framing.
+- 2026-04-11: Added retrieval observability with tracked index freshness metadata, `brain search status`, `brain search --explain`, and a doctor check for stale or missing local index state.
+- 2026-04-11: Updated the Brain skill guidance to use `brain search status`, `brain search --explain`, and `doctor` index freshness when debugging retrieval.

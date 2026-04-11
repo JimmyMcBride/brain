@@ -2,14 +2,17 @@ package index
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -38,6 +41,35 @@ type Stats struct {
 	Notes      int `json:"notes"`
 	Chunks     int `json:"chunks"`
 	Embeddings int `json:"embeddings"`
+}
+
+type IndexState struct {
+	IndexedAt          string `json:"indexed_at"`
+	WorkspaceSignature string `json:"workspace_signature"`
+	IndexedFileCount   int    `json:"indexed_file_count"`
+	Notes              int    `json:"notes"`
+	Chunks             int    `json:"chunks"`
+	Embeddings         int    `json:"embeddings"`
+	EmbeddingProvider  string `json:"embedding_provider,omitempty"`
+	EmbeddingModel     string `json:"embedding_model,omitempty"`
+}
+
+type WorkspaceManifest struct {
+	Signature string `json:"signature"`
+	FileCount int    `json:"file_count"`
+}
+
+type FreshnessStatus struct {
+	State             string `json:"state"`
+	Reason            string `json:"reason"`
+	IndexedAt         string `json:"indexed_at,omitempty"`
+	CurrentFileCount  int    `json:"current_file_count"`
+	IndexedFileCount  int    `json:"indexed_file_count"`
+	Notes             int    `json:"notes"`
+	Chunks            int    `json:"chunks"`
+	Embeddings        int    `json:"embeddings"`
+	EmbeddingProvider string `json:"embedding_provider,omitempty"`
+	EmbeddingModel    string `json:"embedding_model,omitempty"`
 }
 
 var ftsTokenPattern = regexp.MustCompile(`[[:alnum:]_]+`)
@@ -99,6 +131,17 @@ func (s *Store) InitSchema() error {
 			updated_at TEXT NOT NULL,
 			FOREIGN KEY(chunk_id) REFERENCES chunks(id) ON DELETE CASCADE
 		);`,
+		`CREATE TABLE IF NOT EXISTS index_state (
+			id INTEGER PRIMARY KEY CHECK (id = 1),
+			indexed_at TEXT NOT NULL,
+			workspace_signature TEXT NOT NULL,
+			indexed_file_count INTEGER NOT NULL,
+			notes INTEGER NOT NULL,
+			chunks INTEGER NOT NULL,
+			embeddings INTEGER NOT NULL,
+			embedding_provider TEXT NOT NULL,
+			embedding_model TEXT NOT NULL
+		);`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.DB.Exec(stmt); err != nil {
@@ -109,6 +152,10 @@ func (s *Store) InitSchema() error {
 }
 
 func (s *Store) Reindex(ctx context.Context, workspaceSvc *workspace.Service, provider embeddings.Provider) (Stats, error) {
+	manifest, err := BuildWorkspaceManifest(workspaceSvc)
+	if err != nil {
+		return Stats{}, err
+	}
 	files, err := workspaceSvc.WalkMarkdownFiles()
 	if err != nil {
 		return Stats{}, err
@@ -124,6 +171,7 @@ func (s *Store) Reindex(ctx context.Context, workspaceSvc *workspace.Service, pr
 		`DELETE FROM chunk_fts;`,
 		`DELETE FROM chunks;`,
 		`DELETE FROM notes;`,
+		`DELETE FROM index_state;`,
 	} {
 		if _, err := tx.ExecContext(ctx, stmt); err != nil {
 			return Stats{}, fmt.Errorf("clear index: %w", err)
@@ -150,6 +198,11 @@ func (s *Store) Reindex(ctx context.Context, workspaceSvc *workspace.Service, pr
 		return Stats{}, err
 	}
 	defer insertEmbedding.Close()
+	writeState, err := tx.PrepareContext(ctx, `INSERT INTO index_state(id, indexed_at, workspace_signature, indexed_file_count, notes, chunks, embeddings, embedding_provider, embedding_model) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return Stats{}, err
+	}
+	defer writeState.Close()
 
 	stats := Stats{}
 	batchTexts := make([]string, 0, 64)
@@ -227,10 +280,115 @@ func (s *Store) Reindex(ctx context.Context, workspaceSvc *workspace.Service, pr
 	if err := flushEmbeddings(); err != nil {
 		return Stats{}, err
 	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	providerName := "none"
+	modelName := ""
+	if provider != nil {
+		providerName = provider.Name()
+		modelName = provider.Model()
+	}
+	if _, err := writeState.ExecContext(ctx, now, manifest.Signature, manifest.FileCount, stats.Notes, stats.Chunks, stats.Embeddings, providerName, modelName); err != nil {
+		return Stats{}, fmt.Errorf("write index state: %w", err)
+	}
 	if err := tx.Commit(); err != nil {
 		return Stats{}, fmt.Errorf("commit reindex: %w", err)
 	}
 	return stats, nil
+}
+
+func (s *Store) ReadIndexState(ctx context.Context) (*IndexState, error) {
+	var state IndexState
+	err := s.DB.QueryRowContext(ctx, `
+		SELECT indexed_at, workspace_signature, indexed_file_count, notes, chunks, embeddings, embedding_provider, embedding_model
+		FROM index_state WHERE id = 1`,
+	).Scan(
+		&state.IndexedAt,
+		&state.WorkspaceSignature,
+		&state.IndexedFileCount,
+		&state.Notes,
+		&state.Chunks,
+		&state.Embeddings,
+		&state.EmbeddingProvider,
+		&state.EmbeddingModel,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &state, nil
+}
+
+func BuildWorkspaceManifest(workspaceSvc *workspace.Service) (WorkspaceManifest, error) {
+	files, err := workspaceSvc.WalkMarkdownFiles()
+	if err != nil {
+		return WorkspaceManifest{}, err
+	}
+	sort.Strings(files)
+	hash := sha256.New()
+	for _, file := range files {
+		rel, err := workspaceSvc.Rel(file)
+		if err != nil {
+			return WorkspaceManifest{}, err
+		}
+		info, err := os.Stat(file)
+		if err != nil {
+			return WorkspaceManifest{}, fmt.Errorf("stat workspace note %s: %w", rel, err)
+		}
+		fmt.Fprintf(hash, "%s\x00%d\x00%d\n", rel, info.Size(), info.ModTime().UTC().UnixNano())
+	}
+	return WorkspaceManifest{
+		Signature: hex.EncodeToString(hash.Sum(nil)),
+		FileCount: len(files),
+	}, nil
+}
+
+func (s *Store) Freshness(ctx context.Context, workspaceSvc *workspace.Service, provider embeddings.Provider) (*FreshnessStatus, error) {
+	manifest, err := BuildWorkspaceManifest(workspaceSvc)
+	if err != nil {
+		return nil, err
+	}
+	state, err := s.ReadIndexState(ctx)
+	if err != nil {
+		return nil, err
+	}
+	providerName := "none"
+	modelName := ""
+	if provider != nil {
+		providerName = provider.Name()
+		modelName = provider.Model()
+	}
+	status := &FreshnessStatus{
+		State:             "missing",
+		Reason:            "index metadata missing",
+		CurrentFileCount:  manifest.FileCount,
+		EmbeddingProvider: providerName,
+		EmbeddingModel:    modelName,
+	}
+	if state == nil {
+		return status, nil
+	}
+	status.IndexedAt = state.IndexedAt
+	status.IndexedFileCount = state.IndexedFileCount
+	status.Notes = state.Notes
+	status.Chunks = state.Chunks
+	status.Embeddings = state.Embeddings
+	if state.EmbeddingProvider != providerName || state.EmbeddingModel != modelName {
+		status.State = "stale"
+		status.Reason = "embedding configuration changed"
+		return status, nil
+	}
+	status.EmbeddingProvider = state.EmbeddingProvider
+	status.EmbeddingModel = state.EmbeddingModel
+	if state.WorkspaceSignature != manifest.Signature {
+		status.State = "stale"
+		status.Reason = "workspace signature changed"
+		return status, nil
+	}
+	status.State = "fresh"
+	status.Reason = "workspace matches"
+	return status, nil
 }
 
 func (s *Store) SearchFTS(ctx context.Context, query string, limit int) ([]ChunkRecord, error) {
