@@ -1,16 +1,10 @@
 package cmd
 
 import (
-	"fmt"
-	"io"
-	"path/filepath"
-
-	"brain/internal/config"
-	"brain/internal/embeddings"
-	"brain/internal/index"
 	"brain/internal/output"
 	"brain/internal/projectcontext"
-	"brain/internal/workspace"
+	"fmt"
+	"io"
 
 	"github.com/spf13/cobra"
 )
@@ -23,65 +17,33 @@ func addInitCommand(root *cobra.Command, flags *rootFlagsState) {
 		Use:   "init",
 		Short: "Initialize the current project with a local Brain workspace",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, globalPaths, err := config.LoadOrCreate(flags.configPath)
+			boot, err := bootstrapProject(flags, provider, model)
 			if err != nil {
 				return err
 			}
-			if provider != "" {
-				cfg.EmbeddingProvider = provider
-			}
-			if model != "" {
-				cfg.EmbeddingModel = model
-			}
-			if err := config.Save(cfg, globalPaths.ConfigFile); err != nil {
+
+			if _, err := contextManager().Install(cmd.Context(), projectcontext.Request{ProjectDir: boot.ProjectDir}); err != nil {
 				return err
 			}
 
-			projectDir, err := filepath.Abs(flags.projectPath)
-			if err != nil {
-				return err
-			}
-			projectPaths := config.ProjectPaths(globalPaths, projectDir)
-			if err := config.EnsureProjectPaths(projectPaths); err != nil {
-				return err
-			}
-
-			projectWorkspace := workspace.New(projectDir)
-			if err := projectWorkspace.Initialize(); err != nil {
-				return err
-			}
-			if _, err := embeddings.New(cfg); err != nil {
-				return err
-			}
-			store, err := index.New(projectPaths.DBFile)
-			if err != nil {
-				return err
-			}
-			_ = store.Close()
-
-			ctxManager := projectcontext.New(userHomeDir())
-			if _, err := ctxManager.Install(cmd.Context(), projectcontext.Request{ProjectDir: projectDir}); err != nil {
-				return err
-			}
-
-			printer := output.New(modeFromFlag(flags, cfg.OutputMode), cmd.OutOrStdout())
+			printer := output.New(modeFromFlag(flags, boot.Config.OutputMode), cmd.OutOrStdout())
 			payload := map[string]any{
-				"config_file": globalPaths.ConfigFile,
-				"project_dir": projectDir,
-				"brain_dir":   projectPaths.BrainDir,
-				"db_file":     projectPaths.DBFile,
+				"config_file": boot.Global.ConfigFile,
+				"project_dir": boot.ProjectDir,
+				"brain_dir":   boot.Project.BrainDir,
+				"db_file":     boot.Project.DBFile,
 			}
 			return printer.Print(payload, func(w io.Writer) error {
-				if err := output.KeyValue(w, "Config", globalPaths.ConfigFile); err != nil {
+				if err := output.KeyValue(w, "Config", boot.Global.ConfigFile); err != nil {
 					return err
 				}
-				if err := output.KeyValue(w, "Project", projectDir); err != nil {
+				if err := output.KeyValue(w, "Project", boot.ProjectDir); err != nil {
 					return err
 				}
-				if err := output.KeyValue(w, "Brain", projectPaths.BrainDir); err != nil {
+				if err := output.KeyValue(w, "Brain", boot.Project.BrainDir); err != nil {
 					return err
 				}
-				if err := output.KeyValue(w, "SQLite", projectPaths.DBFile); err != nil {
+				if err := output.KeyValue(w, "SQLite", boot.Project.DBFile); err != nil {
 					return err
 				}
 				_, err := fmt.Fprintf(w, "Initialized project-local Brain workspace.\n")

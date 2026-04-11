@@ -87,9 +87,12 @@ brain brainstorm start --project . "Initial ideas"
 brain search --project . "architecture"
 ```
 
+For an existing repo with its own docs or unmanaged `AGENTS.md`, use `brain adopt --project .` instead of `brain init --project .`.
+
 ## Main Commands
 
 - `brain init`: bootstrap a project-local Brain workspace
+- `brain adopt`: adopt an existing repo into the Brain managed context model
 - `brain doctor`: validate local Brain setup
 - `brain read`, `brain edit`: inspect and update managed markdown
 - `brain find`, `brain search`: project-local retrieval

@@ -76,6 +76,7 @@ func newRootCommand(opts rootOptions) *cobra.Command {
 
 func addCommands(root *cobra.Command, flags *rootFlagsState, loadApp appLoader) {
 	addInitCommand(root, flags)
+	addAdoptCommand(root, flags)
 	addDoctorCommand(root, flags)
 	addVersionCommand(root, flags)
 	addUpdateCommand(root, flags)

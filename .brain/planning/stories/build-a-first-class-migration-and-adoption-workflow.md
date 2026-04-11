@@ -2,10 +2,10 @@
 container: core-product-tightening-and-simplification
 created: "2026-04-11T14:49:34Z"
 project: brain
-status: todo
+status: done
 title: Build A First-Class Migration And Adoption Workflow
 type: story
-updated: "2026-04-11T14:49:34Z"
+updated: "2026-04-11T16:43:05Z"
 ---
 # Build A First-Class Migration And Adoption Workflow
 

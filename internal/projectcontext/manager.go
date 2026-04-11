@@ -23,6 +23,7 @@ type Request struct {
 	Agents     []string
 	DryRun     bool
 	Force      bool
+	Adopt      bool
 }
 
 type Result struct {
@@ -73,6 +74,12 @@ func (m *Manager) Install(ctx context.Context, req Request) ([]Result, error) {
 	return m.apply(ctx, req)
 }
 
+func (m *Manager) Adopt(ctx context.Context, req Request) ([]Result, error) {
+	req.Force = true
+	req.Adopt = true
+	return m.apply(ctx, req)
+}
+
 func (m *Manager) Refresh(ctx context.Context, req Request) ([]Result, error) {
 	return m.apply(ctx, req)
 }
@@ -99,7 +106,7 @@ func (m *Manager) apply(ctx context.Context, req Request) ([]Result, error) {
 	specs := bundleSpecs(snapshot, m.resolveAgents(req.Agents), policyBody)
 	results := make([]Result, 0, len(specs))
 	for _, spec := range specs {
-		result, err := syncSpec(spec, req.DryRun, req.Force)
+		result, err := syncSpec(spec, req.DryRun, req.Force, req.Adopt)
 		if err != nil {
 			return nil, err
 		}
@@ -258,10 +265,10 @@ func bundleSpecs(snapshot Snapshot, agents []string, policyBody string) []fileSp
 	return specs
 }
 
-func syncSpec(spec fileSpec, dryRun, force bool) (Result, error) {
+func syncSpec(spec fileSpec, dryRun, force, adopt bool) (Result, error) {
 	switch spec.Style {
 	case "markdown":
-		return syncMarkdownDoc(spec, dryRun, force)
+		return syncMarkdownDoc(spec, dryRun, force, adopt)
 	case "textblock":
 		return syncTextBlock(spec, dryRun)
 	case "wholefile":
@@ -325,12 +332,12 @@ func syncTextBlock(spec fileSpec, dryRun bool) (Result, error) {
 	}, nil
 }
 
-func syncMarkdownDoc(spec fileSpec, dryRun, force bool) (Result, error) {
+func syncMarkdownDoc(spec fileSpec, dryRun, force, adopt bool) (Result, error) {
 	existing, err := os.ReadFile(spec.Path)
 	if err != nil && !os.IsNotExist(err) {
 		return Result{}, err
 	}
-	content, preserved, action, err := mergeDocument(string(existing), spec, force, os.IsNotExist(err))
+	content, preserved, action, err := mergeDocument(string(existing), spec, force, adopt, os.IsNotExist(err))
 	if err != nil {
 		return Result{}, fmt.Errorf("%s: %w", filepath.ToSlash(spec.Path), err)
 	}
@@ -351,7 +358,7 @@ func syncMarkdownDoc(spec fileSpec, dryRun, force bool) (Result, error) {
 	}, nil
 }
 
-func mergeDocument(existing string, spec fileSpec, force, missing bool) (string, bool, string, error) {
+func mergeDocument(existing string, spec fileSpec, force, adopt, missing bool) (string, bool, string, error) {
 	begin := managedBegin(spec.BlockID)
 	end := managedEnd(spec.BlockID)
 	managed := managedBody(spec)
@@ -386,7 +393,11 @@ func mergeDocument(existing string, spec fileSpec, force, missing bool) (string,
 	if trimmed != "" {
 		adopted = strings.TrimRight(adopted, "\n") + "\n\n## Local Notes\n\n" + trimmed + "\n"
 	}
-	return adopted, trimmed != "", "updated", nil
+	action := "updated"
+	if adopt {
+		action = "adopted"
+	}
+	return adopted, trimmed != "", action, nil
 }
 
 func mergeTextBlock(existing string, spec fileSpec, missing bool) (string, bool, string, error) {

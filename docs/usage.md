@@ -18,10 +18,20 @@ If no release has been published yet, the installer falls back to downloading th
 
 ## Bootstrap A Project
 
+For a new or mostly empty repo:
+
 ```bash
 brain init --project .
 brain doctor --project .
 brain context install --project .
+brain plan init --project . --paradigm epics
+```
+
+For an existing repo that already has docs or an unmanaged `AGENTS.md`:
+
+```bash
+brain adopt --project .
+brain doctor --project .
 brain plan init --project . --paradigm epics
 ```
 
@@ -35,6 +45,9 @@ This creates:
 - `.brain/policy.yaml`
 - `.brain/project.yaml`
 - `.brain/state/brain.sqlite3`
+
+`brain init` is the clean bootstrap path.  
+`brain adopt` is the existing-repo path: it creates the local Brain workspace, adopts Brain-owned docs into the managed-block model, and preserves previous content under `Local Notes`.
 
 ## Read And Update Notes
 
@@ -99,6 +112,12 @@ brain context refresh --project . --dry-run
 ```
 
 Use `--force` when adopting an existing unmanaged `AGENTS.md` or docs file into the managed-block model.
+
+If you want the full existing-repo bootstrap instead of just context takeover, use:
+
+```bash
+brain adopt --project .
+```
 
 ## Sessions
 

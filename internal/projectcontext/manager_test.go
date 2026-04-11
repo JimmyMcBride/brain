@@ -51,7 +51,7 @@ func TestMergeDocumentPreservesLocalNotes(t *testing.T) {
 		LocalNote: true,
 	}
 	existing := "# Project Agent Contract\n\n<!-- brain:begin agents-contract -->\nstale\n<!-- brain:end agents-contract -->\n\n## Local Notes\n\nKeep this.\n"
-	merged, preserved, action, err := mergeDocument(existing, spec, false, false)
+	merged, preserved, action, err := mergeDocument(existing, spec, false, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestMergeDocumentRequiresForceForUnmanagedFile(t *testing.T) {
 		Style:     "markdown",
 		LocalNote: true,
 	}
-	if _, _, _, err := mergeDocument("manual file", spec, false, false); err == nil {
+	if _, _, _, err := mergeDocument("manual file", spec, false, false, false); err == nil {
 		t.Fatal("expected unmanaged file error")
 	}
 }
@@ -91,15 +91,34 @@ func TestMergeDocumentForceAdoptsUnmanagedFile(t *testing.T) {
 		Style:     "markdown",
 		LocalNote: true,
 	}
-	merged, preserved, action, err := mergeDocument("manual file", spec, true, false)
+	merged, preserved, action, err := mergeDocument("manual file", spec, true, true, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !preserved || action != "updated" {
+	if !preserved || action != "adopted" {
 		t.Fatalf("unexpected force adoption result: preserved=%t action=%s", preserved, action)
 	}
 	if !strings.Contains(merged, "manual file") || !strings.Contains(merged, "fresh body") {
 		t.Fatalf("adopted document missing content:\n%s", merged)
+	}
+}
+
+func TestMergeDocumentForceRefreshUnmanagedFileWithoutAdoptAction(t *testing.T) {
+	spec := fileSpec{
+		Path:      "AGENTS.md",
+		Kind:      "contract",
+		Title:     "Project Agent Contract",
+		BlockID:   "agents-contract",
+		Body:      "fresh body",
+		Style:     "markdown",
+		LocalNote: true,
+	}
+	_, preserved, action, err := mergeDocument("manual file", spec, true, false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !preserved || action != "updated" {
+		t.Fatalf("unexpected force refresh result: preserved=%t action=%s", preserved, action)
 	}
 }
 
@@ -146,6 +165,32 @@ func TestInstallDryRunDoesNotWrite(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(project, "AGENTS.md")); !os.IsNotExist(err) {
 		t.Fatalf("expected dry-run to avoid writes, got err=%v", err)
+	}
+}
+
+func TestAdoptMarksUnmanagedFilesAsAdopted(t *testing.T) {
+	project := t.TempDir()
+	mustWriteFile(t, filepath.Join(project, "AGENTS.md"), "manual contract\n")
+
+	manager := New(t.TempDir())
+	results, err := manager.Adopt(context.Background(), Request{
+		ProjectDir: project,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var found bool
+	for _, result := range results {
+		if result.Path == "AGENTS.md" {
+			found = true
+			if result.Action != "adopted" || !result.PreservedUserContent {
+				t.Fatalf("unexpected AGENTS.md adoption result: %+v", result)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected AGENTS.md result")
 	}
 }
 

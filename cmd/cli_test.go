@@ -139,6 +139,86 @@ func TestCLIProjectLifecycle(t *testing.T) {
 	}
 }
 
+func TestCLIAdoptExistingRepoPreservesManagedFiles(t *testing.T) {
+	env := newCLIEnv(t)
+	if err := os.WriteFile(filepath.Join(env.project, "README.md"), []byte("# Existing Readme\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(env.project, "AGENTS.md"), []byte("Manual contract\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(env.project, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(env.project, "docs", "project-overview.md"), []byte("Manual overview\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	adoptOutput := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "adopt"))
+	if !strings.Contains(adoptOutput, "adopted") || !strings.Contains(adoptOutput, "AGENTS.md") {
+		t.Fatalf("unexpected adopt output:\n%s", adoptOutput)
+	}
+
+	agentsRaw, err := os.ReadFile(filepath.Join(env.project, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	agents := string(agentsRaw)
+	if !strings.Contains(agents, "<!-- brain:begin agents-contract -->") || !strings.Contains(agents, "Manual contract") {
+		t.Fatalf("unexpected adopted AGENTS.md:\n%s", agents)
+	}
+
+	overviewRaw, err := os.ReadFile(filepath.Join(env.project, "docs", "project-overview.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	overview := string(overviewRaw)
+	if !strings.Contains(overview, "Manual overview") || !strings.Contains(overview, "## Local Notes") {
+		t.Fatalf("unexpected adopted project overview:\n%s", overview)
+	}
+
+	readmeRaw, err := os.ReadFile(filepath.Join(env.project, "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(readmeRaw) != "# Existing Readme\n" {
+		t.Fatalf("expected README to remain unchanged, got:\n%s", string(readmeRaw))
+	}
+}
+
+func TestCLIAdoptDryRunDoesNotWrite(t *testing.T) {
+	env := newCLIEnv(t)
+	if err := os.WriteFile(filepath.Join(env.project, "AGENTS.md"), []byte("Manual contract\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	output := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "adopt", "--dry-run"))
+	if !strings.Contains(output, "Adoption plan:") || !strings.Contains(output, "adopted") {
+		t.Fatalf("unexpected dry-run output:\n%s", output)
+	}
+
+	agentsRaw, err := os.ReadFile(filepath.Join(env.project, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(agentsRaw) != "Manual contract\n" {
+		t.Fatalf("expected dry-run to preserve unmanaged AGENTS.md, got:\n%s", string(agentsRaw))
+	}
+}
+
+func TestCLIAdoptIsIdempotentOnManagedRepo(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+
+	output := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "adopt"))
+	if strings.Contains(output, "adopted") {
+		t.Fatalf("expected already-managed repo not to be adopted again:\n%s", output)
+	}
+	if !strings.Contains(output, "unchanged") && !strings.Contains(output, "updated") {
+		t.Fatalf("unexpected idempotent adopt output:\n%s", output)
+	}
+}
+
 func TestCLISearchStatusAndExplain(t *testing.T) {
 	env := newCLIEnv(t)
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
