@@ -1,4 +1,4 @@
-# brain
+# 🧠 brain
 
 `brain` is a local-first CLI that gives each software project its own markdown-based operating layer.
 
