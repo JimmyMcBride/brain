@@ -40,6 +40,23 @@ my-project/
 
 ## Install
 
+### One-line install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/JimmyMcBride/brain/main/scripts/install.sh | sh
+```
+
+This installs the latest tagged release to `~/.local/bin/brain`, verifies the published checksum, and works on `linux` and `darwin` for `amd64` and `arm64`.
+
+If no GitHub release exists yet, the same command falls back to downloading the current `main` source tarball from GitHub and building it locally with Go.
+
+Optional overrides:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/JimmyMcBride/brain/main/scripts/install.sh | \
+  BRAIN_VERSION=v0.1.0 BRAIN_INSTALL_DIR="$HOME/.local/bin" sh
+```
+
 ### Build from source
 
 ```bash
@@ -80,7 +97,7 @@ brain search --project . "architecture"
 - `brain plan ...`: project-local planning and work tracking
 - `brain context ...`: install or refresh project context files
 - `brain session ...`: enforce workflow and verification rules
-- `brain skills ...`: install the Brain skill bundle for agent runtimes
+- `brain skills ...`: install the repo skill bundles for agent runtimes
 - `brain history`, `brain undo`: inspect and revert tracked note changes
 - `brain version`, `brain update`: inspect or update the CLI
 

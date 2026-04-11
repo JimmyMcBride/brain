@@ -1,13 +1,23 @@
 # Skills
 
-`brain` ships a canonical skill bundle for agent runtimes.
+`brain` ships canonical skill bundles for agent runtimes.
 
 ## Bundle Layout
 
 - `skills/brain/SKILL.md`
 - `skills/brain/agents/openai.yaml`
 - `skills/brain/agents/openclaw.yaml`
+- `skills/googleworkspace-cli/SKILL.md`
+- `skills/googleworkspace-cli/agents/openai.yaml`
+- `skills/googleworkspace-cli/references/*.md`
 - `skills/wrappers/*.md`
+
+## Included Skills
+
+- `brain`
+  - generic fallback for project-local Brain workflows, memory, planning, brainstorming, context, and sessions
+- `googleworkspace-cli`
+  - generic `gws` skill for Google Workspace terminal work across Drive, Gmail, Calendar, Sheets, Docs, Chat, and related APIs
 
 ## Install Targets
 
@@ -30,6 +40,8 @@ brain skills install --scope local --agent codex --project .
 ```
 
 Use `--mode copy` when the target runtime does not support symlinked skill directories well. OpenClaw should generally use copy mode.
+
+Global Codex install targets land under `~/.codex/skills/`.
 
 ## Relationship To Project Context
 

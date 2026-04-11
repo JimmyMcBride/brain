@@ -2,6 +2,18 @@
 
 `brain` is operated per project. Use `--project` when you are acting on a repo other than the current directory.
 
+## Install
+
+For the standard end-user install path:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/JimmyMcBride/brain/main/scripts/install.sh | sh
+```
+
+That installs the latest tagged release into `~/.local/bin/brain` with checksum verification.
+
+If no release has been published yet, the installer falls back to downloading the current `main` source tarball and building it locally with Go.
+
 ## Bootstrap A Project
 
 ```bash

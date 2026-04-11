@@ -1,3 +1,6 @@
+---
+updated: "2026-04-11T06:14:48Z"
+---
 # Current State
 
 <!-- brain:begin context-current-state -->
@@ -28,3 +31,5 @@ This file is a deterministic snapshot of the repository state at the last refres
 ## Local Notes
 
 Add repo-specific notes here. `brain context refresh` preserves content outside managed blocks.
+
+- 2026-04-11: Added the repo-owned `googleworkspace-cli` skill bundle and installed it to `~/.codex/skills/googleworkspace-cli`.
