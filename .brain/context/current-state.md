@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-12T02:36:41Z"
+updated: "2026-04-12T02:40:36Z"
 ---
 # Current State
 
@@ -69,3 +69,4 @@ Add repo-specific notes here. `brain context refresh` preserves content outside 
 - 2026-04-11: Relaxed `main` branch protection just enough to allow normal PR merges again by disabling `required_linear_history` while keeping required PRs, required CI checks, and admin enforcement. Also updated the release workflow to set the GitHub Release title explicitly to `${RELEASE_TAG}` so releases are named by version instead of showing `main`.
 - 2026-04-11: Enabled GitHub `delete_branch_on_merge` for this repo, so merged feature branches will now be deleted automatically after PR merge unless GitHub cannot remove the branch.
 - 2026-04-11: Simplified CI policy again so validation now runs only on `pull_request`. Merges to `main` no longer trigger the separate CI workflow; after merge, only the release automation runs. Branch protection still requires the PR checks before merge.
+- 2026-04-11: Fixed the reusable GitHub release workflow so auto-releases no longer resolve to `main`. The workflow now resolves tag and sha explicitly in a dedicated job and publishes the GitHub Release plus assets against the semver tag passed in from the main tagger workflow.
