@@ -1,22 +1,65 @@
 # 🧠 brain
 
-`brain` is a local-first CLI that gives each software project its own markdown-based operating layer.
+## Give Your AI Coding Agent A Real Brain Inside The Repo
 
-It keeps human docs at the repo root, keeps machine-managed state under `.brain/`, builds a local SQLite search index, and provides explicit workflows for planning, brainstorming, context, history, and session enforcement.
+`brain` is a local-first memory, context, planning, and retrieval layer for AI coding agents.
 
-## What It Does
+It gives every project its own durable brain inside the repo, so the agent stops starting from scratch, stops wasting turns rediscovering context, and works more reliably as the codebase evolves.
 
-- initializes a project-local Brain workspace in any repo or folder
-- keeps durable project knowledge in plain markdown
-- indexes `AGENTS.md`, `docs/**/*.md`, and `.brain/**/*.md` with SQLite FTS plus an embedding provider
-- provides project-scoped planning and brainstorming commands
-- generates deterministic agent context, with optional wrappers only when explicitly requested
-- tracks note history and supports undo
-- enforces repo workflows through session policy
+- Durable project memory in plain markdown
+- Spec-driven workflow from brainstorming to shipped code
+- Lower token spend and less tool sprawl by keeping everything local and integrated
+
+## The Problem
+
+AI coding agents are powerful, but they are stateless by default.
+
+That usually means:
+
+- repeated prompting just to restore project context
+- stale assumptions about architecture and product decisions
+- extra tokens spent rediscovering what the repo already knows
+- planning that lives in separate tools instead of next to the code
+- weak continuity across sessions, branches, and feature work
+
+`brain` fixes that by making the project itself the memory system.
+
+## What Brain Actually Does
+
+`brain` keeps human docs at the repo root, machine-managed state under `.brain/`, and a local SQLite search index for durable project knowledge.
+
+It provides explicit workflows for:
+
+- docs and project context
+- brainstorming
+- epic -> spec -> story planning
+- local retrieval
+- note history and undo
+- session enforcement for verification and durable updates
+
+This is not another hosted dashboard, cloud vector database, or external planning layer. It lives with the project and is built specifically to work well with AI agents.
+
+## Elevator Pitch
+
+`brain` gives every software project its own local brain for AI agents: docs, context, planning, history, and search, all stored with the repo. It helps agents stop starting from scratch, stop wasting turns rediscovering context, and work more reliably in evolving codebases.
+
+## Why It Helps
+
+When an agent can read a real project contract, search durable project knowledge, follow a planning workflow, and update the right notes as the code evolves, you get a tighter and cheaper development loop.
+
+Instead of stitching together n8n, cloud vector storage, external planning tools, and fragile chat history, `brain` keeps the important layer local:
+
+- fewer moving parts
+- fewer subscriptions and hosted dependencies
+- less prompt repetition
+- lower token waste
+- better continuity between sessions
+
+It does not make software work magic. It gives the agent a stable operating memory so it makes better decisions with less thrash.
 
 ## Mental Model
 
-`brain` gives each project its own Brain: a clear markdown layer for docs, context, planning, brainstorming, and local search.
+Every project gets its own Brain:
 
 ```text
 my-project/
@@ -61,24 +104,7 @@ These installers verify published checksums, support `linux`, `darwin`, and `win
 
 Stable GitHub releases are published from `main`. Prefer PR merges as the normal path into `main`, then install from the latest release published there.
 
-If no GitHub release exists yet, the same command falls back to downloading the current `main` source archive from GitHub and building it locally with Go.
-
-Optional overrides:
-
-Unix shell:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/JimmyMcBride/brain/main/scripts/install.sh | \
-  BRAIN_VERSION=v0.1.0 BRAIN_INSTALL_DIR="$HOME/.local/bin" sh
-```
-
-Windows PowerShell:
-
-```powershell
-$env:BRAIN_VERSION = "v0.1.0"
-$env:BRAIN_INSTALL_DIR = "$env:LOCALAPPDATA\Programs\brain"
-irm https://raw.githubusercontent.com/JimmyMcBride/brain/main/scripts/install.ps1 | iex
-```
+If no GitHub release exists yet, the installer falls back to downloading the current `main` source archive from GitHub and building it locally with Go.
 
 ### Build from source
 
@@ -100,14 +126,6 @@ go build -o brain.exe .
 New-Item -ItemType Directory -Force -Path "$env:LOCALAPPDATA\Programs\brain" | Out-Null
 Copy-Item .\brain.exe "$env:LOCALAPPDATA\Programs\brain\brain.exe" -Force
 ```
-
-### Go run during development
-
-```bash
-go run . --help
-```
-
-Use `go run .` when working on the CLI itself before replacing the installed binary.
 
 ## Install The Brain Skill
 
@@ -134,7 +152,7 @@ Preview the target paths first:
 brain skills targets --scope both --agent codex --agent claude --agent copilot --agent pi --project .
 ```
 
-`brain skills` installs only the Brain skill from this repo.
+`brain skills` installs only the Brain skill from this repo. That gives the agent a ready-made way to use Brain correctly instead of treating the project brain like random files.
 
 ## Brainstorm To Planning To Execution
 
@@ -178,6 +196,41 @@ brain brainstorm start --project . "Initial ideas"
 brain search --project . "architecture"
 ```
 
+## Why This Saves Time And Money
+
+`brain` cuts waste in two places:
+
+- token waste from repeatedly feeding the same project context back into the agent
+- tool waste from spreading memory, planning, retrieval, and workflow across too many separate systems
+
+You still need good prompts and good engineering judgment. But when the agent can work against a stable local brain, you spend less money and fewer turns just rebuilding context.
+
+## How Brain Works
+
+### How Brain Works
+
+`brain` keeps markdown as the source of truth and uses local SQLite state for retrieval and operational support. Human-facing docs stay readable, while the agent gets a structured project contract, generated context, planning notes, and local search without any central service dependency.
+
+Deep dive: [`docs/architecture.md`](docs/architecture.md)
+
+### Using Brain Day To Day
+
+The core operating loop is simple: install or adopt Brain in a repo, install the Brain skill, retrieve context with local search, move ideas into epics/specs/stories, and enforce verification plus durable note updates through sessions when you want a stricter workflow.
+
+Deep dive: [`docs/usage.md`](docs/usage.md)
+
+### Brain Skill
+
+The Brain skill is the generic fallback that helps an agent immediately understand how to operate against a Brain-managed repo. It teaches the agent to read the project contract first, use Brain search and note workflows, and respect the repo’s planning and session model.
+
+Deep dive: [`docs/skills.md`](docs/skills.md)
+
+### Why This Model
+
+The design is opinionated on purpose: one brain per project, plain markdown first, local search instead of centralized memory, and explicit contracts instead of hidden magic. That keeps the system portable, understandable, and resilient as a codebase evolves.
+
+Deep dive: [`docs/why.md`](docs/why.md)
+
 ## Main Commands
 
 - `brain init`: bootstrap a project-local Brain workspace
@@ -192,62 +245,3 @@ brain search --project . "architecture"
 - `brain skills ...`: install the Brain skill for agent runtimes
 - `brain history`, `brain undo`: inspect and revert tracked note changes
 - `brain version`, `brain update`: inspect or update the CLI
-
-## Search Model
-
-`brain` indexes project-managed markdown only:
-
-- `AGENTS.md`
-- `docs/**/*.md`
-- `.brain/**/*.md`
-
-It excludes local runtime state such as:
-
-- `.brain/state/**`
-- `.brain/sessions/**`
-
-This keeps retrieval focused on durable project knowledge instead of transient internals.
-
-By default, `brain` uses the built-in `localhash` provider. That gives you strong local lexical search plus lightweight semantic hinting without any network dependency. If you want stronger semantic retrieval, switch the embedding provider to `openai`.
-
-## Config
-
-Config lives at `~/.config/brain/config.yaml`.
-
-Supported fields:
-
-- `embedding_provider`
-- `embedding_model`
-- `output_mode`
-
-Default values:
-
-- `embedding_provider: localhash`
-- `embedding_model: hash-v1`
-
-Environment overrides:
-
-- `BRAIN_EMBEDDING_PROVIDER`
-- `BRAIN_EMBEDDING_MODEL`
-- `BRAIN_OUTPUT_MODE`
-
-Project state is derived from `--project` and `.brain/state`. It is not configured globally.
-
-## Update Model
-
-`brain update` downloads the newest matching GitHub Release, verifies checksums, and installs the binary.
-
-By default, that means the latest stable release published automatically from `main`.
-
-- if the current binary is writable, it updates in place
-- otherwise it installs to:
-  - Unix: `~/.local/bin/brain`
-  - Windows: `%LocalAppData%\Programs\brain\brain.exe`
-- replaced binaries are backed up under the global Brain app data directory
-
-## Read Next
-
-- [`docs/usage.md`](docs/usage.md)
-- [`docs/architecture.md`](docs/architecture.md)
-- [`docs/skills.md`](docs/skills.md)
-- [`docs/why.md`](docs/why.md)

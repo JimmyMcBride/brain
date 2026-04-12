@@ -2,6 +2,8 @@
 
 `brain` installs one skill bundle: the Brain skill itself.
 
+The point of the Brain skill is simple: it teaches the agent how to operate against a Brain-managed repo immediately, instead of expecting the agent to infer the workflow from scattered files and conventions.
+
 ## Brain Skill Bundle
 
 - `skills/brain/SKILL.md`
