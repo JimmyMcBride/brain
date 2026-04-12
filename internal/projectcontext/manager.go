@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-
-	"brain/internal/skills"
 )
 
 const localNotesSection = "## Local Notes\n\nAdd repo-specific notes here. `brain context refresh` preserves content outside managed blocks.\n"
@@ -122,17 +120,7 @@ func (m *Manager) apply(ctx context.Context, req Request) ([]Result, error) {
 }
 
 func (m *Manager) resolveAgents(explicit []string) []string {
-	if len(explicit) != 0 {
-		return normalizeAgents(explicit)
-	}
-	var agents []string
-	for _, agent := range skills.KnownAgents() {
-		root := skills.GlobalSkillRoot(m.Home, agent)
-		if _, err := os.Stat(filepath.Join(root, "brain", "SKILL.md")); err == nil {
-			agents = append(agents, agent)
-		}
-	}
-	return agents
+	return normalizeAgents(explicit)
 }
 
 func wrapperFile(projectDir, agent string) string {
@@ -929,5 +917,6 @@ func renderGitIgnore() string {
 .brain/session.json
 .brain/sessions/
 .brain/policy.override.yaml
+.brain/state/
 `) + "\n"
 }

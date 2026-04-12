@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"brain/internal/skills"
 )
 
 func TestWrapperFile(t *testing.T) {
@@ -23,20 +21,12 @@ func TestWrapperFile(t *testing.T) {
 	}
 }
 
-func TestResolveAgentsFromInstalledSkills(t *testing.T) {
-	home := t.TempDir()
-	for _, agent := range []string{"codex", "openclaw"} {
-		path := filepath.Join(skills.GlobalSkillRoot(home, agent), "brain")
-		if err := os.MkdirAll(path, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(path, "SKILL.md"), []byte("skill"), 0o644); err != nil {
-			t.Fatal(err)
-		}
+func TestResolveAgentsRequiresExplicitRequest(t *testing.T) {
+	manager := New(t.TempDir())
+	if got := manager.resolveAgents(nil); len(got) != 0 {
+		t.Fatalf("expected no implicit wrappers, got=%v", got)
 	}
-
-	manager := New(home)
-	got := manager.resolveAgents(nil)
+	got := manager.resolveAgents([]string{"codex", "openclaw"})
 	want := []string{"codex", "openclaw"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("unexpected resolved agents: got=%v want=%v", got, want)

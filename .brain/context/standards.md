@@ -13,6 +13,7 @@ Use this file for implementation and review expectations.
 
 - `.github/workflows/ci.yml`
 - `.github/workflows/release.yml`
+- `.github/workflows/tag-main-release.yml`
 <!-- brain:end context-standards -->
 
 ## Local Notes

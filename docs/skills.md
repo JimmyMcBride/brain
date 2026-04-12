@@ -7,7 +7,6 @@
 - `skills/brain/SKILL.md`
 - `skills/brain/agents/openai.yaml`
 - `skills/brain/agents/openclaw.yaml`
-- `skills/wrappers/*.md`
 
 The Brain skill is the generic fallback for project-local Brain workflows, memory, epic/spec/story planning, brainstorming, context, and sessions.
 
@@ -61,7 +60,7 @@ Expected order:
 
 ## Wrappers
 
-Agent-specific wrappers such as `.codex/AGENTS.md` or `.claude/CLAUDE.md` are intentionally thin. They should point back to the root contract instead of duplicating policy.
+Agent-specific wrappers such as `.codex/AGENTS.md` or `.claude/CLAUDE.md` are optional and are generated only when you explicitly request them with `brain context install --agent ...` or `brain context refresh --agent ...`. They should stay thin and point back to the root contract instead of duplicating policy.
 
 ## Sessions And Verification
 

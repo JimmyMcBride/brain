@@ -32,7 +32,7 @@ The index is local to each project under `.brain/state/brain.sqlite3`.
 
 ## Product Systems
 
-- `internal/projectcontext` generates and refreshes `AGENTS.md`, `.brain/context/*`, `.brain/policy.yaml`, and agent wrappers
+- `internal/projectcontext` generates and refreshes `AGENTS.md`, `.brain/context/*`, `.brain/policy.yaml`, and optional agent wrappers when explicitly requested
 - `internal/session` enforces preflight and closeout workflow rules
 - `internal/project` owns `.brain/project.yaml` and the fixed epic-spec planning model
 - `internal/plan` owns epic/spec/story planning behavior plus legacy epic migration
