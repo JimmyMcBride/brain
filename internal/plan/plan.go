@@ -1,6 +1,7 @@
 package plan
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -442,7 +443,7 @@ func (m *Manager) ensureEpicSpecMigration(info *project.ProjectInfo) error {
 		specPath := m.specPath(specSlug)
 		spec, err := m.notes.Read(specPath)
 		if err != nil {
-			if !strings.Contains(err.Error(), "no such file") {
+			if !errors.Is(err, os.ErrNotExist) {
 				return err
 			}
 			spec, err = m.createSpecForEpic(info, epic, stringValue(epic.Metadata["source_brainstorm"]))
