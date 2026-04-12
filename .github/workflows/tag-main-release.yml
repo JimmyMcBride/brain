@@ -15,6 +15,10 @@ concurrency:
 jobs:
   tag:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.next_tag.outputs.tag }}
+      should_release: ${{ steps.next_tag.outputs.head_already_tagged != 'true' }}
+      sha: ${{ github.sha }}
 
     steps:
       - uses: actions/checkout@v4
@@ -45,3 +49,13 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag "${TAG}" "${GITHUB_SHA}"
           git push origin "refs/tags/${TAG}"
+
+  release:
+    needs: tag
+    if: needs.tag.outputs.should_release == 'true'
+    uses: ./.github/workflows/release.yml
+    permissions:
+      contents: write
+    with:
+      tag: ${{ needs.tag.outputs.tag }}
+      sha: ${{ needs.tag.outputs.sha }}

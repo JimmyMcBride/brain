@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-11T22:41:48Z"
+updated: "2026-04-12T01:59:17Z"
 ---
 # Current State
 
@@ -61,3 +61,4 @@ Add repo-specific notes here. `brain context refresh` preserves content outside 
 - 2026-04-11: Removed the final legacy planning compatibility path from `.brain/project.yaml` so Brain now accepts only `planning_model: epic_spec_v1`, and rewrote the README flow so install is followed immediately by adding the Brain skill and then by the brainstorm -> epic -> spec -> story execution workflow.
 - 2026-04-11: Added automatic stable release tagging from `main` so each push creates the next patch semver tag, triggers the existing GitHub release packaging flow, and makes installers plus `brain update` target the latest stable release from `main` by default.
 - 2026-04-11: Fixed publish-only session closeout so finish validation can treat accepted durable notes committed in the session commit range as satisfying the memory rule, and ignore volatile `.brain/state` plus session runtime files when checking meaningful git cleanliness.
+- 2026-04-11: Fixed automatic GitHub release publishing so main pushes no longer stop at tag creation. The tag workflow now calls the reusable release workflow directly after pushing the new semver tag, which avoids the GitHub `GITHUB_TOKEN` workflow-chaining limitation that was leaving tags without downloadable release assets.
