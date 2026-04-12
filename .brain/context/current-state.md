@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-12T01:59:17Z"
+updated: "2026-04-12T02:27:50Z"
 ---
 # Current State
 
@@ -62,3 +62,8 @@ Add repo-specific notes here. `brain context refresh` preserves content outside 
 - 2026-04-11: Added automatic stable release tagging from `main` so each push creates the next patch semver tag, triggers the existing GitHub release packaging flow, and makes installers plus `brain update` target the latest stable release from `main` by default.
 - 2026-04-11: Fixed publish-only session closeout so finish validation can treat accepted durable notes committed in the session commit range as satisfying the memory rule, and ignore volatile `.brain/state` plus session runtime files when checking meaningful git cleanliness.
 - 2026-04-11: Fixed automatic GitHub release publishing so main pushes no longer stop at tag creation. The tag workflow now calls the reusable release workflow directly after pushing the new semver tag, which avoids the GitHub `GITHUB_TOKEN` workflow-chaining limitation that was leaving tags without downloadable release assets.
+- 2026-04-11: Updated maintainer docs to make feature-branch plus PR merge the default release path. The documented flow is now branch -> verify -> commit -> PR -> merge to main -> automatic release -> local global-brain refresh, while direct pushes to main remain possible but are treated as the exception.
+- 2026-04-11: Fixed the Windows CI failures by making config tests OS-aware, using `errors.Is(..., os.ErrNotExist)` for epic-spec migration so Windows missing-file errors backfill specs correctly, normalizing projectcontext golden comparisons across line endings, and adding a test-only writable-target hook so updater fallback tests do not depend on Unix directory permission semantics.
+- 2026-04-11: Enabled GitHub branch protection for `main` via `gh api` so direct pushes are blocked, admins are enforced, PRs are required, and the `test (ubuntu-latest)` plus `test (windows-latest)` checks must pass before merge. Also narrowed `ci.yml` to run on `pull_request` and on pushes to `main` only, which removes duplicate branch-push CI runs.
+- 2026-04-11: Fixed the last Windows-only plan test failure on the PR branch by replacing the Unix-specific missing-file string check in epic-spec migration with `errors.Is(err, os.ErrNotExist)`, so legacy epic/story backfill now creates the canonical spec correctly on Windows too.
+- 2026-04-11: Relaxed `main` branch protection just enough to allow normal PR merges again by disabling `required_linear_history` while keeping required PRs, required CI checks, and admin enforcement. Also updated the release workflow to set the GitHub Release title explicitly to `${RELEASE_TAG}` so releases are named by version instead of showing `main`.

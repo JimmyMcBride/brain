@@ -23,7 +23,7 @@ That installs the latest tagged release with checksum verification into:
 - Unix: `~/.local/bin/brain`
 - Windows: `%LocalAppData%\Programs\brain\brain.exe`
 
-Pushes to `main` publish stable GitHub releases automatically, so install and update normally follow the latest release from `main`.
+Stable GitHub releases are published from `main`. Prefer PR merges as the normal path into `main`, then install and update from the latest release published there.
 
 If no release has been published yet, the installer falls back to downloading the current `main` source tarball and building it locally with Go.
 
