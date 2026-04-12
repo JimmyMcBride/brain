@@ -24,6 +24,17 @@ That usually means:
 
 `brain` fixes that by making the project itself the memory system.
 
+## Who This Is For
+
+`brain` is for developers who already use AI coding agents heavily and are tired of paying the context tax every session.
+
+It fits best when:
+
+- you use an AI agent regularly on a real, evolving codebase
+- you are tired of repeating the same architecture and product context
+- you want planning, docs, retrieval, and workflow to live with the code
+- you want the project to stay understandable to humans too, not just the agent
+
 ## What Brain Actually Does
 
 `brain` keeps human docs at the repo root, machine-managed state under `.brain/`, and a local SQLite search index for durable project knowledge.
@@ -196,6 +207,12 @@ brain brainstorm start --project . "Initial ideas"
 brain search --project . "architecture"
 ```
 
+## Why Brain Exists
+
+`brain` exists because most AI agent pain is not raw coding ability. It is continuity failure.
+
+Agents can write code quickly, but they lose project context, drift on decisions, forget why work was scoped a certain way, and burn money re-learning the same repo over and over. Brain exists to keep that continuity local, durable, and usable by both the agent and the human team.
+
 ## Why This Saves Time And Money
 
 `brain` cuts waste in two places:
@@ -205,7 +222,7 @@ brain search --project . "architecture"
 
 You still need good prompts and good engineering judgment. But when the agent can work against a stable local brain, you spend less money and fewer turns just rebuilding context.
 
-## How Brain Works
+## Explore Brain In More Detail
 
 ### How Brain Works
 
