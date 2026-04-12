@@ -2,6 +2,8 @@
 
 `brain` is a single Go CLI with a project-local workspace model.
 
+The architecture exists to support one product claim: every project gets its own durable local brain for AI agents. Markdown stays canonical, local SQLite powers retrieval, and the CLI exposes explicit workflows for context, planning, history, and execution discipline.
+
 The repo has three important layers:
 
 1. workspace and notes

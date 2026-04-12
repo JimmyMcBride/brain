@@ -1,5 +1,7 @@
 # Usage
 
+This is the practical operating guide for `brain` after install. Use it when you already understand the top-level pitch and want the day-to-day commands for adopting Brain in a repo, searching local context, planning work, and running the session workflow.
+
 `brain` is operated per project. Use `--project` when you are acting on a repo other than the current directory.
 
 The default config uses `embedding_provider: localhash` and `embedding_model: hash-v1`.
@@ -28,6 +30,8 @@ Stable GitHub releases are published from `main`. Prefer PR merges as the normal
 If no release has been published yet, the installer falls back to downloading the current `main` source tarball and building it locally with Go.
 
 ## Bootstrap A Project
+
+This is the moment where a repo gets its local brain: contract, docs, generated context, planning model, and local state.
 
 For a new or mostly empty repo:
 
@@ -70,6 +74,8 @@ brain edit --project . AGENTS.md --editor nvim
 ```
 
 ## Retrieve Context
+
+This is the core cost-saving loop. When the agent can retrieve local project knowledge instead of having it re-pasted into prompts, you spend fewer turns reconstructing context.
 
 ```bash
 brain find --project . auth
@@ -155,6 +161,8 @@ brain session finish --project . --summary "auth flow tightened"
 ```
 
 ## Skills
+
+Install the Brain skill when you want the agent runtime itself to understand how to use the repo brain correctly from the start.
 
 ```bash
 brain skills targets --scope both --agent codex --project .
