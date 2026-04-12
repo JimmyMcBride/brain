@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-12T04:17:28Z"
+updated: "2026-04-12T04:31:58Z"
 ---
 # Current State
 
@@ -76,3 +76,4 @@ Add repo-specific notes here. `brain context refresh` preserves content outside 
 - 2026-04-11: Fixed the session lock helper for Windows by treating `os.ErrPermission` on an already-existing lock directory as normal contention rather than a hard failure. This prevents concurrent `brain session run` tests from failing on Windows with `Access is denied` while preserving the filesystem lock behavior.
 - 2026-04-11: Returned the local checkout to `main` after PR #3 merged and fast-forwarded the repo to `v0.1.5`, which includes the wrapper cleanup, Windows session-lock fix, and corrected reusable release input handling.
 - 2026-04-11: Repositioned the product docs around Brain as durable local operating memory for AI coding agents. The README now leads with the continuity/reliability story, keeps install + skill install + brainstorm-to-execution prominent, treats lower token and tool cost as supporting proof, and replaces the bottom link dump with high-level overview sections that deep-link into usage, architecture, skills, and why.
+- 2026-04-11: Tightened the Windows session-lock fix again after PR feedback. Lock acquisition now treats Windows `os.ErrPermission` during lock-directory races as retryable contention even if a follow-up stat misses the directory, which should stop intermittent `Access is denied` failures in concurrent session tests.

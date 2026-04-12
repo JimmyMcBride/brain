@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -657,10 +658,14 @@ func sessionLockBusy(lockPath string, err error) bool {
 		return true
 	}
 	// On Windows, racing Mkdir calls against an existing directory lock can
-	// surface as a permission error instead of EEXIST. If the lock path now
-	// exists, treat that as normal contention and retry.
+	// surface as a permission error instead of EEXIST. Treat permission
+	// errors there as retryable contention; the lock dir can appear and
+	// disappear between the failed Mkdir and a follow-up Stat.
 	if !errors.Is(err, os.ErrPermission) {
 		return false
+	}
+	if runtime.GOOS == "windows" {
+		return true
 	}
 	info, statErr := os.Stat(lockPath)
 	return statErr == nil && info.IsDir()
