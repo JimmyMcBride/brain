@@ -25,13 +25,13 @@ var validStoryStatuses = map[string]struct{}{
 }
 
 type EpicInfo struct {
-	Path            string `json:"path"`
-	Title           string `json:"title"`
-	Spec            string `json:"spec"`
-	SpecStatus      string `json:"spec_status"`
+	Path             string `json:"path"`
+	Title            string `json:"title"`
+	Spec             string `json:"spec"`
+	SpecStatus       string `json:"spec_status"`
 	SourceBrainstorm string `json:"source_brainstorm,omitempty"`
-	TotalStories    int    `json:"total_stories"`
-	DoneStories     int    `json:"done_stories"`
+	TotalStories     int    `json:"total_stories"`
+	DoneStories      int    `json:"done_stories"`
 }
 
 type StoryInfo struct {
@@ -43,13 +43,13 @@ type StoryInfo struct {
 }
 
 type ProjectStatus struct {
-	Project         string     `json:"project"`
-	PlanningModel   string     `json:"planning_model"`
-	Epics           []EpicInfo `json:"epics"`
-	TotalStories    int        `json:"total_stories"`
-	DoneStories     int        `json:"done_stories"`
-	BlockedStories  int        `json:"blocked_stories"`
-	InProgressStories int      `json:"in_progress_stories"`
+	Project           string     `json:"project"`
+	PlanningModel     string     `json:"planning_model"`
+	Epics             []EpicInfo `json:"epics"`
+	TotalStories      int        `json:"total_stories"`
+	DoneStories       int        `json:"done_stories"`
+	BlockedStories    int        `json:"blocked_stories"`
+	InProgressStories int        `json:"in_progress_stories"`
 }
 
 type StoryChanges struct {
@@ -135,10 +135,10 @@ func (m *Manager) ListEpics() ([]EpicInfo, error) {
 			}
 		}
 		info := EpicInfo{
-			Path:            note.Path,
-			Title:           note.Title,
-			Spec:            specSlug,
-			SpecStatus:      specStatus,
+			Path:             note.Path,
+			Title:            note.Title,
+			Spec:             specSlug,
+			SpecStatus:       specStatus,
 			SourceBrainstorm: stringValue(note.Metadata["source_brainstorm"]),
 		}
 		for _, story := range stories {

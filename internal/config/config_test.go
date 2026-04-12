@@ -3,23 +3,34 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
 func TestLoadOrCreateUsesXDGDefaults(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("HOME", filepath.Join(root, "home"))
+	home := filepath.Join(root, "home")
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "xdg-config"))
 	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "xdg-data"))
+	t.Setenv("APPDATA", filepath.Join(root, "AppData", "Roaming"))
+	t.Setenv("LOCALAPPDATA", filepath.Join(root, "LocalAppData"))
 
 	cfg, paths, err := LoadOrCreate("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if paths.ConfigFile != filepath.Join(root, "xdg-config", "brain", "config.yaml") {
+	wantConfig := filepath.Join(root, "xdg-config", "brain", "config.yaml")
+	wantAppData := filepath.Join(root, "xdg-data", "brain")
+	if runtime.GOOS == "windows" {
+		wantConfig = filepath.Join(root, "AppData", "Roaming", "brain", "config.yaml")
+		wantAppData = filepath.Join(root, "LocalAppData", "brain")
+	}
+	if paths.ConfigFile != wantConfig {
 		t.Fatalf("unexpected config path: %s", paths.ConfigFile)
 	}
-	if paths.AppDataDir != filepath.Join(root, "xdg-data", "brain") {
+	if paths.AppDataDir != wantAppData {
 		t.Fatalf("unexpected app data dir: %s", paths.AppDataDir)
 	}
 	if cfg.EmbeddingProvider != "localhash" || cfg.EmbeddingModel != "hash-v1" || cfg.OutputMode != "human" {
@@ -42,7 +53,10 @@ func TestLoadOrCreateAppliesEnvOverrides(t *testing.T) {
 	t.Setenv("BRAIN_EMBEDDING_PROVIDER", "none")
 	t.Setenv("BRAIN_EMBEDDING_MODEL", "none")
 	t.Setenv("BRAIN_OUTPUT_MODE", "json")
+	t.Setenv("HOME", filepath.Join(root, "home"))
+	t.Setenv("USERPROFILE", filepath.Join(root, "home"))
 	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "xdg-data"))
+	t.Setenv("LOCALAPPDATA", filepath.Join(root, "LocalAppData"))
 
 	cfg, paths, err := LoadOrCreate(configPath)
 	if err != nil {
@@ -51,7 +65,11 @@ func TestLoadOrCreateAppliesEnvOverrides(t *testing.T) {
 	if cfg.EmbeddingProvider != "none" || cfg.EmbeddingModel != "none" || cfg.OutputMode != "json" {
 		t.Fatalf("unexpected config overrides: %+v", cfg)
 	}
-	if paths.UpdateBackupDir != filepath.Join(root, "xdg-data", "brain", "updates", "backups") {
+	wantBackupDir := filepath.Join(root, "xdg-data", "brain", "updates", "backups")
+	if runtime.GOOS == "windows" {
+		wantBackupDir = filepath.Join(root, "LocalAppData", "brain", "updates", "backups")
+	}
+	if paths.UpdateBackupDir != wantBackupDir {
 		t.Fatalf("unexpected update backup dir: %s", paths.UpdateBackupDir)
 	}
 }
@@ -94,6 +112,7 @@ func TestUserDataDirForWindowsUsesLocalAppData(t *testing.T) {
 
 func TestUserDataDirForWindowsFallsBackToUserProfile(t *testing.T) {
 	root := t.TempDir()
+	t.Setenv("LOCALAPPDATA", "")
 	got := userDataDirFor("windows", filepath.Join(root, "home"))
 	want := filepath.Join(root, "home", "AppData", "Local")
 	if got != want {

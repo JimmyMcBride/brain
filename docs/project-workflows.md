@@ -20,6 +20,8 @@ Use this file for agent operating workflow inside the repo.
 ## Close-Out
 
 - Refresh or update durable notes for meaningful behavior, config, or architecture changes.
+- For maintainer/product changes, prefer a feature branch and PR merge into `main` instead of pushing directly to `main`.
+- Treat the PR merge as the release boundary. After merge, wait for the automatic GitHub release, then refresh your installed `brain` binary and global Codex Brain skill.
 - Finish with `brain session finish`.
 - If you must bypass enforcement, use `brain session finish --force --reason "..."` so the override is recorded.
 <!-- brain:end project-doc-workflows -->
@@ -37,3 +39,12 @@ Release/history references:
 - [.brain/resources/changes/session-enforcement-and-policy-engine.md](../.brain/resources/changes/session-enforcement-and-policy-engine.md)
 - [.brain/resources/changes/project-scoped-planning-and-brainstorming.md](../.brain/resources/changes/project-scoped-planning-and-brainstorming.md)
 - [.brain/resources/references/maintainer-global-refresh.md](../.brain/resources/references/maintainer-global-refresh.md)
+
+Maintainer release flow:
+
+- Do product work on a branch.
+- Verify through `brain session run`.
+- Commit the branch.
+- Open and merge a PR to `main`.
+- Let the merge trigger the automatic release.
+- Refresh the installed binary and global Codex Brain skill only after that release exists.

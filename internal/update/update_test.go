@@ -213,6 +213,7 @@ func TestManagerUpdateFallbackInstall(t *testing.T) {
 		GOOS:           "linux",
 		GOARCH:         "amd64",
 		LookPath:       func(string) (string, error) { return exePath, nil },
+		WritableTarget: func(string) bool { return false },
 	})
 
 	result, err := manager.Update(context.Background(), Request{})
@@ -365,6 +366,7 @@ func TestManagerUpdateWindowsFallbackInstall(t *testing.T) {
 		GOOS:           "windows",
 		GOARCH:         "amd64",
 		LookPath:       func(string) (string, error) { return exePath, nil },
+		WritableTarget: func(string) bool { return false },
 	})
 
 	result, err := manager.Update(context.Background(), Request{})

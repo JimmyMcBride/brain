@@ -59,7 +59,7 @@ These installers verify published checksums, support `linux`, `darwin`, and `win
 - Unix: `~/.local/bin/brain`
 - Windows: `%LocalAppData%\Programs\brain\brain.exe`
 
-Pushes to `main` publish stable GitHub releases automatically, so install normally targets the latest release from `main`.
+Stable GitHub releases are published from `main`. Prefer PR merges as the normal path into `main`, then install from the latest release published there.
 
 If no GitHub release exists yet, the same command falls back to downloading the current `main` source archive from GitHub and building it locally with Go.
 

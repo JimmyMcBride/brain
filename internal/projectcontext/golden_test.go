@@ -45,12 +45,14 @@ func TestGeneratedDocumentGoldens(t *testing.T) {
 			got := strings.ReplaceAll(filepath.ToSlash(string(gotBytes)), filepath.ToSlash(project), "<PROJECT>")
 			got = strings.ReplaceAll(got, "demo-project", "<PROJECT_NAME>")
 			got = strings.ReplaceAll(got, "DemoProject", "<PROJECT_TITLE>")
+			got = strings.ReplaceAll(got, "\r\n", "\n")
 			want, err := os.ReadFile(filepath.Join("testdata", tc.name))
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got != string(want) {
-				t.Fatalf("golden mismatch for %s\nwant:\n%s\ngot:\n%s", tc.name, string(want), got)
+			wantText := strings.ReplaceAll(string(want), "\r\n", "\n")
+			if got != wantText {
+				t.Fatalf("golden mismatch for %s\nwant:\n%s\ngot:\n%s", tc.name, wantText, got)
 			}
 		})
 	}

@@ -43,18 +43,20 @@ type Options struct {
 	GOOS           string
 	GOARCH         string
 	LookPath       func(string) (string, error)
+	WritableTarget func(string) bool
 }
 
 type Manager struct {
-	cfg    *config.Config
-	paths  config.Paths
-	client *http.Client
-	base   string
-	exe    string
-	home   string
-	goos   string
-	goarch string
-	look   func(string) (string, error)
+	cfg      *config.Config
+	paths    config.Paths
+	client   *http.Client
+	base     string
+	exe      string
+	home     string
+	goos     string
+	goarch   string
+	look     func(string) (string, error)
+	writable func(string) bool
 }
 
 type Request struct {
@@ -139,16 +141,21 @@ func New(cfg *config.Config, paths config.Paths, opts Options) *Manager {
 	if look == nil {
 		look = exec.LookPath
 	}
+	writable := opts.WritableTarget
+	if writable == nil {
+		writable = isWritableTarget
+	}
 	return &Manager{
-		cfg:    cfg,
-		paths:  paths,
-		client: client,
-		base:   base,
-		exe:    exe,
-		home:   home,
-		goos:   goos,
-		goarch: goarch,
-		look:   look,
+		cfg:      cfg,
+		paths:    paths,
+		client:   client,
+		base:     base,
+		exe:      exe,
+		home:     home,
+		goos:     goos,
+		goarch:   goarch,
+		look:     look,
+		writable: writable,
 	}
 }
 
@@ -334,7 +341,7 @@ func (m *Manager) downloadFile(ctx context.Context, url, dest string) error {
 }
 
 func (m *Manager) chooseInstallPath() (string, bool, error) {
-	if isWritableTarget(m.exe) {
+	if m.writable(m.exe) {
 		return m.exe, false, nil
 	}
 	installDir := defaultInstallDir(m.goos, m.home)

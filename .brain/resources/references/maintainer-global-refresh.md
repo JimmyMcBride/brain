@@ -8,15 +8,19 @@ updated: "2026-04-11T00:00:00Z"
 
 Use this when a real product change should also update your installed `brain` binary and the global Codex `brain` skill.
 
+Default maintainer flow: work on a feature branch, open a PR, merge to `main`, wait for the automatic release, then refresh your local install.
+
 ## Sequence
 
-1. Finish the feature, bug fix, or doc change.
-2. Record any durable note updates in repo memory.
-3. Run required verification through `brain session run -- <command>`.
-4. Commit the repo changes.
-5. Push `main`.
-6. Wait for the automatic stable release workflow to tag and publish the new version from that pushed commit.
-7. Refresh the installed binary and global Codex skill:
+1. Create or switch to a feature branch from `main`.
+2. Finish the feature, bug fix, or doc change on that branch.
+3. Record any durable note updates in repo memory.
+4. Run required verification through `brain session run -- <command>`.
+5. Commit the branch changes.
+6. Open a PR into `main`.
+7. Review and merge the PR.
+8. Wait for the automatic stable release workflow to tag and publish the new version from that merge commit on `main`.
+9. Refresh the installed binary and global Codex skill:
 
 Unix shell:
 
@@ -30,7 +34,7 @@ Windows PowerShell:
 .\scripts\refresh-global-brain.ps1
 ```
 
-8. Verify:
+10. Verify:
    - Unix: `~/.local/bin/brain version` shows the pushed commit
    - Windows: `%LocalAppData%\Programs\brain\brain.exe version` shows the pushed commit
    - the installed global Codex `brain` skill matches `skills/brain/`
@@ -39,4 +43,5 @@ Windows PowerShell:
 
 - This flow refreshes only the global Codex `brain` skill.
 - It does not commit, push, or edit repo-tracked files.
+- Treat direct pushes to `main` as the exception, not the default. PR merge is the normal release boundary.
 - Do not create a follow-up repo-memory commit just because you refreshed the global binary or skill. Otherwise the installed binary immediately lags `HEAD` again.
