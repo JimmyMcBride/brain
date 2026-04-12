@@ -637,7 +637,7 @@ func withSessionLock(activePath string, fn func() error) error {
 				_ = os.Remove(lockPath)
 			}()
 			return fn()
-		} else if !errors.Is(err, os.ErrExist) {
+		} else if !sessionLockBusy(lockPath, err) {
 			return fmt.Errorf("acquire session lock: %w", err)
 		}
 
@@ -650,6 +650,20 @@ func withSessionLock(activePath string, fn func() error) error {
 		}
 		time.Sleep(sessionLockRetryDelay)
 	}
+}
+
+func sessionLockBusy(lockPath string, err error) bool {
+	if errors.Is(err, os.ErrExist) {
+		return true
+	}
+	// On Windows, racing Mkdir calls against an existing directory lock can
+	// surface as a permission error instead of EEXIST. If the lock path now
+	// exists, treat that as normal contention and retry.
+	if !errors.Is(err, os.ErrPermission) {
+		return false
+	}
+	info, statErr := os.Stat(lockPath)
+	return statErr == nil && info.IsDir()
 }
 
 func sessionLockIsStale(lockPath string) (bool, error) {

@@ -28,9 +28,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "workflow_call" ]; then
-            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
-            echo "sha=${{ inputs.sha }}" >> "$GITHUB_OUTPUT"
+          TAG_INPUT="${{ inputs.tag }}"
+          SHA_INPUT="${{ inputs.sha }}"
+          if [ -n "${TAG_INPUT}" ]; then
+            echo "tag=${TAG_INPUT}" >> "$GITHUB_OUTPUT"
+            echo "sha=${SHA_INPUT}" >> "$GITHUB_OUTPUT"
           else
             echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
             echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
