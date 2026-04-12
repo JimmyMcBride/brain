@@ -20,8 +20,6 @@ Use this file for agent operating workflow inside the repo.
 ## Close-Out
 
 - Refresh or update durable notes for meaningful behavior, config, or architecture changes.
-- For maintainer/product changes, prefer a feature branch and PR merge into `main` instead of pushing directly to `main`.
-- Treat the PR merge as the release boundary. After merge, wait for the automatic GitHub release, then refresh your installed `brain` binary and global Codex Brain skill.
 - Finish with `brain session finish`.
 - If you must bypass enforcement, use `brain session finish --force --reason "..."` so the override is recorded.
 <!-- brain:end project-doc-workflows -->

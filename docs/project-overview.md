@@ -14,12 +14,10 @@ Primary runtime: `go`
 ## Repo Map
 
 - `.brain/`
-- `.claude/`
-- `.codex/`
-- `.openclaw/`
 - `cmd/`
 - `docs/`
 - `internal/`
+- `scripts/`
 - `skills/`
 - `templates/`
 <!-- brain:end project-doc-overview -->

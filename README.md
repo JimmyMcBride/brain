@@ -10,7 +10,7 @@ It keeps human docs at the repo root, keeps machine-managed state under `.brain/
 - keeps durable project knowledge in plain markdown
 - indexes `AGENTS.md`, `docs/**/*.md`, and `.brain/**/*.md` with SQLite FTS plus an embedding provider
 - provides project-scoped planning and brainstorming commands
-- generates deterministic agent context and optional wrappers
+- generates deterministic agent context, with optional wrappers only when explicitly requested
 - tracks note history and supports undo
 - enforces repo workflows through session policy
 

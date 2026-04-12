@@ -126,12 +126,15 @@ Planning is intentionally opinionated:
 Install or refresh project context:
 
 ```bash
-brain context install --project . --agent codex --agent claude
+brain context install --project .
+brain context install --project . --agent codex
 brain context refresh --project .
 brain context refresh --project . --dry-run
 ```
 
 Use `--force` when adopting an existing unmanaged `AGENTS.md` or docs file into the managed-block model.
+
+Wrappers are opt-in. Brain always installs the root contract and `.brain/context/*`; agent-specific wrapper files are only created when you pass one or more `--agent` flags.
 
 If you want the full existing-repo bootstrap instead of just context takeover, use:
 
