@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-12T02:13:15Z"
+updated: "2026-04-12T02:21:25Z"
 ---
 # Current State
 
@@ -64,3 +64,4 @@ Add repo-specific notes here. `brain context refresh` preserves content outside 
 - 2026-04-11: Fixed automatic GitHub release publishing so main pushes no longer stop at tag creation. The tag workflow now calls the reusable release workflow directly after pushing the new semver tag, which avoids the GitHub `GITHUB_TOKEN` workflow-chaining limitation that was leaving tags without downloadable release assets.
 - 2026-04-11: Updated maintainer docs to make feature-branch plus PR merge the default release path. The documented flow is now branch -> verify -> commit -> PR -> merge to main -> automatic release -> local global-brain refresh, while direct pushes to main remain possible but are treated as the exception.
 - 2026-04-11: Fixed the Windows CI failures by making config tests OS-aware, using `errors.Is(..., os.ErrNotExist)` for epic-spec migration so Windows missing-file errors backfill specs correctly, normalizing projectcontext golden comparisons across line endings, and adding a test-only writable-target hook so updater fallback tests do not depend on Unix directory permission semantics.
+- 2026-04-11: Enabled GitHub branch protection for `main` via `gh api` so direct pushes are blocked, admins are enforced, PRs are required, and the `test (ubuntu-latest)` plus `test (windows-latest)` checks must pass before merge. Also narrowed `ci.yml` to run on `pull_request` and on pushes to `main` only, which removes duplicate branch-push CI runs.
