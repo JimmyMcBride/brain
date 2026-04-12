@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-12T03:19:46Z"
+updated: "2026-04-12T03:24:47Z"
 ---
 # Current State
 
@@ -73,3 +73,4 @@ Add repo-specific notes here. `brain context refresh` preserves content outside 
 - 2026-04-11: Stopped generating agent wrapper files implicitly from installed global skills. Project context now creates wrappers only when `--agent` is passed, removed the tracked `.codex/`, `.claude/`, and `.openclaw/` wrapper files from this repo, and deleted dead wrapper reference files under `skills/`.
 - 2026-04-11: Corrected the reusable GitHub release workflow again after confirming the called workflow still saw the parent `push` event context. Release tag resolution now prefers non-empty workflow-call inputs over `github.event_name`, so auto releases should publish `vX.Y.Z` assets and release names instead of `main`.
 - 2026-04-11: Merged the latest `origin/main` into the PR branch while resolving conflicts in `.github/workflows/release.yml` and `.brain/context/current-state.md`. Kept the newer workflow-call input preference for release tag resolution and preserved the latest durable note entries.
+- 2026-04-11: Fixed the session lock helper for Windows by treating `os.ErrPermission` on an already-existing lock directory as normal contention rather than a hard failure. This prevents concurrent `brain session run` tests from failing on Windows with `Access is denied` while preserving the filesystem lock behavior.

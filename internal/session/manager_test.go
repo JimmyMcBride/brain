@@ -74,6 +74,16 @@ func TestSnapshotGitIgnoresVolatileBrainRuntimeFiles(t *testing.T) {
 	}
 }
 
+func TestSessionLockBusyTreatsPermissionOnExistingDirAsContention(t *testing.T) {
+	lockPath := filepath.Join(t.TempDir(), "session.json.lock")
+	if err := os.Mkdir(lockPath, 0o700); err != nil {
+		t.Fatalf("mkdir lock dir: %v", err)
+	}
+	if !sessionLockBusy(lockPath, os.ErrPermission) {
+		t.Fatal("expected existing lock dir plus permission error to be treated as contention")
+	}
+}
+
 func TestRunCommandConcurrentRecordsAll(t *testing.T) {
 	project := makeSessionProject(t, sessionPolicyYAML(t, nil, false))
 	manager := New(nil)
