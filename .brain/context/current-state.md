@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-12T02:50:40Z"
+updated: "2026-04-12T03:05:12Z"
 ---
 # Current State
 
@@ -71,3 +71,4 @@ Add repo-specific notes here. `brain context refresh` preserves content outside 
 - 2026-04-11: Simplified CI policy again so validation now runs only on `pull_request`. Merges to `main` no longer trigger the separate CI workflow; after merge, only the release automation runs. Branch protection still requires the PR checks before merge.
 - 2026-04-11: Fixed the reusable GitHub release workflow so auto-releases no longer resolve to `main`. The workflow now resolves tag and sha explicitly in a dedicated job and publishes the GitHub Release plus assets against the semver tag passed in from the main tagger workflow.
 - 2026-04-11: Stopped generating agent wrapper files implicitly from installed global skills. Project context now creates wrappers only when `--agent` is passed, removed the tracked `.codex/`, `.claude/`, and `.openclaw/` wrapper files from this repo, and deleted dead wrapper reference files under `skills/`.
+- 2026-04-11: Corrected the reusable GitHub release workflow again after confirming the called workflow still saw the parent `push` event context. Release tag resolution now prefers non-empty workflow-call inputs over `github.event_name`, so auto releases should publish `vX.Y.Z` assets and release names instead of `main`.
