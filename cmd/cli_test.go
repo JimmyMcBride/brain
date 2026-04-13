@@ -100,6 +100,10 @@ func normalizeCLIOutput(s, root string) string {
 	return s
 }
 
+func cliPath(parts ...string) string {
+	return filepath.Join(parts...)
+}
+
 func requireOK(t *testing.T, result cliResult) string {
 	t.Helper()
 	if result.err != nil {
@@ -383,22 +387,22 @@ func TestCLIProjectPlanningWorkflow(t *testing.T) {
 func TestCLISkillsCommands(t *testing.T) {
 	env := newCLIEnv(t)
 	targets := requireOK(t, env.run(t, "", "skills", "targets", "--scope", "both", "-a", "codex", "-a", "copilot", "-a", "pi.dev", "-a", "zed", "--project", env.project))
-	if !strings.Contains(targets, "codex [global] brain <ROOT>/home/.codex/skills/brain") {
+	if !strings.Contains(targets, "codex [global] brain "+cliPath("<ROOT>", "home", ".codex", "skills", "brain")) {
 		t.Fatalf("missing global codex target:\n%s", targets)
 	}
-	if !strings.Contains(targets, "copilot [global] brain <ROOT>/home/.copilot/skills/brain") {
+	if !strings.Contains(targets, "copilot [global] brain "+cliPath("<ROOT>", "home", ".copilot", "skills", "brain")) {
 		t.Fatalf("missing global copilot target:\n%s", targets)
 	}
-	if !strings.Contains(targets, "copilot [local] brain <ROOT>/project/.github/skills/brain") {
+	if !strings.Contains(targets, "copilot [local] brain "+cliPath("<ROOT>", "project", ".github", "skills", "brain")) {
 		t.Fatalf("missing local copilot target:\n%s", targets)
 	}
-	if !strings.Contains(targets, "pi [global] brain <ROOT>/home/.pi/agent/skills/brain") {
+	if !strings.Contains(targets, "pi [global] brain "+cliPath("<ROOT>", "home", ".pi", "agent", "skills", "brain")) {
 		t.Fatalf("missing global pi target:\n%s", targets)
 	}
-	if !strings.Contains(targets, "pi [local] brain <ROOT>/project/.pi/skills/brain") {
+	if !strings.Contains(targets, "pi [local] brain "+cliPath("<ROOT>", "project", ".pi", "skills", "brain")) {
 		t.Fatalf("missing local pi target:\n%s", targets)
 	}
-	if !strings.Contains(targets, "zed [local] brain <ROOT>/project/.zed/skills/brain") {
+	if !strings.Contains(targets, "zed [local] brain "+cliPath("<ROOT>", "project", ".zed", "skills", "brain")) {
 		t.Fatalf("missing local zed target:\n%s", targets)
 	}
 	requireOK(t, env.run(t, "", "skills", "install", "--scope", "local", "-a", "codex", "--project", env.project, "--mode", "copy"))
