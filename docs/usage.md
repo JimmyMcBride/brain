@@ -97,6 +97,20 @@ brain search --project . "follow-up"
 
 Brainstorms live in `.brain/brainstorms/`.
 
+## Distillation
+
+Use distillation when session work or a brainstorm should become proposed durable memory without mutating the destination notes directly.
+
+```bash
+brain distill --project . --session
+brain distill --project . --brainstorm .brain/brainstorms/event-follow-up-ideas.md
+brain brainstorm distill --project . .brain/brainstorms/event-follow-up-ideas.md
+```
+
+`brain distill --session` requires an active session and creates a proposal note under `.brain/resources/changes/` with source provenance, proposed target notes, and suggested markdown updates for review.
+
+`brain distill --brainstorm ...` uses the same proposal flow for brainstorms. `brain brainstorm distill ...` remains supported as a compatibility wrapper.
+
 ## Planning
 
 Initialize once:

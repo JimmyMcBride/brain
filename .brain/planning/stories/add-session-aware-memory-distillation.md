@@ -3,10 +3,10 @@ created: "2026-04-13T06:23:52Z"
 epic: planning-and-brainstorming-ux
 project: brain
 spec: planning-and-brainstorming-ux
-status: todo
+status: in_progress
 title: Add Session-Aware Memory Distillation
 type: story
-updated: "2026-04-13T06:24:25Z"
+updated: "2026-04-13T07:24:23Z"
 ---
 # Add Session-Aware Memory Distillation
 

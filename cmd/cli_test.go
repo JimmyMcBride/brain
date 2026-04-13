@@ -275,6 +275,75 @@ func TestCLISearchInjectIncludesContextBlockInHumanAndJSONModes(t *testing.T) {
 	}
 }
 
+func TestCLIDistillSessionCreatesProposal(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	initGitProject(t, env.project)
+
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "tighten session distill"))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "edit", ".brain/context/current-state.md", "-b", "# Current State\n\nSession context was updated.\n"))
+	if err := os.WriteFile(filepath.Join(env.project, "main.go"), []byte("package main\nfunc main() { println(\"changed\") }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "run", "--project", env.project, "--", "go", "version"))
+
+	agentsBefore, err := os.ReadFile(filepath.Join(env.project, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	output := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "distill", "--session"))
+	if !strings.Contains(output, "Created distill proposal .brain/resources/changes/tighten-session-distill-distill-proposal.md") {
+		t.Fatalf("unexpected distill output:\n%s", output)
+	}
+
+	noteRaw, err := os.ReadFile(filepath.Join(env.project, ".brain", "resources", "changes", "tighten-session-distill-distill-proposal.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	note := string(noteRaw)
+	if !strings.Contains(note, "## Source Provenance") || !strings.Contains(note, "go version") || !strings.Contains(note, "main.go") {
+		t.Fatalf("expected session-derived provenance in proposal:\n%s", note)
+	}
+	if !strings.Contains(note, "## Proposed Updates") || !strings.Contains(note, "### AGENTS.md") || !strings.Contains(note, "### .brain/context/current-state.md") {
+		t.Fatalf("expected target sections in proposal:\n%s", note)
+	}
+
+	agentsAfter, err := os.ReadFile(filepath.Join(env.project, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(agentsBefore) != string(agentsAfter) {
+		t.Fatalf("expected distill not to modify AGENTS.md directly")
+	}
+}
+
+func TestCLIDistillBrainstormModeMatchesLegacyWrapper(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "brainstorm", "start", "Auth Ideas"))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "brainstorm", "idea", ".brain/brainstorms/auth-ideas.md", "-b", "Favor explicit durable memory over transcript storage."))
+
+	topLevel := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "distill", "--brainstorm", ".brain/brainstorms/auth-ideas.md"))
+	legacy := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "brainstorm", "distill", ".brain/brainstorms/auth-ideas.md"))
+	if topLevel != legacy {
+		t.Fatalf("expected equivalent command output\nnew:\n%s\nlegacy:\n%s", topLevel, legacy)
+	}
+
+	noteRaw, err := os.ReadFile(filepath.Join(env.project, ".brain", "resources", "changes", "auth-ideas-distill-proposal.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	note := string(noteRaw)
+	if !strings.Contains(note, "Mode: `brainstorm`") || !strings.Contains(note, "[[.brain/brainstorms/auth-ideas.md]]") {
+		t.Fatalf("expected brainstorm provenance in proposal:\n%s", note)
+	}
+	if !strings.Contains(note, "### .brain/resources/decisions/auth-ideas.md") {
+		t.Fatalf("expected proposed decision target in proposal:\n%s", note)
+	}
+}
+
 func TestCLIProjectPlanningWorkflow(t *testing.T) {
 	env := newCLIEnv(t)
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
