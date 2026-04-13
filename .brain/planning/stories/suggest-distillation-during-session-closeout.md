@@ -3,10 +3,10 @@ created: "2026-04-13T06:23:52Z"
 epic: context-and-session-workflow
 project: brain
 spec: context-and-session-workflow
-status: todo
+status: done
 title: Suggest Distillation During Session Closeout
 type: story
-updated: "2026-04-13T06:23:52Z"
+updated: "2026-04-13T07:38:30Z"
 ---
 # Suggest Distillation During Session Closeout
 

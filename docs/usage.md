@@ -185,6 +185,8 @@ brain session run --project . -- go build ./...
 brain session finish --project . --summary "auth flow tightened"
 ```
 
+If finish blocks because repo changes need durable memory updates, run `brain distill --project . --session`, review the proposal, apply the note updates that matter, and retry `brain session finish`.
+
 ## Skills
 
 Install the Brain skill when you want the agent runtime itself to understand how to use the repo brain correctly from the start.

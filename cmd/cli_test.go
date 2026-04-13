@@ -543,11 +543,12 @@ func TestCLISessionWorkflow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	validateBlocked := env.run(t, "", "--config", env.config, "session", "validate", "--project", env.project, "--stage", "finish")
-	if validateBlocked.err == nil || !strings.Contains(validateBlocked.stdout, "durable note update required for repo changes") {
-		t.Fatalf("expected finish validation to block before note update:\nstdout=%s\nstderr=%s", validateBlocked.stdout, validateBlocked.stderr)
+	finishBlocked := env.run(t, "", "--config", env.config, "session", "finish", "--project", env.project, "--summary", "premature closeout")
+	if finishBlocked.err == nil || !strings.Contains(finishBlocked.stdout, "durable note update required for repo changes") || !strings.Contains(finishBlocked.stdout, "brain distill --session") {
+		t.Fatalf("expected finish to block and suggest distill:\nstdout=%s\nstderr=%s", finishBlocked.stdout, finishBlocked.stderr)
 	}
 
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "distill", "--session"))
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "edit", "AGENTS.md", "-b", "# Project Agent Contract\n\nRecorded durable note for project changes.\n"))
 	requireOK(t, env.run(t, "", "--config", env.config, "session", "run", "--project", env.project, "--", "go", "test", "./..."))
 	requireOK(t, env.run(t, "", "--config", env.config, "session", "run", "--project", env.project, "--", "go", "build", "./..."))
