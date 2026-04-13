@@ -114,7 +114,7 @@ func addBrainstormCommand(root *cobra.Command, flags *rootFlagsState, loadApp ap
 	var distillLimit int
 	distillCmd := &cobra.Command{
 		Use:   "distill <path>",
-		Short: "Create a distillation note from a brainstorm",
+		Short: "Create a distillation proposal from a brainstorm",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appCtx, err := loadApp()
@@ -125,12 +125,12 @@ func addBrainstormCommand(root *cobra.Command, flags *rootFlagsState, loadApp ap
 			if err := appCtx.SyncIndex(cmd.Context()); err != nil {
 				return err
 			}
-			note, err := appCtx.Brainstorm.Distill(cmd.Context(), args[0], distillLimit)
+			note, err := appCtx.Distill.FromBrainstorm(cmd.Context(), args[0], distillLimit)
 			if err != nil {
 				return err
 			}
 			return appCtx.Output.Print(note, func(w io.Writer) error {
-				_, err := fmt.Fprintf(w, "Created distillation %s\n", note.Path)
+				_, err := fmt.Fprintf(w, "Created distill proposal %s\n", note.Path)
 				return err
 			})
 		},

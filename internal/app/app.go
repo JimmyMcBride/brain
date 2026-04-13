@@ -10,6 +10,7 @@ import (
 	"brain/internal/backup"
 	"brain/internal/brainstorm"
 	"brain/internal/config"
+	"brain/internal/distill"
 	"brain/internal/embeddings"
 	"brain/internal/history"
 	"brain/internal/index"
@@ -39,6 +40,7 @@ type App struct {
 	Search     *search.Engine
 	Project    *project.Manager
 	Brainstorm *brainstorm.Manager
+	Distill    *distill.Manager
 	Plan       *plan.Manager
 	Skills     *skills.Installer
 	Context    *projectcontext.Manager
@@ -90,7 +92,9 @@ func New(configPath, projectPath string, jsonOutput bool, opts Options) (*App, e
 	searchEngine := search.New(store, embedder)
 	notesManager := notes.New(workspaceSvc, tpl, backups, historyLog)
 	projectManager := project.New(notesManager, workspaceSvc)
+	sessionManager := session.New(historyLog)
 	brainstormManager := brainstorm.New(notesManager, searchEngine, projectManager)
+	distillManager := distill.New(notesManager, searchEngine, projectManager, historyLog, sessionManager)
 	planManager := plan.New(notesManager, projectManager)
 	userHome, _ := os.UserHomeDir()
 
@@ -108,10 +112,11 @@ func New(configPath, projectPath string, jsonOutput bool, opts Options) (*App, e
 		Search:     searchEngine,
 		Project:    projectManager,
 		Brainstorm: brainstormManager,
+		Distill:    distillManager,
 		Plan:       planManager,
 		Skills:     skills.NewInstaller(userHome),
 		Context:    projectcontext.New(userHome),
-		Session:    session.New(historyLog),
+		Session:    sessionManager,
 		Output:     output.New(cfg.OutputMode, opts.Stdout),
 	}, nil
 }

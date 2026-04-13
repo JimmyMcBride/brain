@@ -219,6 +219,18 @@ func defaultProjectDir(dir string) string {
 	return dir
 }
 
+func (m *Manager) Active(projectDir string) (*ActiveSession, error) {
+	projectDir, err := filepath.Abs(defaultProjectDir(projectDir))
+	if err != nil {
+		return nil, err
+	}
+	policy, _, _, err := projectcontext.LoadPolicy(projectDir)
+	if err != nil {
+		return nil, err
+	}
+	return loadActiveSessionIfExists(filepath.Join(projectDir, filepath.FromSlash(policy.Session.ActiveFile)))
+}
+
 func (m *Manager) Validate(ctx context.Context, req ValidateRequest) (*ValidationResult, error) {
 	projectDir, err := filepath.Abs(defaultProjectDir(req.ProjectDir))
 	if err != nil {
@@ -495,7 +507,8 @@ func (m *Manager) evaluateFinish(ctx context.Context, policy *projectcontext.Pol
 	if result.RepoChanged && policy.Closeout.RequireMemoryUpdateOnRepoChange && result.MemorySatisfiedBy == "" {
 		result.OK = false
 		result.Obligations = append(result.Obligations, "durable note update required for repo changes")
-		result.Remediation = append(result.Remediation, fmt.Sprintf("run `brain edit AGENTS.md ...` or update docs/.brain notes for %s", policy.Project.Name))
+		result.Remediation = append(result.Remediation, "run `brain distill --session` to generate a session-scoped memory proposal")
+		result.Remediation = append(result.Remediation, fmt.Sprintf("review the proposal, apply the durable note updates for %s, then retry `brain session finish`", policy.Project.Name))
 	} else if result.MemorySatisfiedBy == "git_committed_notes" {
 		result.Remediation = append(result.Remediation, "durable notes were already committed in the session commit range")
 	}

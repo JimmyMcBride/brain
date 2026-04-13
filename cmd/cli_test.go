@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -92,9 +93,15 @@ func (e *cliEnv) run(t *testing.T, stdin string, args ...string) cliResult {
 }
 
 func normalizeCLIOutput(s, root string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
 	s = strings.ReplaceAll(s, root, "<ROOT>")
+	s = strings.ReplaceAll(s, filepath.ToSlash(root), "<ROOT>")
 	s = rfc3339Pattern.ReplaceAllString(s, "<TIME>")
-	return filepath.ToSlash(s)
+	return s
+}
+
+func cliPath(parts ...string) string {
+	return filepath.Join(parts...)
 }
 
 func requireOK(t *testing.T, result cliResult) string {
@@ -233,7 +240,7 @@ func TestCLISearchStatusAndExplain(t *testing.T) {
 
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "edit", "docs/project-overview.md", "-b", "# Project Overview\n\nRetrieval status should become observable."))
 	searchOutput := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "search", "--explain", "retrieval observable"))
-	if !strings.Contains(searchOutput, "[") || !strings.Contains(searchOutput, "lex=") || !strings.Contains(searchOutput, "sem=") {
+	if !strings.Contains(searchOutput, "[") || !strings.Contains(searchOutput, "lex=") || !strings.Contains(searchOutput, "sem=") || !strings.Contains(searchOutput, "rec=") || !strings.Contains(searchOutput, "type=") || !strings.Contains(searchOutput, "ctx=") {
 		t.Fatalf("expected explain output:\n%s", searchOutput)
 	}
 
@@ -246,6 +253,100 @@ func TestCLISearchStatusAndExplain(t *testing.T) {
 	stale := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "search", "status"))
 	if !strings.Contains(stale, "state: stale") || !strings.Contains(stale, "workspace signature changed") {
 		t.Fatalf("expected stale index status after managed markdown change:\n%s", stale)
+	}
+}
+
+func TestCLISearchInjectIncludesContextBlockInHumanAndJSONModes(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "edit", "docs/project-overview.md", "-b", "# Project Overview\n\nInjectable context should cite the project overview note."))
+
+	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "search", "--inject", "injectable context"))
+	if !strings.Contains(human, "## Relevant Context") || !strings.Contains(human, "docs/project-overview.md") {
+		t.Fatalf("expected injected context in human output:\n%s", human)
+	}
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "search", "--inject", "injectable context"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, jsonOut)
+	}
+	results, ok := payload["results"].([]any)
+	if !ok || len(results) == 0 {
+		t.Fatalf("expected results in json payload: %#v", payload)
+	}
+	contextBlock, ok := payload["context_block"].(string)
+	if !ok || !strings.Contains(contextBlock, "## Relevant Context") || !strings.Contains(contextBlock, "docs/project-overview.md") {
+		t.Fatalf("expected context block in json payload: %#v", payload)
+	}
+}
+
+func TestCLIDistillSessionCreatesProposal(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	initGitProject(t, env.project)
+
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "tighten session distill"))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "edit", ".brain/context/current-state.md", "-b", "# Current State\n\nSession context was updated.\n"))
+	if err := os.WriteFile(filepath.Join(env.project, "main.go"), []byte("package main\nfunc main() { println(\"changed\") }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "run", "--project", env.project, "--", "go", "version"))
+
+	agentsBefore, err := os.ReadFile(filepath.Join(env.project, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	output := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "distill", "--session"))
+	if !strings.Contains(output, "Created distill proposal .brain/resources/changes/tighten-session-distill-distill-proposal.md") {
+		t.Fatalf("unexpected distill output:\n%s", output)
+	}
+
+	noteRaw, err := os.ReadFile(filepath.Join(env.project, ".brain", "resources", "changes", "tighten-session-distill-distill-proposal.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	note := string(noteRaw)
+	if !strings.Contains(note, "## Source Provenance") || !strings.Contains(note, "go version") || !strings.Contains(note, "main.go") {
+		t.Fatalf("expected session-derived provenance in proposal:\n%s", note)
+	}
+	if !strings.Contains(note, "## Proposed Updates") || !strings.Contains(note, "### AGENTS.md") || !strings.Contains(note, "### .brain/context/current-state.md") {
+		t.Fatalf("expected target sections in proposal:\n%s", note)
+	}
+
+	agentsAfter, err := os.ReadFile(filepath.Join(env.project, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(agentsBefore) != string(agentsAfter) {
+		t.Fatalf("expected distill not to modify AGENTS.md directly")
+	}
+}
+
+func TestCLIDistillBrainstormModeMatchesLegacyWrapper(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "brainstorm", "start", "Auth Ideas"))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "brainstorm", "idea", ".brain/brainstorms/auth-ideas.md", "-b", "Favor explicit durable memory over transcript storage."))
+
+	topLevel := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "distill", "--brainstorm", ".brain/brainstorms/auth-ideas.md"))
+	legacy := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "brainstorm", "distill", ".brain/brainstorms/auth-ideas.md"))
+	if topLevel != legacy {
+		t.Fatalf("expected equivalent command output\nnew:\n%s\nlegacy:\n%s", topLevel, legacy)
+	}
+
+	noteRaw, err := os.ReadFile(filepath.Join(env.project, ".brain", "resources", "changes", "auth-ideas-distill-proposal.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	note := string(noteRaw)
+	if !strings.Contains(note, "Mode: `brainstorm`") || !strings.Contains(note, "[[.brain/brainstorms/auth-ideas.md]]") {
+		t.Fatalf("expected brainstorm provenance in proposal:\n%s", note)
+	}
+	if !strings.Contains(note, "### .brain/resources/decisions/auth-ideas.md") {
+		t.Fatalf("expected proposed decision target in proposal:\n%s", note)
 	}
 }
 
@@ -286,22 +387,22 @@ func TestCLIProjectPlanningWorkflow(t *testing.T) {
 func TestCLISkillsCommands(t *testing.T) {
 	env := newCLIEnv(t)
 	targets := requireOK(t, env.run(t, "", "skills", "targets", "--scope", "both", "-a", "codex", "-a", "copilot", "-a", "pi.dev", "-a", "zed", "--project", env.project))
-	if !strings.Contains(targets, "codex [global] brain <ROOT>/home/.codex/skills/brain") {
+	if !strings.Contains(targets, "codex [global] brain "+cliPath("<ROOT>", "home", ".codex", "skills", "brain")) {
 		t.Fatalf("missing global codex target:\n%s", targets)
 	}
-	if !strings.Contains(targets, "copilot [global] brain <ROOT>/home/.copilot/skills/brain") {
+	if !strings.Contains(targets, "copilot [global] brain "+cliPath("<ROOT>", "home", ".copilot", "skills", "brain")) {
 		t.Fatalf("missing global copilot target:\n%s", targets)
 	}
-	if !strings.Contains(targets, "copilot [local] brain <ROOT>/project/.github/skills/brain") {
+	if !strings.Contains(targets, "copilot [local] brain "+cliPath("<ROOT>", "project", ".github", "skills", "brain")) {
 		t.Fatalf("missing local copilot target:\n%s", targets)
 	}
-	if !strings.Contains(targets, "pi [global] brain <ROOT>/home/.pi/agent/skills/brain") {
+	if !strings.Contains(targets, "pi [global] brain "+cliPath("<ROOT>", "home", ".pi", "agent", "skills", "brain")) {
 		t.Fatalf("missing global pi target:\n%s", targets)
 	}
-	if !strings.Contains(targets, "pi [local] brain <ROOT>/project/.pi/skills/brain") {
+	if !strings.Contains(targets, "pi [local] brain "+cliPath("<ROOT>", "project", ".pi", "skills", "brain")) {
 		t.Fatalf("missing local pi target:\n%s", targets)
 	}
-	if !strings.Contains(targets, "zed [local] brain <ROOT>/project/.zed/skills/brain") {
+	if !strings.Contains(targets, "zed [local] brain "+cliPath("<ROOT>", "project", ".zed", "skills", "brain")) {
 		t.Fatalf("missing local zed target:\n%s", targets)
 	}
 	requireOK(t, env.run(t, "", "skills", "install", "--scope", "local", "-a", "codex", "--project", env.project, "--mode", "copy"))
@@ -385,6 +486,55 @@ func TestCLIContextCommands(t *testing.T) {
 	}
 }
 
+func TestCLIContextLoadLevels(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "context", "install", "--project", env.project))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "edit", "docs/project-overview.md", "-b", "# Project Overview\n\nLayered context helps agents stay fast."))
+
+	level0 := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "load", "--level", "0"))
+	if !strings.Contains(level0, "## Source: AGENTS.md (summary)") || !strings.Contains(level0, "## Source: .brain/context/current-state.md") {
+		t.Fatalf("unexpected level 0 output:\n%s", level0)
+	}
+	if strings.Contains(level0, ".brain/context/overview.md") {
+		t.Fatalf("expected level 0 to omit overview:\n%s", level0)
+	}
+
+	level2JSON := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "load", "--level", "2"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(level2JSON), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, level2JSON)
+	}
+	if payload["level"].(float64) != 2 {
+		t.Fatalf("expected level 2 payload: %#v", payload)
+	}
+	sources, ok := payload["sources"].([]any)
+	if !ok || len(sources) != 7 {
+		t.Fatalf("expected 7 static sources in level 2 payload: %#v", payload)
+	}
+	content, ok := payload["content"].(string)
+	if !ok || !strings.Contains(content, "## Source: .brain/context/architecture.md") || !strings.Contains(content, "## Source: .brain/context/memory-policy.md") {
+		t.Fatalf("unexpected level 2 content: %#v", payload)
+	}
+}
+
+func TestCLIContextLoadLevelThreeUsesQueryOrActiveSession(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "context", "install", "--project", env.project))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "edit", "docs/project-overview.md", "-b", "# Project Overview\n\nLayered context query should retrieve this overview."))
+
+	missing := env.run(t, "", "--config", env.config, "--project", env.project, "context", "load", "--level", "3")
+	if missing.err == nil || !strings.Contains(missing.err.Error(), "requires --query or an active session task") {
+		t.Fatalf("expected missing-query error, got err=%v stdout=%s stderr=%s", missing.err, missing.stdout, missing.stderr)
+	}
+
+	initGitProject(t, env.project)
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "layered context query"))
+	level3 := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "load", "--level", "3"))
+	if !strings.Contains(level3, "## Source: search:layered context query") || !strings.Contains(level3, "## Relevant Context") || !strings.Contains(level3, "docs/project-overview.md") {
+		t.Fatalf("unexpected level 3 output:\n%s", level3)
+	}
+}
+
 func TestCLISessionWorkflow(t *testing.T) {
 	env := newCLIEnv(t)
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
@@ -399,11 +549,12 @@ func TestCLISessionWorkflow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	validateBlocked := env.run(t, "", "--config", env.config, "session", "validate", "--project", env.project, "--stage", "finish")
-	if validateBlocked.err == nil || !strings.Contains(validateBlocked.stdout, "durable note update required for repo changes") {
-		t.Fatalf("expected finish validation to block before note update:\nstdout=%s\nstderr=%s", validateBlocked.stdout, validateBlocked.stderr)
+	finishBlocked := env.run(t, "", "--config", env.config, "session", "finish", "--project", env.project, "--summary", "premature closeout")
+	if finishBlocked.err == nil || !strings.Contains(finishBlocked.stdout, "durable note update required for repo changes") || !strings.Contains(finishBlocked.stdout, "brain distill --session") {
+		t.Fatalf("expected finish to block and suggest distill:\nstdout=%s\nstderr=%s", finishBlocked.stdout, finishBlocked.stderr)
 	}
 
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "distill", "--session"))
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "edit", "AGENTS.md", "-b", "# Project Agent Contract\n\nRecorded durable note for project changes.\n"))
 	requireOK(t, env.run(t, "", "--config", env.config, "session", "run", "--project", env.project, "--", "go", "test", "./..."))
 	requireOK(t, env.run(t, "", "--config", env.config, "session", "run", "--project", env.project, "--", "go", "build", "./..."))

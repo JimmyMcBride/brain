@@ -193,3 +193,64 @@ func TestUpdateRejectsInvalidFrontmatter(t *testing.T) {
 		t.Fatalf("note was modified unexpectedly:\n%s", reloaded.Content)
 	}
 }
+
+func TestCreateDecisionNoteUsesDecisionDefaults(t *testing.T) {
+	manager := newTestManager(t)
+
+	note, err := manager.Create(CreateInput{
+		Title:    "Why We Chose SQLite",
+		NoteType: "decision",
+		Section:  ".brain",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if note.Path != ".brain/resources/decisions/why-we-chose-sqlite.md" {
+		t.Fatalf("unexpected decision note path: %s", note.Path)
+	}
+	if note.Type != "decision" {
+		t.Fatalf("unexpected decision note type: %s", note.Type)
+	}
+	for _, heading := range []string{"## Context", "## Options Considered", "## Decision", "## Tradeoffs"} {
+		if !strings.Contains(note.Content, heading) {
+			t.Fatalf("expected decision template heading %q in note:\n%s", heading, note.Content)
+		}
+	}
+}
+
+func TestInferDecisionTypeFromPath(t *testing.T) {
+	manager := newTestManager(t)
+
+	if _, err := manager.Create(CreateInput{
+		Title:    "Keep Search Local",
+		NoteType: "decision",
+		Section:  ".brain",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	path := manager.WorkspaceAbs(".brain/resources/decisions/keep-search-local.md")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta, body, err := ParseFrontmatter(string(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	delete(meta, "type")
+	normalized, err := ComposeFrontmatter(meta, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(normalized), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	note, err := manager.Read(".brain/resources/decisions/keep-search-local.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if note.Type != "decision" {
+		t.Fatalf("expected decision type inferred from path, got %q", note.Type)
+	}
+}

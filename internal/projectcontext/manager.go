@@ -61,6 +61,17 @@ type fileSpec struct {
 	CommentPrefix string
 }
 
+type LoadRequest struct {
+	ProjectDir string
+	Level      int
+}
+
+type LoadedContext struct {
+	Level   int      `json:"level"`
+	Sources []string `json:"sources"`
+	Content string   `json:"content"`
+}
+
 func New(home string) *Manager {
 	if home == "" {
 		home, _ = os.UserHomeDir()
@@ -80,6 +91,175 @@ func (m *Manager) Adopt(ctx context.Context, req Request) ([]Result, error) {
 
 func (m *Manager) Refresh(ctx context.Context, req Request) ([]Result, error) {
 	return m.apply(ctx, req)
+}
+
+func (m *Manager) Load(req LoadRequest) (*LoadedContext, error) {
+	projectDir, err := filepath.Abs(defaultProjectDir(req.ProjectDir))
+	if err != nil {
+		return nil, err
+	}
+	sources, err := staticLoadSources(req.Level)
+	if err != nil {
+		return nil, err
+	}
+
+	out := &LoadedContext{
+		Level:   req.Level,
+		Sources: make([]string, 0, len(sources)),
+	}
+	var content strings.Builder
+	for i, source := range sources {
+		body, err := renderLoadSource(projectDir, source)
+		if err != nil {
+			return nil, err
+		}
+		if i > 0 {
+			content.WriteString("\n\n")
+		}
+		content.WriteString("## Source: " + source.label() + "\n\n")
+		content.WriteString(body)
+		out.Sources = append(out.Sources, source.label())
+	}
+	out.Content = strings.TrimSpace(content.String()) + "\n"
+	return out, nil
+}
+
+type loadSource struct {
+	Path    string
+	Summary bool
+}
+
+func staticLoadSources(level int) ([]loadSource, error) {
+	switch level {
+	case 0:
+		return []loadSource{
+			{Path: "AGENTS.md", Summary: true},
+			{Path: ".brain/context/current-state.md"},
+		}, nil
+	case 1:
+		return []loadSource{
+			{Path: "AGENTS.md", Summary: true},
+			{Path: ".brain/context/current-state.md"},
+			{Path: ".brain/context/overview.md"},
+			{Path: ".brain/context/workflows.md"},
+		}, nil
+	case 2, 3:
+		return []loadSource{
+			{Path: "AGENTS.md"},
+			{Path: ".brain/context/overview.md"},
+			{Path: ".brain/context/architecture.md"},
+			{Path: ".brain/context/standards.md"},
+			{Path: ".brain/context/workflows.md"},
+			{Path: ".brain/context/memory-policy.md"},
+			{Path: ".brain/context/current-state.md"},
+		}, nil
+	default:
+		return nil, fmt.Errorf("unsupported context level %d (expected 0, 1, 2, or 3)", level)
+	}
+}
+
+func renderLoadSource(projectDir string, source loadSource) (string, error) {
+	raw, err := os.ReadFile(filepath.Join(projectDir, filepath.FromSlash(source.Path)))
+	if err != nil {
+		return "", fmt.Errorf("read context source %s: %w", source.Path, err)
+	}
+	content := strings.ReplaceAll(string(raw), "\r\n", "\n")
+	if source.Path == "AGENTS.md" && source.Summary {
+		return summarizeAgents(content), nil
+	}
+	return stripLocalNotes(strings.TrimSpace(content)), nil
+}
+
+func (s loadSource) label() string {
+	if s.Summary {
+		return s.Path + " (summary)"
+	}
+	return s.Path
+}
+
+func summarizeAgents(content string) string {
+	intro := firstParagraph(content)
+	workflow := extractMarkdownSection(content, "Required Workflow")
+	var b strings.Builder
+	if intro != "" {
+		b.WriteString(intro)
+	}
+	if workflow != "" {
+		if b.Len() > 0 {
+			b.WriteString("\n\n")
+		}
+		b.WriteString("## Required Workflow\n\n")
+		b.WriteString(workflow)
+	}
+	summary := strings.TrimSpace(b.String())
+	if summary == "" {
+		return stripLocalNotes(strings.TrimSpace(content))
+	}
+	return summary
+}
+
+func firstParagraph(content string) string {
+	lines := strings.Split(content, "\n")
+	var paragraph []string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			if len(paragraph) != 0 {
+				break
+			}
+			continue
+		}
+		if strings.HasPrefix(line, "#") || strings.HasPrefix(line, "<!--") || strings.HasPrefix(line, "- [") || strings.HasPrefix(line, "- ") {
+			if len(paragraph) != 0 {
+				break
+			}
+			continue
+		}
+		paragraph = append(paragraph, line)
+	}
+	return strings.TrimSpace(strings.Join(paragraph, " "))
+}
+
+func extractMarkdownSection(content, heading string) string {
+	lines := strings.Split(content, "\n")
+	inSection := false
+	sectionLevel := 0
+	var out []string
+
+	for _, line := range lines {
+		if strings.HasPrefix(line, "#") {
+			level := 0
+			for _, ch := range line {
+				if ch == '#' {
+					level++
+				} else {
+					break
+				}
+			}
+			title := strings.TrimSpace(strings.TrimLeft(line, "#"))
+			if strings.EqualFold(title, heading) {
+				inSection = true
+				sectionLevel = level
+				continue
+			}
+			if inSection && level <= sectionLevel {
+				break
+			}
+		}
+		if inSection {
+			out = append(out, line)
+		}
+	}
+	return strings.TrimSpace(strings.Join(out, "\n"))
+}
+
+func stripLocalNotes(content string) string {
+	content = strings.TrimSpace(content)
+	marker := "\n## Local Notes\n"
+	if idx := strings.Index(content, marker); idx >= 0 {
+		return strings.TrimSpace(content[:idx])
+	}
+	return content
 }
 
 func (m *Manager) apply(ctx context.Context, req Request) ([]Result, error) {
@@ -835,9 +1015,20 @@ func renderWorkflows(snapshot Snapshot) string {
 	b.WriteString("- Keep durable discoveries, decisions, and risks in AGENTS.md, /docs, or .brain notes.\n")
 	b.WriteString("- Update existing durable notes instead of duplicating context.\n")
 	b.WriteString("- Run required verification commands through `brain session run -- <command>`.\n")
+	b.WriteString("- If you change Brain command behavior or agent-facing workflow guidance, update `skills/brain/SKILL.md` in the same branch.\n")
 	b.WriteString("- Re-read context before large changes if the task shifts.\n\n")
+	b.WriteString("## Ticket Loop\n\n")
+	b.WriteString("1. Start one story or ticket at a time and keep the scope narrow.\n")
+	b.WriteString("2. Implement the story, then run focused tests for the touched packages.\n")
+	b.WriteString("3. Run the required full checks through `brain session run -- go test ./...` and `brain session run -- go build ./...`.\n")
+	b.WriteString("4. Review the diff against the story acceptance criteria and user-facing behavior.\n")
+	b.WriteString("5. If review finds issues, patch the work and repeat the test and review steps.\n")
+	b.WriteString("6. When the story is clean, commit it, push it, and only then move to the next story.\n\n")
 	b.WriteString("## Close-Out\n\n")
 	b.WriteString("- Refresh or update durable notes for meaningful behavior, config, or architecture changes.\n")
+	b.WriteString("- If `skills/brain/` changed, reinstall the local Brain skill for Codex and OpenClaw with `brain skills install --scope local --agent codex --agent openclaw --project .`.\n")
+	b.WriteString("- When opening a PR, make the title and body release-note friendly because GitHub release notes are generated from merged PR metadata.\n")
+	b.WriteString("- Summarize shipped behavior in the PR, not just implementation steps, so future changelogs stay human-readable.\n")
 	b.WriteString("- Finish with `brain session finish`.\n")
 	b.WriteString("- If you must bypass enforcement, use `brain session finish --force --reason \"...\"` so the override is recorded.\n")
 	return b.String()
@@ -918,5 +1109,7 @@ func renderGitIgnore() string {
 .brain/sessions/
 .brain/policy.override.yaml
 .brain/state/
+.codex/skills/
+.openclaw/skills/
 `) + "\n"
 }

@@ -293,6 +293,9 @@ func TestValidateFinishStillBlocksCommittedCodeOnlyPublishSession(t *testing.T) 
 	if result.MemorySatisfiedBy != "" {
 		t.Fatalf("expected no memory satisfaction source, got %q", result.MemorySatisfiedBy)
 	}
+	if !containsString(result.Remediation, "run `brain distill --session` to generate a session-scoped memory proposal") {
+		t.Fatalf("expected distill remediation, got %v", result.Remediation)
+	}
 }
 
 func TestValidateFinishDoesNotUseCommittedDurableNotesWhenWorktreeDirty(t *testing.T) {
@@ -336,6 +339,15 @@ func TestValidateFinishDoesNotUseCommittedDurableNotesWhenWorktreeDirty(t *testi
 	if result.MemorySatisfiedBy != "" {
 		t.Fatalf("expected no memory satisfaction source for dirty worktree, got %q", result.MemorySatisfiedBy)
 	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestSessionCommandHelper(t *testing.T) {

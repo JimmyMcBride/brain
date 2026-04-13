@@ -18,6 +18,8 @@ Default maintainer flow: work on a feature branch, open a PR, merge to `main`, w
 4. Run required verification through `brain session run -- <command>`.
 5. Commit the branch changes.
 6. Open a PR into `main`.
+   - Write the PR title and body in release-note language because GitHub release notes are generated from merged PR metadata.
+   - Summarize shipped behavior in human-readable bullets, not just implementation steps or internal refactors.
 7. Review and merge the PR.
 8. Wait for the automatic stable release workflow to tag and publish the new version from that merge commit on `main`.
 9. Refresh the installed binary and global Codex skill:
@@ -44,4 +46,5 @@ Windows PowerShell:
 - This flow refreshes only the global Codex `brain` skill.
 - It does not commit, push, or edit repo-tracked files.
 - Treat direct pushes to `main` as the exception, not the default. PR merge is the normal release boundary.
+- Treat release-note-friendly PR copy as part of the definition of done for every PR.
 - Do not create a follow-up repo-memory commit just because you refreshed the global binary or skill. Otherwise the installed binary immediately lags `HEAD` again.

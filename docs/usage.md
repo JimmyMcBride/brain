@@ -97,6 +97,20 @@ brain search --project . "follow-up"
 
 Brainstorms live in `.brain/brainstorms/`.
 
+## Distillation
+
+Use distillation when session work or a brainstorm should become proposed durable memory without mutating the destination notes directly.
+
+```bash
+brain distill --project . --session
+brain distill --project . --brainstorm .brain/brainstorms/event-follow-up-ideas.md
+brain brainstorm distill --project . .brain/brainstorms/event-follow-up-ideas.md
+```
+
+`brain distill --session` requires an active session and creates a proposal note under `.brain/resources/changes/` with source provenance, proposed target notes, and suggested markdown updates for review.
+
+`brain distill --brainstorm ...` uses the same proposal flow for brainstorms. `brain brainstorm distill ...` remains supported as a compatibility wrapper.
+
 ## Planning
 
 Initialize once:
@@ -136,9 +150,20 @@ brain context install --project .
 brain context install --project . --agent codex
 brain context refresh --project .
 brain context refresh --project . --dry-run
+brain context load --project . --level 0
+brain context load --project . --level 1
+brain context load --project . --level 2
+brain context load --project . --level 3 --query "auth flow"
 ```
 
 Use `--force` when adopting an existing unmanaged `AGENTS.md` or docs file into the managed-block model.
+
+`context load` is read-only and deterministic:
+
+- level 0 loads the AGENTS summary plus current state
+- level 1 adds overview and workflows
+- level 2 loads the full static context bundle
+- level 3 adds search-injected relevant context, using `--query` or the active session task
 
 Wrappers are opt-in. Brain always installs the root contract and `.brain/context/*`; agent-specific wrapper files are only created when you pass one or more `--agent` flags.
 
@@ -160,6 +185,8 @@ brain session run --project . -- go build ./...
 brain session finish --project . --summary "auth flow tightened"
 ```
 
+If finish blocks because repo changes need durable memory updates, run `brain distill --project . --session`, review the proposal, apply the note updates that matter, and retry `brain session finish`.
+
 ## Skills
 
 Install the Brain skill when you want the agent runtime itself to understand how to use the repo brain correctly from the start.
@@ -174,9 +201,16 @@ brain skills install --scope local --agent copilot --project .
 brain skills install --scope global --agent pi
 brain skills install --scope local --agent pi --project .
 brain skills install --scope global --agent openclaw --mode copy
+brain skills install --scope local --agent openclaw --project .
 ```
 
 `brain skills install` always installs the Brain skill. Use `--scope global` to add it to your machine and `--scope local --project .` to add it to the current project.
+
+When a branch changes Brain's command surface or agent-facing workflow guidance, update `skills/brain/SKILL.md` in that same branch and reinstall the local Brain skill for Codex and OpenClaw before closing the work:
+
+```bash
+brain skills install --scope local --agent codex --agent openclaw --project .
+```
 
 ## History And Undo
 

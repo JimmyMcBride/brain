@@ -62,10 +62,24 @@ Use these commands by default:
   - Inspect index freshness, indexed counts, and the local sqlite path without mutating the index.
 - `brain search --explain "query"`
   - Show lexical and semantic score contributions plus the retrieval source classification for each result.
+- `brain search --inject "query"`
+  - Return ranked results plus an agent-ready `## Relevant Context` block that can be reused directly.
+- `brain distill --session`
+  - Create a session-scoped distill proposal note with source provenance and suggested durable note updates.
+- `brain distill --brainstorm <path>`
+  - Create the same style of proposal note from a brainstorm source.
 - `brain brainstorm ...`
   - Manage project-local brainstorming notes.
 - `brain plan ...`
   - Manage project-local epics, specs, and stories with a spec-driven workflow.
+- `brain context load --level 0`
+  - Load the minimal AGENTS summary plus current state.
+- `brain context load --level 1`
+  - Add overview and workflows to the minimal context bundle.
+- `brain context load --level 2`
+  - Load the full static context bundle.
+- `brain context load --level 3 --query "..."`
+  - Load the full static bundle plus search-injected relevant context. If a session is active, the task can stand in for `--query`.
 - `brain context install --project .`
   - Create or adopt the root contract plus `.brain/context`.
 - `brain context refresh --project .`
@@ -95,9 +109,32 @@ Use these commands by default:
 2. `brain search "<task or concept>"` for ranked results.
 3. `brain search status` when results look stale, missing, or surprising.
 4. `brain search --explain "<task or concept>"` when you need to inspect ranking behavior.
-5. `brain read <path>` for the winning notes.
-6. Re-run search after meaningful note updates when you need the latest local state reflected. Brain will rebuild the local index automatically only when it is stale or missing.
-7. If retrieval quality matters, check which provider is active in `brain doctor` or `brain search status` before assuming the project is using a strong hosted semantic model.
+5. `brain search --inject "<task or concept>"` when you need a compact context block to pass straight into the next step.
+6. `brain read <path>` for the winning notes when the injected block is not enough.
+7. Re-run search after meaningful note updates when you need the latest local state reflected. Brain will rebuild the local index automatically only when it is stale or missing.
+8. If retrieval quality matters, check which provider is active in `brain doctor` or `brain search status` before assuming the project is using a strong hosted semantic model.
+
+## Context Workflow
+
+1. `brain context load --level 0` for minimal startup context.
+2. `brain context load --level 1` when you need summaries and workflows.
+3. `brain context load --level 2` when the task needs the full static context bundle.
+4. `brain context load --level 3 --query "<task or concept>"` when you need search-driven deep context.
+5. Prefer requesting the next level explicitly instead of loading everything up front.
+
+## Distillation Workflow
+
+1. Run `brain distill --session` when a working session surfaced decisions, tradeoffs, bugs, or discoveries that should become durable memory.
+2. Run `brain distill --brainstorm <path>` when a brainstorm should collapse into proposed durable note updates.
+3. Review the proposal note under `.brain/resources/changes/`.
+4. Apply the durable note updates with `brain edit` or by updating the target notes directly after review.
+5. Treat distill as a proposal generator, not as an auto-write path.
+
+## Session Recovery
+
+- If `brain session finish` blocks on missing durable memory updates, run `brain distill --session`.
+- Review the proposal, update the durable notes that matter, then retry `brain session finish`.
+- Keep using `brain session run -- <command>` for required verification commands before closeout.
 
 ## When Not To Use This Skill
 

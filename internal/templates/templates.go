@@ -147,6 +147,22 @@ Created: {{ .Now }}
 
 ## Notes
 `,
+	"decision.md": `# {{ .Title }}
+
+Created: {{ .Now }}
+
+## Context
+
+## Options Considered
+
+## Decision
+
+## Tradeoffs
+
+## Related
+
+## Notes
+`,
 }
 
 type Manager struct {

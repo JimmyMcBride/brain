@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-12T05:22:46Z"
+updated: "2026-04-13T15:26:30Z"
 ---
 # Current State
 
@@ -12,9 +12,10 @@ This file is a deterministic snapshot of the repository state at the last refres
 - Root: `.`
 - Runtime: `go`
 - Go module: `brain`
-- Current branch: `docs-pr-workflow-and-windows-ci-fixes`
+- Current branch: `feature/mempalace-planning-roadmap`
+- Default branch: `main`
 - Remote: `https://github.com/JimmyMcBride/brain.git`
-- Go test files: `19`
+- Go test files: `20`
 
 ## Docs
 
@@ -78,3 +79,10 @@ Add repo-specific notes here. `brain context refresh` preserves content outside 
 - 2026-04-11: Repositioned the product docs around Brain as durable local operating memory for AI coding agents. The README now leads with the continuity/reliability story, keeps install + skill install + brainstorm-to-execution prominent, treats lower token and tool cost as supporting proof, and replaces the bottom link dump with high-level overview sections that deep-link into usage, architecture, skills, and why.
 - 2026-04-11: Tightened the Windows session-lock fix again after PR feedback. Lock acquisition now treats Windows `os.ErrPermission` during lock-directory races as retryable contention even if a follow-up stat misses the directory, which should stop intermittent `Access is denied` failures in concurrent session tests.
 - 2026-04-11: Tightened the README positioning pass by adding an explicit audience section for heavy AI-agent users, a `Why Brain Exists` founder-pain section, and a cleaner deep-dive section structure so the README sells urgency before dropping into technical overviews.
+- 2026-04-12: Returned the local checkout to `main` after PR #5 merged and fast-forwarded the repo to `v0.1.7`, which includes the README urgency follow-up and aligned supporting docs.
+
+- 2026-04-13: Updated `skills/brain/SKILL.md` and refreshed the global Codex `brain` skill so it now teaches `brain distill`, `brain search --inject`, `brain context load --level`, and the session-finish distill recovery flow.
+
+- 2026-04-13: Fixed the CLI test output normalizer so Windows no longer corrupts JSON escape sequences while replacing temp-root paths, which restores `TestCLIContextLoadLevels` and other JSON-based CLI tests on the Windows pipeline.
+
+- 2026-04-13: Fixed the remaining Windows CLI skill-target assertions to use OS-native path joins in tests, so `TestCLISkillsCommands` now accepts Windows `\` paths without regressing Unix output expectations.
