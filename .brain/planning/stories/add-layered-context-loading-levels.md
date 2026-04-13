@@ -3,10 +3,10 @@ created: "2026-04-13T06:23:52Z"
 epic: context-and-session-workflow
 project: brain
 spec: context-and-session-workflow
-status: todo
+status: in_progress
 title: Add Layered Context Loading Levels
 type: story
-updated: "2026-04-13T06:23:52Z"
+updated: "2026-04-13T07:30:43Z"
 ---
 # Add Layered Context Loading Levels
 

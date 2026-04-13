@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -158,6 +159,52 @@ func TestInstallDryRunDoesNotWrite(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(project, "AGENTS.md")); !os.IsNotExist(err) {
 		t.Fatalf("expected dry-run to avoid writes, got err=%v", err)
+	}
+}
+
+func TestLoadReturnsDeterministicSourcesByLevel(t *testing.T) {
+	project := t.TempDir()
+	mustWriteFile(t, filepath.Join(project, "go.mod"), "module example.com/test\n\ngo 1.26\n")
+	manager := New(t.TempDir())
+	if _, err := manager.Install(context.Background(), Request{ProjectDir: project}); err != nil {
+		t.Fatal(err)
+	}
+
+	level0, err := manager.Load(LoadRequest{ProjectDir: project, Level: 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"AGENTS.md (summary)", ".brain/context/current-state.md"}; !reflect.DeepEqual(level0.Sources, want) {
+		t.Fatalf("unexpected level 0 sources: got=%v want=%v", level0.Sources, want)
+	}
+	if strings.Contains(level0.Content, ".brain/context/overview.md") {
+		t.Fatalf("expected level 0 to omit overview:\n%s", level0.Content)
+	}
+
+	level1, err := manager.Load(LoadRequest{ProjectDir: project, Level: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"AGENTS.md (summary)", ".brain/context/current-state.md", ".brain/context/overview.md", ".brain/context/workflows.md"}; !reflect.DeepEqual(level1.Sources, want) {
+		t.Fatalf("unexpected level 1 sources: got=%v want=%v", level1.Sources, want)
+	}
+
+	level2, err := manager.Load(LoadRequest{ProjectDir: project, Level: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"AGENTS.md", ".brain/context/overview.md", ".brain/context/architecture.md", ".brain/context/standards.md", ".brain/context/workflows.md", ".brain/context/memory-policy.md", ".brain/context/current-state.md"}; !reflect.DeepEqual(level2.Sources, want) {
+		t.Fatalf("unexpected level 2 sources: got=%v want=%v", level2.Sources, want)
+	}
+	if !strings.Contains(level2.Content, "## Source: .brain/context/architecture.md") || !strings.Contains(level2.Content, "## Source: .brain/context/memory-policy.md") {
+		t.Fatalf("expected full static bundle in level 2:\n%s", level2.Content)
+	}
+}
+
+func TestLoadRejectsUnsupportedLevel(t *testing.T) {
+	manager := New(t.TempDir())
+	if _, err := manager.Load(LoadRequest{ProjectDir: t.TempDir(), Level: 9}); err == nil {
+		t.Fatal("expected unsupported level error")
 	}
 }
 

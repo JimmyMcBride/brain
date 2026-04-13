@@ -25,7 +25,7 @@ type rootFlagsState struct {
 	jsonOutput  bool
 }
 
-type appLoader func() (*app.App, error)
+type appLoader func(projectPath ...string) (*app.App, error)
 
 var rootCmd = newRootCommand(rootOptions{})
 
@@ -66,8 +66,12 @@ func newRootCommand(opts rootOptions) *cobra.Command {
 	cmd.PersistentFlags().StringVar(&flags.projectPath, "project", ".", "project root path")
 	cmd.PersistentFlags().BoolVar(&flags.jsonOutput, "json", false, "render output as JSON")
 
-	loadApp := func() (*app.App, error) {
-		return opts.appLoad(flags.configPath, flags.projectPath, flags.jsonOutput, cmd.OutOrStdout(), cmd.ErrOrStderr())
+	loadApp := func(projectPath ...string) (*app.App, error) {
+		resolvedProject := flags.projectPath
+		if len(projectPath) != 0 && strings.TrimSpace(projectPath[0]) != "" {
+			resolvedProject = projectPath[0]
+		}
+		return opts.appLoad(flags.configPath, resolvedProject, flags.jsonOutput, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	}
 
 	addCommands(cmd, flags, loadApp)

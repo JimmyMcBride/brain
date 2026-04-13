@@ -480,6 +480,55 @@ func TestCLIContextCommands(t *testing.T) {
 	}
 }
 
+func TestCLIContextLoadLevels(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "context", "install", "--project", env.project))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "edit", "docs/project-overview.md", "-b", "# Project Overview\n\nLayered context helps agents stay fast."))
+
+	level0 := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "load", "--level", "0"))
+	if !strings.Contains(level0, "## Source: AGENTS.md (summary)") || !strings.Contains(level0, "## Source: .brain/context/current-state.md") {
+		t.Fatalf("unexpected level 0 output:\n%s", level0)
+	}
+	if strings.Contains(level0, ".brain/context/overview.md") {
+		t.Fatalf("expected level 0 to omit overview:\n%s", level0)
+	}
+
+	level2JSON := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "load", "--level", "2"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(level2JSON), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, level2JSON)
+	}
+	if payload["level"].(float64) != 2 {
+		t.Fatalf("expected level 2 payload: %#v", payload)
+	}
+	sources, ok := payload["sources"].([]any)
+	if !ok || len(sources) != 7 {
+		t.Fatalf("expected 7 static sources in level 2 payload: %#v", payload)
+	}
+	content, ok := payload["content"].(string)
+	if !ok || !strings.Contains(content, "## Source: .brain/context/architecture.md") || !strings.Contains(content, "## Source: .brain/context/memory-policy.md") {
+		t.Fatalf("unexpected level 2 content: %#v", payload)
+	}
+}
+
+func TestCLIContextLoadLevelThreeUsesQueryOrActiveSession(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "context", "install", "--project", env.project))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "edit", "docs/project-overview.md", "-b", "# Project Overview\n\nLayered context query should retrieve this overview."))
+
+	missing := env.run(t, "", "--config", env.config, "--project", env.project, "context", "load", "--level", "3")
+	if missing.err == nil || !strings.Contains(missing.err.Error(), "requires --query or an active session task") {
+		t.Fatalf("expected missing-query error, got err=%v stdout=%s stderr=%s", missing.err, missing.stdout, missing.stderr)
+	}
+
+	initGitProject(t, env.project)
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "layered context query"))
+	level3 := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "load", "--level", "3"))
+	if !strings.Contains(level3, "## Source: search:layered context query") || !strings.Contains(level3, "## Relevant Context") || !strings.Contains(level3, "docs/project-overview.md") {
+		t.Fatalf("unexpected level 3 output:\n%s", level3)
+	}
+}
+
 func TestCLISessionWorkflow(t *testing.T) {
 	env := newCLIEnv(t)
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))

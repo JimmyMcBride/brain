@@ -1,11 +1,13 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
 
 	"brain/internal/projectcontext"
+	"brain/internal/search"
 
 	"github.com/spf13/cobra"
 )
@@ -15,6 +17,8 @@ func addContextCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLo
 	var agents []string
 	var dryRun bool
 	var force bool
+	var level int
+	var query string
 
 	contextCmd := &cobra.Command{
 		Use:   "context",
@@ -31,8 +35,9 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 		Use:   "install",
 		Short: "Create or update the project context bundle",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			projectRoot := contextProjectPath(project, flags.projectPath)
 			return runContextCommand(cmd, loadApp, projectcontext.Request{
-				ProjectDir: project,
+				ProjectDir: projectRoot,
 				Agents:     agents,
 				DryRun:     dryRun,
 				Force:      force,
@@ -44,8 +49,9 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 		Use:   "refresh",
 		Short: "Refresh brain-managed project context files",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			projectRoot := contextProjectPath(project, flags.projectPath)
 			return runContextCommand(cmd, loadApp, projectcontext.Request{
-				ProjectDir: project,
+				ProjectDir: projectRoot,
 				Agents:     agents,
 				DryRun:     dryRun,
 				Force:      force,
@@ -53,14 +59,67 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 		},
 	}
 
+	loadCmd := &cobra.Command{
+		Use:   "load",
+		Short: "Load a deterministic context bundle by level",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			projectRoot := contextProjectPath(project, flags.projectPath)
+			appCtx, err := loadApp(projectRoot)
+			if err != nil {
+				return err
+			}
+			defer appCtx.Close()
+
+			bundle, err := appCtx.Context.Load(projectcontext.LoadRequest{
+				ProjectDir: projectRoot,
+				Level:      level,
+			})
+			if err != nil {
+				return err
+			}
+
+			if level == 3 {
+				activeTask := ""
+				active, err := appCtx.Session.Active(projectRoot)
+				if err == nil && active != nil {
+					activeTask = active.Task
+				}
+				resolvedQuery := strings.TrimSpace(query)
+				if resolvedQuery == "" {
+					resolvedQuery = strings.TrimSpace(activeTask)
+				}
+				if resolvedQuery == "" {
+					return errors.New("context load --level 3 requires --query or an active session task")
+				}
+				if err := appCtx.SyncIndex(cmd.Context()); err != nil {
+					return err
+				}
+				results, err := appCtx.Search.SearchWithOptions(cmd.Context(), resolvedQuery, 5, search.Options{ActiveTask: activeTask})
+				if err != nil {
+					return err
+				}
+				bundle.Sources = append(bundle.Sources, fmt.Sprintf("search:%s", resolvedQuery))
+				bundle.Content = strings.TrimRight(bundle.Content, "\n") + "\n\n## Source: search:" + resolvedQuery + "\n\n" + strings.TrimSpace(search.BuildContextBlock(results)) + "\n"
+			}
+
+			return appCtx.Output.Print(bundle, func(w io.Writer) error {
+				_, err := io.WriteString(w, bundle.Content)
+				return err
+			})
+		},
+	}
+
 	for _, sub := range []*cobra.Command{installCmd, refreshCmd} {
-		sub.Flags().StringVar(&project, "project", ".", "project root to scan and update")
+		sub.Flags().StringVar(&project, "project", "", "project root to scan and update")
 		sub.Flags().StringArrayVarP(&agents, "agent", "a", nil, "agent wrapper to generate; repeatable")
 		sub.Flags().BoolVar(&dryRun, "dry-run", false, "show planned changes without writing files")
 		sub.Flags().BoolVar(&force, "force", false, "adopt unmanaged files by preserving existing content under Local Notes")
 	}
+	loadCmd.Flags().StringVar(&project, "project", "", "project root to load context from")
+	loadCmd.Flags().IntVar(&level, "level", 0, "context depth to load: 0, 1, 2, or 3")
+	loadCmd.Flags().StringVar(&query, "query", "", "search query for level 3 context")
 
-	contextCmd.AddCommand(installCmd, refreshCmd)
+	contextCmd.AddCommand(installCmd, refreshCmd, loadCmd)
 	root.AddCommand(contextCmd)
 }
 
@@ -92,4 +151,11 @@ func runContextCommand(cmd *cobra.Command, loadApp appLoader, req projectcontext
 		}
 		return nil
 	})
+}
+
+func contextProjectPath(localProject, rootProject string) string {
+	if strings.TrimSpace(localProject) != "" {
+		return localProject
+	}
+	return rootProject
 }
