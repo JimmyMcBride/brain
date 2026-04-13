@@ -579,8 +579,12 @@ func TestCLIContextAssembleJSONReturnsStablePacketShape(t *testing.T) {
 		t.Fatalf("unexpected task payload: %#v", payload)
 	}
 	summary, ok := payload["summary"].(map[string]any)
-	if !ok || summary["confidence"] != "low" {
+	if !ok {
 		t.Fatalf("unexpected summary payload: %#v", payload)
+	}
+	confidence, ok := summary["confidence"].(string)
+	if !ok || confidence == "" {
+		t.Fatalf("expected confidence in summary payload: %#v", payload)
 	}
 	if _, ok := summary["selected_count"].(float64); !ok {
 		t.Fatalf("expected selected_count in summary payload: %#v", payload)
@@ -604,8 +608,11 @@ func TestCLIContextAssembleJSONReturnsStablePacketShape(t *testing.T) {
 	}
 	for _, key := range []string{"durable_notes", "generated_context", "structural_repo", "live_work", "policy_workflow"} {
 		items, ok := omitted[key].([]any)
-		if !ok || len(items) != 0 {
-			t.Fatalf("expected empty omitted %s group in payload: %#v", key, payload)
+		if !ok {
+			t.Fatalf("expected omitted %s group in payload: %#v", key, payload)
+		}
+		if (key == "structural_repo" || key == "live_work") && len(items) != 0 {
+			t.Fatalf("expected future omitted %s group to remain empty: %#v", key, payload)
 		}
 	}
 }
@@ -635,6 +642,51 @@ func TestCLIContextAssembleSelectsFirstWaveSourceGroups(t *testing.T) {
 	}
 	if groupCounts["structural_repo"].(float64) != 0 || groupCounts["live_work"].(float64) != 0 {
 		t.Fatalf("expected future groups to remain empty: %#v", payload)
+	}
+}
+
+func TestCLIContextAssembleExplainReportsRationaleAndAmbiguities(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "context", "install", "--project", env.project))
+	if err := os.MkdirAll(filepath.Join(env.project, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(env.project, "docs", "workflow-guide.md"), []byte("# Workflow Guide\n\nTask workflow guide for auth flow changes.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(env.project, "docs", "workflow-extra.md"), []byte("# Workflow Extra\n\nNearby workflow notes for auth flow changes.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "assemble", "--task", "auth flow workflow", "--explain"))
+	if !strings.Contains(human, "## Why This Was Selected") || !strings.Contains(human, "## Omitted Nearby Context") || !strings.Contains(human, "## Missing Or Unused Source Groups") {
+		t.Fatalf("expected explain sections in human output:\n%s", human)
+	}
+	if !strings.Contains(human, "## Ambiguities") {
+		t.Fatalf("expected ambiguity section in explain output:\n%s", human)
+	}
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "assemble", "--task", "auth flow workflow", "--explain"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, jsonOut)
+	}
+	summary := payload["summary"].(map[string]any)
+	if summary["confidence"] != "medium" && summary["confidence"] != "low" {
+		t.Fatalf("expected explain run to compute a non-empty confidence bucket: %#v", payload)
+	}
+	ambiguities := payload["ambiguities"].([]any)
+	if len(ambiguities) == 0 {
+		t.Fatalf("expected explain run to report ambiguities: %#v", payload)
+	}
+	selected := payload["selected"].(map[string]any)
+	durable := selected["durable_notes"].([]any)
+	if len(durable) == 0 {
+		t.Fatalf("expected durable notes in explain packet: %#v", payload)
+	}
+	first := durable[0].(map[string]any)
+	if first["selection_method"] == "" || first["rank"].(float64) == 0 {
+		t.Fatalf("expected explain metadata on selected item: %#v", payload)
 	}
 }
 

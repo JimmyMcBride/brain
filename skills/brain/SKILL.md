@@ -80,6 +80,10 @@ Use these commands by default:
   - Load the full static context bundle.
 - `brain context load --level 3 --query "..."`
   - Load the full static bundle plus search-injected relevant context. If a session is active, the task can stand in for `--query`.
+- `brain context assemble --task "..."`
+  - Assemble a task-focused context packet from durable notes, generated context, and workflow/policy sources.
+- `brain context assemble --explain`
+  - Add rationale, omitted-nearby context, missing-group reporting, ambiguities, and confidence to the task packet.
 - `brain context install --project .`
   - Create or adopt the root contract plus `.brain/context`.
 - `brain context refresh --project .`
@@ -120,7 +124,9 @@ Use these commands by default:
 2. `brain context load --level 1` when you need summaries and workflows.
 3. `brain context load --level 2` when the task needs the full static context bundle.
 4. `brain context load --level 3 --query "<task or concept>"` when you need search-driven deep context.
-5. Prefer requesting the next level explicitly instead of loading everything up front.
+5. `brain context assemble --task "<task>"` when you need a task-focused packet instead of a raw static bundle.
+6. `brain context assemble --explain` when you need to inspect why Brain chose its packet and what it left nearby.
+7. Prefer requesting the next level explicitly instead of loading everything up front.
 
 ## Distillation Workflow
 

@@ -154,6 +154,8 @@ brain context load --project . --level 0
 brain context load --project . --level 1
 brain context load --project . --level 2
 brain context load --project . --level 3 --query "auth flow"
+brain context assemble --project . --task "auth flow"
+brain context assemble --project . --explain
 ```
 
 Use `--force` when adopting an existing unmanaged `AGENTS.md` or docs file into the managed-block model.
@@ -164,6 +166,13 @@ Use `--force` when adopting an existing unmanaged `AGENTS.md` or docs file into 
 - level 1 adds overview and workflows
 - level 2 loads the full static context bundle
 - level 3 adds search-injected relevant context, using `--query` or the active session task
+
+`context assemble` is the task-focused packet interface:
+
+- resolves the task from `--task` or the active session
+- assembles typed context from durable notes, generated context, and workflow/policy sources
+- shows ambiguities and confidence for the current task packet
+- adds rationale, omitted-nearby context, and missing-group reporting with `--explain`
 
 Wrappers are opt-in. Brain always installs the root contract and `.brain/context/*`; agent-specific wrapper files are only created when you pass one or more `--agent` flags.
 

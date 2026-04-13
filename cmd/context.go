@@ -140,16 +140,18 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 				return errors.New("context assemble requires --task or an active session task")
 			}
 			searchResults := []search.Result{}
-			if err := appCtx.SyncIndex(cmd.Context()); err != nil {
-				return err
-			}
 			activeTask := ""
+			hasActiveSession := false
 			active, err := appCtx.Session.Active(projectRoot)
 			if err != nil {
 				return err
 			}
 			if active != nil {
+				hasActiveSession = true
 				activeTask = strings.TrimSpace(active.Task)
+			}
+			if err := appCtx.SyncIndex(cmd.Context()); err != nil {
+				return err
 			}
 			searchLimit := 16
 			if assembleLimit > 0 && assembleLimit*4 > searchLimit {
@@ -162,12 +164,13 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 
 			manager := contextassembly.New(appCtx.Context)
 			packet, err := manager.Assemble(contextassembly.Request{
-				ProjectDir:    projectRoot,
-				Task:          resolvedTask,
-				TaskSource:    taskSource,
-				Limit:         assembleLimit,
-				Explain:       assembleExplain,
-				SearchResults: searchResults,
+				ProjectDir:       projectRoot,
+				Task:             resolvedTask,
+				TaskSource:       taskSource,
+				HasActiveSession: hasActiveSession,
+				Limit:            assembleLimit,
+				Explain:          assembleExplain,
+				SearchResults:    searchResults,
 			})
 			if err != nil {
 				return err

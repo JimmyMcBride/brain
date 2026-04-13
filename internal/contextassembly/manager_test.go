@@ -29,6 +29,9 @@ func TestAssembleReturnsStableEmptyPacketShape(t *testing.T) {
 	if packet.Summary.Confidence != "low" || packet.Summary.SelectedCount != 0 {
 		t.Fatalf("unexpected summary: %#v", packet.Summary)
 	}
+	if len(packet.Ambiguities) != 2 {
+		t.Fatalf("expected explicit-task ambiguity in empty packet: %#v", packet.Ambiguities)
+	}
 	if packet.Selected.DurableNotes == nil || packet.Selected.GeneratedContext == nil || packet.Selected.StructuralRepo == nil || packet.Selected.LiveWork == nil || packet.Selected.PolicyWorkflow == nil {
 		t.Fatalf("expected empty selected groups to be initialized: %#v", packet.Selected)
 	}
@@ -113,7 +116,6 @@ func TestAssembleSelectsFirstWaveGroupsDeterministically(t *testing.T) {
 	if packet.Summary.SelectedCount != 8 {
 		t.Fatalf("expected selected count to match packet contents: %#v", packet.Summary)
 	}
-
 	second, err := manager.Assemble(Request{
 		ProjectDir:    project,
 		Task:          "auth flow",
@@ -155,5 +157,80 @@ func TestAssembleUsesSearchAndStaticSourcesWithoutLeakingFutureGroups(t *testing
 	}
 	if packet.Summary.GroupCounts.StructuralRepo != 0 || packet.Summary.GroupCounts.LiveWork != 0 {
 		t.Fatalf("expected future groups to remain empty in summary: %#v", packet.Summary)
+	}
+}
+
+func TestAssembleComputesConfidenceFromCoverageAndAmbiguities(t *testing.T) {
+	project := t.TempDir()
+	contextManager := projectcontext.New(t.TempDir())
+	if _, err := contextManager.Install(context.Background(), projectcontext.Request{ProjectDir: project}); err != nil {
+		t.Fatal(err)
+	}
+
+	manager := New(contextManager)
+	packet, err := manager.Assemble(Request{
+		ProjectDir:       project,
+		Task:             "workflow",
+		TaskSource:       "session",
+		HasActiveSession: true,
+		Limit:            7,
+		SearchResults: []search.Result{
+			{NotePath: "docs/workflow-guide.md", NoteTitle: "Workflow Guide", Heading: "Overview", Snippet: "Workflow guide.", Score: 0.80},
+			{NotePath: "docs/workflow-checklist.md", NoteTitle: "Workflow Checklist", Heading: "Checklist", Snippet: "Workflow checklist.", Score: 0.70},
+			{NotePath: "docs/workflow-ops.md", NoteTitle: "Workflow Ops", Heading: "", Snippet: "Workflow operations.", Score: 0.60},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if packet.Summary.Confidence != "high" {
+		t.Fatalf("expected high confidence with three groups and no ambiguities: %#v", packet)
+	}
+}
+
+func TestAssembleExplainAddsDiagnosticsAndOmittedNearby(t *testing.T) {
+	project := t.TempDir()
+	contextManager := projectcontext.New(t.TempDir())
+	if _, err := contextManager.Install(context.Background(), projectcontext.Request{ProjectDir: project}); err != nil {
+		t.Fatal(err)
+	}
+
+	manager := New(contextManager)
+	packet, err := manager.Assemble(Request{
+		ProjectDir:       project,
+		Task:             "workflow",
+		TaskSource:       "session",
+		HasActiveSession: true,
+		Limit:            6,
+		Explain:          true,
+		SearchResults: []search.Result{
+			{NotePath: "docs/workflow-overview.md", NoteTitle: "Workflow Overview", Heading: "Summary", Snippet: "Workflow details.", Score: 0.77},
+			{NotePath: "docs/workflow-details.md", NoteTitle: "Workflow Details", Heading: "Checklist", Snippet: "Detailed workflow notes.", Score: 0.70},
+			{NotePath: "docs/workflow-ops.md", NoteTitle: "Workflow Ops", Heading: "", Snippet: "Operational workflow notes.", Score: 0.65},
+			{NotePath: "docs/workflow-extra.md", NoteTitle: "Workflow Extra", Heading: "", Snippet: "Nearby workflow notes.", Score: 0.63},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(packet.Selected.DurableNotes) == 0 || packet.Selected.DurableNotes[0].Diagnostics == nil {
+		t.Fatalf("expected explain diagnostics on selected items: %#v", packet.Selected)
+	}
+	if packet.Selected.DurableNotes[0].SelectionMethod == "" || packet.Selected.DurableNotes[0].Rank == 0 {
+		t.Fatalf("expected explain rank and selection method: %#v", packet.Selected.DurableNotes[0])
+	}
+	if totalItems(packet.OmittedNearby) == 0 {
+		t.Fatalf("expected omitted nearby items in explain packet: %#v", packet.OmittedNearby)
+	}
+
+	var out bytes.Buffer
+	if err := RenderHuman(&out, packet, true); err != nil {
+		t.Fatal(err)
+	}
+	rendered := out.String()
+	if !strings.Contains(rendered, "## Why This Was Selected") || !strings.Contains(rendered, "## Omitted Nearby Context") || !strings.Contains(rendered, "## Missing Or Unused Source Groups") {
+		t.Fatalf("expected explain sections in human output:\n%s", rendered)
 	}
 }

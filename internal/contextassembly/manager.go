@@ -20,12 +20,13 @@ type Manager struct {
 }
 
 type Request struct {
-	ProjectDir    string
-	Task          string
-	TaskSource    string
-	Limit         int
-	Explain       bool
-	SearchResults []search.Result
+	ProjectDir       string
+	Task             string
+	TaskSource       string
+	HasActiveSession bool
+	Limit            int
+	Explain          bool
+	SearchResults    []search.Result
 }
 
 type Packet struct {
@@ -80,10 +81,12 @@ type ItemDiagnostics struct {
 }
 
 type candidate struct {
-	group string
-	item  Item
-	score float64
-	key   string
+	group  string
+	item   Item
+	score  float64
+	key    string
+	method string
+	notes  []string
 }
 
 type staticSource struct {
@@ -94,6 +97,19 @@ type staticSource struct {
 	BaseScore    float64
 	DefaultWhy   string
 	SectionTitle string
+}
+
+type candidateGroups struct {
+	DurableNotes     []candidate
+	GeneratedContext []candidate
+	StructuralRepo   []candidate
+	LiveWork         []candidate
+	PolicyWorkflow   []candidate
+}
+
+type selectionPlan struct {
+	Selected candidateGroups
+	Omitted  candidateGroups
 }
 
 var taskTokenPattern = regexp.MustCompile(`[[:alnum:]_]+`)
@@ -125,35 +141,37 @@ func (m *Manager) Assemble(req Request) (*Packet, error) {
 	if taskSource == "" {
 		taskSource = "flag"
 	}
-	packet := &Packet{
+
+	limit := req.Limit
+	if limit <= 0 {
+		limit = 8
+	}
+
+	plan := selectCandidates(task, req.ProjectDir, limit, req.SearchResults)
+	selected := plan.Selected.items(req.Explain)
+	omitted := plan.Omitted.items(req.Explain)
+	ambiguities := buildAmbiguities(req, plan)
+
+	return &Packet{
 		Task: TaskInfo{
 			Text:   task,
 			Source: taskSource,
 		},
 		Summary: Summary{
-			Confidence:    "low",
-			SelectedCount: 0,
-			GroupCounts:   GroupCounts{},
+			Confidence:    computeConfidence(selected, ambiguities),
+			SelectedCount: totalItems(selected),
+			GroupCounts: GroupCounts{
+				DurableNotes:     len(selected.DurableNotes),
+				GeneratedContext: len(selected.GeneratedContext),
+				StructuralRepo:   len(selected.StructuralRepo),
+				LiveWork:         len(selected.LiveWork),
+				PolicyWorkflow:   len(selected.PolicyWorkflow),
+			},
 		},
-		Selected:      newGroupedItems(),
-		Ambiguities:   []string{},
-		OmittedNearby: newGroupedItems(),
-	}
-	limit := req.Limit
-	if limit <= 0 {
-		limit = 8
-	}
-	selected := selectCandidates(task, req.ProjectDir, limit, req.SearchResults)
-	packet.Selected = selected
-	packet.Summary.SelectedCount = totalItems(selected)
-	packet.Summary.GroupCounts = GroupCounts{
-		DurableNotes:     len(selected.DurableNotes),
-		GeneratedContext: len(selected.GeneratedContext),
-		StructuralRepo:   len(selected.StructuralRepo),
-		LiveWork:         len(selected.LiveWork),
-		PolicyWorkflow:   len(selected.PolicyWorkflow),
-	}
-	return packet, nil
+		Selected:      selected,
+		Ambiguities:   ambiguities,
+		OmittedNearby: omitted,
+	}, nil
 }
 
 func RenderHuman(w io.Writer, packet *Packet, explain bool) error {
@@ -170,6 +188,7 @@ func RenderHuman(w io.Writer, packet *Packet, explain bool) error {
 	); err != nil {
 		return err
 	}
+
 	if _, err := io.WriteString(w, "## Selected Context\n\n"); err != nil {
 		return err
 	}
@@ -178,29 +197,6 @@ func RenderHuman(w io.Writer, packet *Packet, explain bool) error {
 			return err
 		}
 	} else {
-		writeGroup := func(label string, items []Item) error {
-			if len(items) == 0 {
-				return nil
-			}
-			if _, err := fmt.Fprintf(w, "### %s\n\n", label); err != nil {
-				return err
-			}
-			for _, item := range items {
-				line := fmt.Sprintf("- %s (`%s`)", item.Label, item.Source)
-				if strings.TrimSpace(item.Excerpt) != "" {
-					line += ": " + item.Excerpt
-				} else if strings.TrimSpace(item.Why) != "" {
-					line += ": " + item.Why
-				}
-				if _, err := fmt.Fprintln(w, line); err != nil {
-					return err
-				}
-			}
-			if _, err := io.WriteString(w, "\n"); err != nil {
-				return err
-			}
-			return nil
-		}
 		for _, entry := range []struct {
 			label string
 			items []Item
@@ -211,11 +207,12 @@ func RenderHuman(w io.Writer, packet *Packet, explain bool) error {
 			{label: "Live Work", items: packet.Selected.LiveWork},
 			{label: "Policy Workflow", items: packet.Selected.PolicyWorkflow},
 		} {
-			if err := writeGroup(entry.label, entry.items); err != nil {
+			if err := renderSelectedGroup(w, entry.label, entry.items); err != nil {
 				return err
 			}
 		}
 	}
+
 	if len(packet.Ambiguities) > 0 {
 		if _, err := io.WriteString(w, "\n## Ambiguities\n\n"); err != nil {
 			return err
@@ -226,7 +223,12 @@ func RenderHuman(w io.Writer, packet *Packet, explain bool) error {
 			}
 		}
 	}
-	_ = explain
+
+	if explain {
+		if err := renderExplainSections(w, packet); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -237,6 +239,16 @@ func newGroupedItems() GroupedItems {
 		StructuralRepo:   []Item{},
 		LiveWork:         []Item{},
 		PolicyWorkflow:   []Item{},
+	}
+}
+
+func newCandidateGroups() candidateGroups {
+	return candidateGroups{
+		DurableNotes:     []candidate{},
+		GeneratedContext: []candidate{},
+		StructuralRepo:   []candidate{},
+		LiveWork:         []candidate{},
+		PolicyWorkflow:   []candidate{},
 	}
 }
 
@@ -260,8 +272,11 @@ func totalItems(groups GroupedItems) int {
 	return len(groups.DurableNotes) + len(groups.GeneratedContext) + len(groups.StructuralRepo) + len(groups.LiveWork) + len(groups.PolicyWorkflow)
 }
 
-func selectCandidates(task, projectDir string, limit int, searchResults []search.Result) GroupedItems {
-	selected := newGroupedItems()
+func selectCandidates(task, projectDir string, limit int, searchResults []search.Result) selectionPlan {
+	plan := selectionPlan{
+		Selected: newCandidateGroups(),
+		Omitted:  newCandidateGroups(),
+	}
 	taskTokens := tokenize(task)
 	grouped := map[string][]candidate{
 		"durable_notes":     durableNoteCandidates(searchResults),
@@ -275,46 +290,51 @@ func selectCandidates(task, projectDir string, limit int, searchResults []search
 	}
 
 	seen := map[string]struct{}{}
+	selectedCount := 0
 	for _, group := range []string{"durable_notes", "generated_context", "policy_workflow"} {
-		candidates := grouped[group]
-		selectedCount := 0
-		for _, candidate := range candidates {
-			if totalItems(selected) >= limit || selectedCount >= groupCaps[group] {
-				break
-			}
-			if _, ok := seen[candidate.key]; ok {
+		groupSelected := 0
+		for _, entry := range grouped[group] {
+			if _, ok := seen[entry.key]; ok {
 				continue
 			}
-			addItem(&selected, group, candidate.item)
-			seen[candidate.key] = struct{}{}
-			selectedCount++
+			if selectedCount < limit && groupSelected < groupCaps[group] {
+				addCandidate(&plan.Selected, group, entry)
+				seen[entry.key] = struct{}{}
+				selectedCount++
+				groupSelected++
+				continue
+			}
+			addCandidate(&plan.Omitted, group, entry)
 		}
 	}
 
-	if totalItems(selected) < limit {
+	if selectedCount < limit {
 		var remaining []candidate
 		for _, group := range []string{"durable_notes", "generated_context", "policy_workflow"} {
-			for _, candidate := range grouped[group] {
-				if _, ok := seen[candidate.key]; ok {
+			for _, entry := range grouped[group] {
+				if _, ok := seen[entry.key]; ok {
 					continue
 				}
-				remaining = append(remaining, candidate)
+				remaining = append(remaining, entry)
 			}
 		}
 		sortCandidates(remaining)
-		for _, candidate := range remaining {
-			if totalItems(selected) >= limit {
-				break
-			}
-			if _, ok := seen[candidate.key]; ok {
+		for _, entry := range remaining {
+			if _, ok := seen[entry.key]; ok {
 				continue
 			}
-			addItem(&selected, candidate.group, candidate.item)
-			seen[candidate.key] = struct{}{}
+			if selectedCount < limit {
+				addCandidate(&plan.Selected, entry.group, entry)
+				seen[entry.key] = struct{}{}
+				selectedCount++
+				continue
+			}
+			addCandidate(&plan.Omitted, entry.group, entry)
 		}
 	}
 
-	return selected
+	plan.Omitted.limitPerGroup(2)
+	return plan
 }
 
 func durableNoteCandidates(results []search.Result) []candidate {
@@ -330,16 +350,17 @@ func durableNoteCandidates(results []search.Result) []candidate {
 		if label == "" {
 			label = filepath.Base(result.NotePath)
 		}
-		excerpt := compactSnippet(result.Snippet)
 		candidates = append(candidates, candidate{
-			group: "durable_notes",
-			score: result.Score,
-			key:   result.NotePath + "#" + strings.TrimSpace(result.Heading),
+			group:  "durable_notes",
+			score:  result.Score,
+			key:    result.NotePath + "#" + strings.TrimSpace(result.Heading),
+			method: "search",
+			notes:  []string{"matched task terms", "high search rank"},
 			item: Item{
 				Source:  result.NotePath,
 				Label:   label,
 				Kind:    "note",
-				Excerpt: excerpt,
+				Excerpt: compactSnippet(result.Snippet),
 				Why:     "high search rank for the task",
 			},
 		})
@@ -355,15 +376,19 @@ func staticCandidates(projectDir string, taskTokens map[string]struct{}, specs [
 		if err != nil {
 			continue
 		}
-		score := spec.BaseScore + overlapScore(taskTokens, strings.Join([]string{spec.Path, spec.Label, content}, " "))
+		overlap := overlapScore(taskTokens, strings.Join([]string{spec.Path, spec.Label, content}, " "))
 		why := spec.DefaultWhy
-		if overlap := overlapScore(taskTokens, strings.Join([]string{spec.Path, spec.Label, content}, " ")); overlap > 0 {
+		notes := []string{"deterministic context source"}
+		if overlap > 0 {
 			why = "matched task terms in " + strings.ToLower(spec.Label)
+			notes = []string{"matched task terms", "deterministic context source"}
 		}
 		candidates = append(candidates, candidate{
-			group: spec.Group,
-			score: score,
-			key:   spec.Path,
+			group:  spec.Group,
+			score:  spec.BaseScore + overlap,
+			key:    spec.Path,
+			method: "deterministic",
+			notes:  notes,
 			item: Item{
 				Source:  spec.Path,
 				Label:   spec.Label,
@@ -386,8 +411,8 @@ func loadStaticSource(projectDir string, spec staticSource) (string, error) {
 	if spec.Path == ".brain/policy.yaml" {
 		return strings.TrimSpace(content), nil
 	}
-	meta, body, err := notes.ParseFrontmatter(content)
-	if err == nil && len(meta) >= 0 {
+	_, body, err := notes.ParseFrontmatter(content)
+	if err == nil {
 		content = body
 	}
 	content = strings.TrimSpace(content)
@@ -425,18 +450,18 @@ func isGeneratedContextPath(path string) bool {
 	}
 }
 
-func addItem(groups *GroupedItems, group string, item Item) {
+func addCandidate(groups *candidateGroups, group string, entry candidate) {
 	switch group {
 	case "durable_notes":
-		groups.DurableNotes = append(groups.DurableNotes, item)
+		groups.DurableNotes = append(groups.DurableNotes, entry)
 	case "generated_context":
-		groups.GeneratedContext = append(groups.GeneratedContext, item)
+		groups.GeneratedContext = append(groups.GeneratedContext, entry)
 	case "policy_workflow":
-		groups.PolicyWorkflow = append(groups.PolicyWorkflow, item)
+		groups.PolicyWorkflow = append(groups.PolicyWorkflow, entry)
 	case "structural_repo":
-		groups.StructuralRepo = append(groups.StructuralRepo, item)
+		groups.StructuralRepo = append(groups.StructuralRepo, entry)
 	case "live_work":
-		groups.LiveWork = append(groups.LiveWork, item)
+		groups.LiveWork = append(groups.LiveWork, entry)
 	}
 }
 
@@ -450,6 +475,50 @@ func sortCandidates(candidates []candidate) {
 		}
 		return candidates[i].score > candidates[j].score
 	})
+}
+
+func (groups candidateGroups) items(explain bool) GroupedItems {
+	out := newGroupedItems()
+	out.DurableNotes = candidatesToItems("durable_notes", groups.DurableNotes, explain)
+	out.GeneratedContext = candidatesToItems("generated_context", groups.GeneratedContext, explain)
+	out.StructuralRepo = candidatesToItems("structural_repo", groups.StructuralRepo, explain)
+	out.LiveWork = candidatesToItems("live_work", groups.LiveWork, explain)
+	out.PolicyWorkflow = candidatesToItems("policy_workflow", groups.PolicyWorkflow, explain)
+	return out
+}
+
+func (groups *candidateGroups) limitPerGroup(limit int) {
+	if limit <= 0 {
+		return
+	}
+	for _, items := range []*[]candidate{
+		&groups.DurableNotes,
+		&groups.GeneratedContext,
+		&groups.StructuralRepo,
+		&groups.LiveWork,
+		&groups.PolicyWorkflow,
+	} {
+		if len(*items) > limit {
+			*items = (*items)[:limit]
+		}
+	}
+}
+
+func candidatesToItems(group string, candidates []candidate, explain bool) []Item {
+	items := make([]Item, 0, len(candidates))
+	for i, entry := range candidates {
+		item := entry.item
+		if explain {
+			item.Rank = i + 1
+			item.SelectionMethod = entry.method
+			item.Diagnostics = &ItemDiagnostics{
+				SourceGroup: group,
+				Notes:       append([]string(nil), entry.notes...),
+			}
+		}
+		items = append(items, item)
+	}
+	return items
 }
 
 func tokenize(text string) map[string]struct{} {
@@ -510,8 +579,7 @@ func compactSnippet(content string) string {
 	if len(paragraph) == 0 {
 		paragraph = append(paragraph, lines[0])
 	}
-	snippet := strings.Join(paragraph, " ")
-	snippet = strings.TrimSpace(snippet)
+	snippet := strings.TrimSpace(strings.Join(paragraph, " "))
 	if len(snippet) > 180 {
 		snippet = strings.TrimSpace(snippet[:177]) + "..."
 	}
@@ -548,4 +616,154 @@ func extractMarkdownSection(content, heading string) string {
 		}
 	}
 	return strings.TrimSpace(strings.Join(out, "\n"))
+}
+
+func buildAmbiguities(req Request, plan selectionPlan) []string {
+	ambiguities := []string{}
+	selected := plan.Selected.items(false)
+	if !req.HasActiveSession && req.TaskSource == "flag" {
+		ambiguities = append(ambiguities, "using explicit task text without an active session")
+	}
+	if countNonEmptyGroups(selected) <= 1 {
+		ambiguities = append(ambiguities, "only one source group provided useful context")
+	}
+	if hasCompetitiveDurableNearby(plan) {
+		ambiguities = append(ambiguities, "multiple nearby durable notes compete for the same role")
+	}
+	return ambiguities
+}
+
+func hasCompetitiveDurableNearby(plan selectionPlan) bool {
+	if len(plan.Selected.DurableNotes) == 0 || len(plan.Omitted.DurableNotes) == 0 {
+		return false
+	}
+	lastSelected := plan.Selected.DurableNotes[len(plan.Selected.DurableNotes)-1]
+	firstOmitted := plan.Omitted.DurableNotes[0]
+	return (lastSelected.score - firstOmitted.score) <= 0.10
+}
+
+func computeConfidence(selected GroupedItems, ambiguities []string) string {
+	groupCount := countNonEmptyGroups(selected)
+	ambiguityCount := len(ambiguities)
+	switch {
+	case groupCount >= 3 && ambiguityCount == 0:
+		return "high"
+	case groupCount <= 1 || ambiguityCount >= 2:
+		return "low"
+	case groupCount == 2 || ambiguityCount == 1:
+		return "medium"
+	default:
+		return "low"
+	}
+}
+
+func renderSelectedGroup(w io.Writer, label string, items []Item) error {
+	if len(items) == 0 {
+		return nil
+	}
+	if _, err := fmt.Fprintf(w, "### %s\n\n", label); err != nil {
+		return err
+	}
+	for _, item := range items {
+		line := fmt.Sprintf("- %s (`%s`)", item.Label, item.Source)
+		if strings.TrimSpace(item.Excerpt) != "" {
+			line += ": " + item.Excerpt
+		} else if strings.TrimSpace(item.Why) != "" {
+			line += ": " + item.Why
+		}
+		if _, err := fmt.Fprintln(w, line); err != nil {
+			return err
+		}
+	}
+	if _, err := io.WriteString(w, "\n"); err != nil {
+		return err
+	}
+	return nil
+}
+
+func renderExplainSections(w io.Writer, packet *Packet) error {
+	if _, err := io.WriteString(w, "\n## Why This Was Selected\n\n"); err != nil {
+		return err
+	}
+	for _, entry := range []struct {
+		label string
+		items []Item
+	}{
+		{label: "Durable Notes", items: packet.Selected.DurableNotes},
+		{label: "Generated Context", items: packet.Selected.GeneratedContext},
+		{label: "Policy Workflow", items: packet.Selected.PolicyWorkflow},
+		{label: "Structural Repo", items: packet.Selected.StructuralRepo},
+		{label: "Live Work", items: packet.Selected.LiveWork},
+	} {
+		if err := renderExplainGroup(w, entry.label, entry.items); err != nil {
+			return err
+		}
+	}
+
+	if _, err := io.WriteString(w, "\n## Omitted Nearby Context\n\n"); err != nil {
+		return err
+	}
+	if totalItems(packet.OmittedNearby) == 0 {
+		if _, err := io.WriteString(w, "- No omitted nearby context.\n"); err != nil {
+			return err
+		}
+	} else {
+		for _, entry := range []struct {
+			label string
+			items []Item
+		}{
+			{label: "Durable Notes", items: packet.OmittedNearby.DurableNotes},
+			{label: "Generated Context", items: packet.OmittedNearby.GeneratedContext},
+			{label: "Policy Workflow", items: packet.OmittedNearby.PolicyWorkflow},
+			{label: "Structural Repo", items: packet.OmittedNearby.StructuralRepo},
+			{label: "Live Work", items: packet.OmittedNearby.LiveWork},
+		} {
+			if err := renderExplainGroup(w, entry.label, entry.items); err != nil {
+				return err
+			}
+		}
+	}
+
+	if _, err := io.WriteString(w, "\n## Missing Or Unused Source Groups\n\n"); err != nil {
+		return err
+	}
+	for _, entry := range []struct {
+		label string
+		count int
+	}{
+		{label: "Durable Notes", count: len(packet.Selected.DurableNotes)},
+		{label: "Generated Context", count: len(packet.Selected.GeneratedContext)},
+		{label: "Policy Workflow", count: len(packet.Selected.PolicyWorkflow)},
+		{label: "Structural Repo", count: len(packet.Selected.StructuralRepo)},
+		{label: "Live Work", count: len(packet.Selected.LiveWork)},
+	} {
+		if entry.count == 0 {
+			if _, err := fmt.Fprintf(w, "- %s\n", entry.label); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func renderExplainGroup(w io.Writer, label string, items []Item) error {
+	if len(items) == 0 {
+		return nil
+	}
+	if _, err := fmt.Fprintf(w, "### %s\n\n", label); err != nil {
+		return err
+	}
+	for _, item := range items {
+		line := fmt.Sprintf("- %s (`%s`): %s", item.Label, item.Source, item.Why)
+		if item.Diagnostics != nil && len(item.Diagnostics.Notes) > 0 {
+			line += " [" + strings.Join(item.Diagnostics.Notes, ", ") + "]"
+		}
+		if _, err := fmt.Fprintln(w, line); err != nil {
+			return err
+		}
+	}
+	if _, err := io.WriteString(w, "\n"); err != nil {
+		return err
+	}
+	return nil
 }

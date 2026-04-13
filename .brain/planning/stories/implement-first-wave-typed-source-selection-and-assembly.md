@@ -3,10 +3,10 @@ created: "2026-04-13T23:17:25Z"
 epic: task-context-assembly
 project: brain
 spec: task-context-assembly
-status: in_progress
+status: done
 title: Implement First-Wave Typed Source Selection And Assembly
 type: story
-updated: "2026-04-13T23:22:56Z"
+updated: "2026-04-13T23:27:23Z"
 ---
 # Implement First-Wave Typed Source Selection And Assembly
 

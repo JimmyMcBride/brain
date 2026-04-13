@@ -3,10 +3,10 @@ created: "2026-04-13T23:17:25Z"
 epic: task-context-assembly
 project: brain
 spec: task-context-assembly
-status: todo
+status: done
 title: Add Explain Mode, Omitted Nearby Context, And Confidence Reporting
 type: story
-updated: "2026-04-13T23:17:25Z"
+updated: "2026-04-13T23:34:36Z"
 ---
 # Add Explain Mode, Omitted Nearby Context, And Confidence Reporting
 
