@@ -1027,6 +1027,8 @@ func renderWorkflows(snapshot Snapshot) string {
 	b.WriteString("## Close-Out\n\n")
 	b.WriteString("- Refresh or update durable notes for meaningful behavior, config, or architecture changes.\n")
 	b.WriteString("- If `skills/brain/` changed, reinstall the local Brain skill for Codex and OpenClaw with `brain skills install --scope local --agent codex --agent openclaw --project .`.\n")
+	b.WriteString("- When opening a PR, make the title and body release-note friendly because GitHub release notes are generated from merged PR metadata.\n")
+	b.WriteString("- Summarize shipped behavior in the PR, not just implementation steps, so future changelogs stay human-readable.\n")
 	b.WriteString("- Finish with `brain session finish`.\n")
 	b.WriteString("- If you must bypass enforcement, use `brain session finish --force --reason \"...\"` so the override is recorded.\n")
 	return b.String()

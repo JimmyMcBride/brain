@@ -31,6 +31,8 @@ Use this file for agent operating workflow inside the repo.
 
 - Refresh or update durable notes for meaningful behavior, config, or architecture changes.
 - If `skills/brain/` changed, reinstall the local Brain skill for Codex and OpenClaw with `brain skills install --scope local --agent codex --agent openclaw --project .`.
+- When opening a PR, make the title and body release-note friendly because GitHub release notes are generated from merged PR metadata.
+- Summarize shipped behavior in the PR, not just implementation steps, so future changelogs stay human-readable.
 - Finish with `brain session finish`.
 - If you must bypass enforcement, use `brain session finish --force --reason "..."` so the override is recorded.
 <!-- brain:end project-doc-workflows -->
