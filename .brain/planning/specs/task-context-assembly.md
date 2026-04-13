@@ -2,10 +2,10 @@
 created: "2026-04-13T22:00:47Z"
 epic: task-context-assembly
 project: brain
-status: draft
+status: approved
 title: Task Context Assembly Spec
 type: spec
-updated: "2026-04-13T22:02:40Z"
+updated: "2026-04-13T22:16:24Z"
 ---
 # Task Context Assembly Spec
 
@@ -24,62 +24,193 @@ Today Brain can load deterministic context files and retrieve durable markdown n
 - Improve Brain's answer to: what context does this task need right now?
 - Move from mostly note-centric retrieval toward typed local context assembly.
 - Keep selected context transparent enough that users can see why it was chosen and what was left out.
-- Reuse existing command surfaces where practical instead of adding a new flagship command too early.
+- Reuse the existing `context` surface instead of adding a new top-level command.
 
 ## Non-Goals
 
 - Replacing markdown as canonical truth.
 - Turning Brain into a hosted or opaque memory system.
 - Designing a broad relationship-graph platform in the first wave.
-- Committing the first wave to a brand-new top-level packet command before the workflow proves necessary.
+- Defining the structural derivation or live-work derivation logic that belongs to later epics.
 
 ## Requirements
 
-- Define a task-context assembly flow that can intentionally combine canonical markdown, generated project docs, structural repo context, live work signals, and policy/workflow guidance.
-- Group selected context by type so the output makes it obvious what kind of source is being included.
-- Include selection rationale for each source or source group.
-- Surface nearby but omitted context so the agent can see obvious alternatives or ambiguities.
-- Keep the output compact enough to act as an agent handoff rather than another broad document dump.
-- Prefer evolution of `brain context load` and `brain search` before introducing a dedicated new top-level command.
+- Add `brain context assemble` as the task-focused context-packet interface under the existing `context` command group.
+- Support `brain context assemble --task "<task>"` and `brain context assemble` using the active session task.
+- Return a compact task-context packet grouped by typed source categories.
+- Include a rationale for each selected source or source group.
+- Include ambiguity notes when Brain is uncertain or missing strong signals.
+- Support an explicit explain mode that expands the packet with richer rationale and omitted-nearby context.
+- Keep the first implementation compatible with current Brain primitives by building on existing context-loading and search behavior.
+- Lock the full packet schema now, even if some source groups remain empty until later epics land.
 
 ## UX / Flows
 
-Task-context assembly during active work:
-1. User starts or validates a session.
-2. User requests task-relevant context for the current task or a provided query.
-3. Brain combines the best local sources by type.
-4. Brain returns a visible bundle that includes selected context, rationale, omitted-nearby context, and ambiguity notes.
+Task-context assembly with explicit task:
+1. User runs `brain context assemble --task "tighten auth flow"`.
+2. Brain resolves the task from the flag.
+3. Brain assembles a compact packet from typed local sources.
+4. Brain returns the selected context, grouped by type, plus ambiguity notes when needed.
 
-Task-context assembly without an active session:
-1. User provides a task or query explicitly.
-2. Brain assembles the same typed context bundle using repo state plus the explicit task text.
-3. Brain remains transparent about weaker confidence when active-work signals are missing.
+Task-context assembly with active session:
+1. User starts or validates a session.
+2. User runs `brain context assemble`.
+3. Brain uses the active session task as the task input.
+4. Brain returns the same typed packet and marks the task source as `session`.
+
+Explain mode:
+1. User runs `brain context assemble --explain`.
+2. Brain returns the normal packet plus detailed selection rationale, omitted-nearby context, and missing or unused source groups.
+
+Missing task flow:
+1. User runs `brain context assemble` with no active session and no `--task`.
+2. Brain returns a clear error explaining that a task or active session is required.
 
 ## Data / Interfaces
 
-- Treat the assembled task-context bundle as a read-only derived output.
-- Preserve existing deterministic context files and search results as lower-level primitives that feed the assembled output.
-- Keep the interface markdown-native and JSON-friendly so the same assembled result is usable in terminal output, tests, and agent integrations.
-- Model source groups at least at the level of markdown truth, generated docs, structural repo context, live work signals, and policy/workflow guidance.
+Public command surface:
+- `brain context assemble --task "<task>"`
+- `brain context assemble`
+- `brain context assemble --explain`
+- `brain context assemble --limit <n>`
+
+Resolution rules:
+- `--task` wins when provided.
+- Otherwise use the active session task.
+- If neither exists, fail clearly.
+
+Default limit:
+- `--limit` defaults to `8` selected items in the packet.
+
+Default human output sections:
+- `## Task Context`
+- `## Selected Context`
+- `## Ambiguities` only when non-empty
+
+Explain-mode-only human output sections:
+- `## Why This Was Selected`
+- `## Omitted Nearby Context`
+- `## Missing Or Unused Source Groups`
+
+JSON output contract:
+
+```json
+{
+  "task": {
+    "text": "tighten auth flow",
+    "source": "flag"
+  },
+  "summary": {
+    "confidence": "high",
+    "selected_count": 0,
+    "group_counts": {
+      "durable_notes": 0,
+      "generated_context": 0,
+      "structural_repo": 0,
+      "live_work": 0,
+      "policy_workflow": 0
+    }
+  },
+  "selected": {
+    "durable_notes": [],
+    "generated_context": [],
+    "structural_repo": [],
+    "live_work": [],
+    "policy_workflow": []
+  },
+  "ambiguities": [],
+  "omitted_nearby": {
+    "durable_notes": [],
+    "generated_context": [],
+    "structural_repo": [],
+    "live_work": [],
+    "policy_workflow": []
+  }
+}
+```
+
+Per-item shape:
+
+```json
+{
+  "source": "docs/project-overview.md",
+  "label": "Project Overview",
+  "kind": "note",
+  "excerpt": "short snippet or summary",
+  "why": "short human-readable reason"
+}
+```
+
+Explain-mode item diagnostics:
+
+```json
+{
+  "rank": 1,
+  "selection_method": "search",
+  "diagnostics": {
+    "source_group": "durable_notes",
+    "notes": ["matched task terms", "high search rank"]
+  }
+}
+```
+
+Source groups:
+- `durable_notes`
+- `generated_context`
+- `structural_repo`
+- `live_work`
+- `policy_workflow`
+
+First-wave population:
+- Populate `durable_notes`, `generated_context`, and `policy_workflow` in this epic.
+- Keep `structural_repo` and `live_work` in the schema but allow them to remain empty until later epics land.
+
+Source-group membership in the first wave:
+- `durable_notes`: `docs/**/*.md`, `.brain/**/*.md` excluding `.brain/context/*`, and `AGENTS.md` when selected as repo truth instead of workflow guidance.
+- `generated_context`: `.brain/context/current-state.md`, `.brain/context/overview.md`, `.brain/context/architecture.md`, `.brain/context/standards.md`.
+- `policy_workflow`: `AGENTS.md` required workflow content, `.brain/policy.yaml`, `.brain/context/workflows.md`, `.brain/context/memory-policy.md`.
+
+## Assembly Pipeline
+
+1. Resolve task text from `--task` or active session.
+2. Load the compact static base from the current context primitives.
+3. Run current markdown search using the resolved task and active-task bias when a session exists.
+4. Classify candidate sources into packet source groups.
+5. Select up to `8` total items with these default caps:
+   - up to `3` durable-note items
+   - up to `2` generated-context items
+   - up to `2` policy/workflow items
+   - remaining capacity can be filled by any non-empty group
+6. Deduplicate by source path plus heading.
+7. Build ambiguity notes when:
+   - there is no active session and task resolution relies only on `--task`
+   - only one source group contains useful context
+   - multiple nearby sources compete for the same role
+8. Compute packet confidence:
+   - `high`: at least three non-empty groups and no ambiguity notes
+   - `medium`: two non-empty groups or one ambiguity note
+   - `low`: zero or one non-empty groups, or two or more ambiguity notes
+9. Build omitted-nearby lists from next-best candidates in each group.
+10. Hide omitted-nearby detail in default human output and show it in `--explain` output.
 
 ## Risks / Open Questions
 
-- How much can existing `context load` and `search` surfaces stretch before a dedicated command becomes cleaner?
-- How much omitted-context detail is useful before the output becomes noisy?
-- Which confidence or ambiguity markers are actually helpful in real use instead of decorative?
+- How far can `context assemble` stretch before Brain eventually needs a separate packet-specific command family?
+- Is the default cap of `8` items compact enough in real agent workflows?
+- Are the confidence buckets useful as phrased, or do they need different language once the first implementation is exercised?
 
 ## Rollout
 
-1. Define the assembled-output contract and rationale model.
-2. Reuse current context and search primitives to prove the workflow.
-3. Add richer typed inputs from the structural and live-work epics.
-4. Re-evaluate whether a dedicated context-packet command is justified after the assembly flow exists.
+1. Add the `context assemble` command and stable packet schema.
+2. Build the first implementation on top of current context and search primitives.
+3. Use this epic to prove the packet UX before structural and live-work epics deepen the source groups.
+4. Re-evaluate whether `context assemble` should remain the long-term surface or evolve further once the later epics land.
 
 ## Story Breakdown
 
-- [ ] Define the task-context output contract and explanation model.
-- [ ] Extend current context/search flows to emit typed assembled context.
-- [ ] Add omitted-nearby and ambiguity reporting without overwhelming the output.
+- [ ] Add the `brain context assemble` command and stable packet schema.
+- [ ] Implement first-wave typed assembly from current durable notes, generated context, and policy/workflow sources.
+- [ ] Add explain-mode rationale, omitted-nearby reporting, and confidence output.
 
 ## Resources
 
@@ -90,4 +221,4 @@ Task-context assembly without an active session:
 
 ## Notes
 
-This epic is the product center of the initiative. The other new epics exist mainly to improve the quality of this assembled output.
+This epic defines the user-facing task-context contract for the v2 initiative. The structural and live-work epics should enrich this packet shape rather than invent parallel context products.
