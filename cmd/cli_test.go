@@ -535,6 +535,75 @@ func TestCLIContextLoadLevelThreeUsesQueryOrActiveSession(t *testing.T) {
 	}
 }
 
+func TestCLIContextAssembleRequiresTaskOrActiveSession(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "context", "install", "--project", env.project))
+
+	missing := env.run(t, "", "--config", env.config, "--project", env.project, "context", "assemble")
+	if missing.err == nil || !strings.Contains(missing.err.Error(), "requires --task or an active session task") {
+		t.Fatalf("expected missing-task error, got err=%v stdout=%s stderr=%s", missing.err, missing.stdout, missing.stderr)
+	}
+}
+
+func TestCLIContextAssembleResolvesTaskFromFlagAndSession(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "context", "install", "--project", env.project))
+
+	byFlag := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "assemble", "--task", "tighten auth flow"))
+	if !strings.Contains(byFlag, "## Task Context") || !strings.Contains(byFlag, "- Task: `tighten auth flow`") || !strings.Contains(byFlag, "- Source: `flag`") {
+		t.Fatalf("unexpected flag-based assemble output:\n%s", byFlag)
+	}
+	if !strings.Contains(byFlag, "## Selected Context") {
+		t.Fatalf("expected selected context section:\n%s", byFlag)
+	}
+
+	initGitProject(t, env.project)
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "session derived task"))
+	bySession := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "assemble"))
+	if !strings.Contains(bySession, "- Task: `session derived task`") || !strings.Contains(bySession, "- Source: `session`") {
+		t.Fatalf("unexpected session-based assemble output:\n%s", bySession)
+	}
+}
+
+func TestCLIContextAssembleJSONReturnsStablePacketShape(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "context", "install", "--project", env.project))
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "assemble", "--task", "tighten auth flow"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, jsonOut)
+	}
+	task, ok := payload["task"].(map[string]any)
+	if !ok || task["text"] != "tighten auth flow" || task["source"] != "flag" {
+		t.Fatalf("unexpected task payload: %#v", payload)
+	}
+	summary, ok := payload["summary"].(map[string]any)
+	if !ok || summary["confidence"] != "low" || summary["selected_count"].(float64) != 0 {
+		t.Fatalf("unexpected summary payload: %#v", payload)
+	}
+	selected, ok := payload["selected"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected selected groups in payload: %#v", payload)
+	}
+	for _, key := range []string{"durable_notes", "generated_context", "structural_repo", "live_work", "policy_workflow"} {
+		items, ok := selected[key].([]any)
+		if !ok || len(items) != 0 {
+			t.Fatalf("expected empty %s group in payload: %#v", key, payload)
+		}
+	}
+	omitted, ok := payload["omitted_nearby"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected omitted groups in payload: %#v", payload)
+	}
+	for _, key := range []string{"durable_notes", "generated_context", "structural_repo", "live_work", "policy_workflow"} {
+		items, ok := omitted[key].([]any)
+		if !ok || len(items) != 0 {
+			t.Fatalf("expected empty omitted %s group in payload: %#v", key, payload)
+		}
+	}
+}
+
 func TestCLISessionWorkflow(t *testing.T) {
 	env := newCLIEnv(t)
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))

@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 
+	"brain/internal/contextassembly"
 	"brain/internal/projectcontext"
 	"brain/internal/search"
 
@@ -19,6 +20,9 @@ func addContextCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLo
 	var force bool
 	var level int
 	var query string
+	var assembleTask string
+	var assembleLimit int
+	var assembleExplain bool
 
 	contextCmd := &cobra.Command{
 		Use:   "context",
@@ -109,6 +113,50 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 		},
 	}
 
+	assembleCmd := &cobra.Command{
+		Use:   "assemble",
+		Short: "Assemble a task-focused context packet",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			projectRoot := contextProjectPath(project, flags.projectPath)
+			appCtx, err := loadApp(projectRoot)
+			if err != nil {
+				return err
+			}
+			defer appCtx.Close()
+
+			resolvedTask := strings.TrimSpace(assembleTask)
+			taskSource := "flag"
+			if resolvedTask == "" {
+				active, err := appCtx.Session.Active(projectRoot)
+				if err != nil {
+					return err
+				}
+				if active != nil {
+					resolvedTask = strings.TrimSpace(active.Task)
+					taskSource = "session"
+				}
+			}
+			if resolvedTask == "" {
+				return errors.New("context assemble requires --task or an active session task")
+			}
+
+			manager := contextassembly.New(appCtx.Context)
+			packet, err := manager.Assemble(contextassembly.Request{
+				ProjectDir: projectRoot,
+				Task:       resolvedTask,
+				TaskSource: taskSource,
+				Limit:      assembleLimit,
+				Explain:    assembleExplain,
+			})
+			if err != nil {
+				return err
+			}
+			return appCtx.Output.Print(packet, func(w io.Writer) error {
+				return contextassembly.RenderHuman(w, packet, assembleExplain)
+			})
+		},
+	}
+
 	for _, sub := range []*cobra.Command{installCmd, refreshCmd} {
 		sub.Flags().StringVar(&project, "project", "", "project root to scan and update")
 		sub.Flags().StringArrayVarP(&agents, "agent", "a", nil, "agent wrapper to generate; repeatable")
@@ -118,8 +166,12 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 	loadCmd.Flags().StringVar(&project, "project", "", "project root to load context from")
 	loadCmd.Flags().IntVar(&level, "level", 0, "context depth to load: 0, 1, 2, or 3")
 	loadCmd.Flags().StringVar(&query, "query", "", "search query for level 3 context")
+	assembleCmd.Flags().StringVar(&project, "project", "", "project root to assemble context from")
+	assembleCmd.Flags().StringVar(&assembleTask, "task", "", "task text to assemble context for")
+	assembleCmd.Flags().IntVar(&assembleLimit, "limit", 8, "maximum selected context items")
+	assembleCmd.Flags().BoolVar(&assembleExplain, "explain", false, "include selection rationale and omitted context")
 
-	contextCmd.AddCommand(installCmd, refreshCmd, loadCmd)
+	contextCmd.AddCommand(installCmd, refreshCmd, loadCmd, assembleCmd)
 	root.AddCommand(contextCmd)
 }
 
