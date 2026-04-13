@@ -93,9 +93,11 @@ func (e *cliEnv) run(t *testing.T, stdin string, args ...string) cliResult {
 }
 
 func normalizeCLIOutput(s, root string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
 	s = strings.ReplaceAll(s, root, "<ROOT>")
+	s = strings.ReplaceAll(s, filepath.ToSlash(root), "<ROOT>")
 	s = rfc3339Pattern.ReplaceAllString(s, "<TIME>")
-	return filepath.ToSlash(s)
+	return s
 }
 
 func requireOK(t *testing.T, result cliResult) string {
