@@ -33,6 +33,7 @@ Install into a project:
 
 ```bash
 brain skills install --scope local --agent codex --project .
+brain skills install --scope local --agent openclaw --project .
 brain skills install --scope local --agent copilot --project .
 brain skills install --scope local --agent pi --project .
 ```
@@ -42,11 +43,22 @@ Use `--mode copy` when the target runtime does not support symlinked skill direc
 Default roots:
 
 - Codex global: `~/.codex/skills/`
+- Codex local: `.codex/skills/`
 - Claude global: `~/.claude/skills/`
 - Copilot global: `~/.copilot/skills/`
 - Pi global: `~/.pi/agent/skills/`
+- OpenClaw global: `~/.openclaw/skills/`
+- OpenClaw local: `.openclaw/skills/`
 - Copilot local: `.github/skills/`
 - Pi local: `.pi/skills/`
+
+## Repo Maintenance
+
+When a repo change updates Brain's command surface or agent-facing workflow guidance, update `skills/brain/SKILL.md` in the same branch and reinstall the local Brain skill for Codex and OpenClaw before closing the work:
+
+```bash
+brain skills install --scope local --agent codex --agent openclaw --project .
+```
 
 ## Relationship To Project Context
 

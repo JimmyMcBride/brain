@@ -12,9 +12,10 @@ This file is a deterministic snapshot of the repository state at the last refres
 - Root: `.`
 - Runtime: `go`
 - Go module: `brain`
-- Current branch: `docs-pr-workflow-and-windows-ci-fixes`
+- Current branch: `feature/mempalace-planning-roadmap`
+- Default branch: `main`
 - Remote: `https://github.com/JimmyMcBride/brain.git`
-- Go test files: `19`
+- Go test files: `20`
 
 ## Docs
 

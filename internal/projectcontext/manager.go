@@ -1015,9 +1015,18 @@ func renderWorkflows(snapshot Snapshot) string {
 	b.WriteString("- Keep durable discoveries, decisions, and risks in AGENTS.md, /docs, or .brain notes.\n")
 	b.WriteString("- Update existing durable notes instead of duplicating context.\n")
 	b.WriteString("- Run required verification commands through `brain session run -- <command>`.\n")
+	b.WriteString("- If you change Brain command behavior or agent-facing workflow guidance, update `skills/brain/SKILL.md` in the same branch.\n")
 	b.WriteString("- Re-read context before large changes if the task shifts.\n\n")
+	b.WriteString("## Ticket Loop\n\n")
+	b.WriteString("1. Start one story or ticket at a time and keep the scope narrow.\n")
+	b.WriteString("2. Implement the story, then run focused tests for the touched packages.\n")
+	b.WriteString("3. Run the required full checks through `brain session run -- go test ./...` and `brain session run -- go build ./...`.\n")
+	b.WriteString("4. Review the diff against the story acceptance criteria and user-facing behavior.\n")
+	b.WriteString("5. If review finds issues, patch the work and repeat the test and review steps.\n")
+	b.WriteString("6. When the story is clean, commit it, push it, and only then move to the next story.\n\n")
 	b.WriteString("## Close-Out\n\n")
 	b.WriteString("- Refresh or update durable notes for meaningful behavior, config, or architecture changes.\n")
+	b.WriteString("- If `skills/brain/` changed, reinstall the local Brain skill for Codex and OpenClaw with `brain skills install --scope local --agent codex --agent openclaw --project .`.\n")
 	b.WriteString("- Finish with `brain session finish`.\n")
 	b.WriteString("- If you must bypass enforcement, use `brain session finish --force --reason \"...\"` so the override is recorded.\n")
 	return b.String()
@@ -1098,5 +1107,7 @@ func renderGitIgnore() string {
 .brain/sessions/
 .brain/policy.override.yaml
 .brain/state/
+.codex/skills/
+.openclaw/skills/
 `) + "\n"
 }

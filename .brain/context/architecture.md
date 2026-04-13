@@ -10,6 +10,7 @@ Use this file for the structural shape of the repository.
 - `internal/brainstorm/`
 - `internal/buildinfo/`
 - `internal/config/`
+- `internal/distill/`
 - `internal/embeddings/`
 - `internal/history/`
 - `internal/index/`

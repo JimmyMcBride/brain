@@ -15,11 +15,22 @@ Use this file for agent operating workflow inside the repo.
 - Keep durable discoveries, decisions, and risks in AGENTS.md, /docs, or .brain notes.
 - Update existing durable notes instead of duplicating context.
 - Run required verification commands through `brain session run -- <command>`.
+- If you change Brain command behavior or agent-facing workflow guidance, update `skills/brain/SKILL.md` in the same branch.
 - Re-read context before large changes if the task shifts.
+
+## Ticket Loop
+
+1. Start one story or ticket at a time and keep the scope narrow.
+2. Implement the story, then run focused tests for the touched packages.
+3. Run the required full checks through `brain session run -- go test ./...` and `brain session run -- go build ./...`.
+4. Review the diff against the story acceptance criteria and user-facing behavior.
+5. If review finds issues, patch the work and repeat the test and review steps.
+6. When the story is clean, commit it, push it, and only then move to the next story.
 
 ## Close-Out
 
 - Refresh or update durable notes for meaningful behavior, config, or architecture changes.
+- If `skills/brain/` changed, reinstall the local Brain skill for Codex and OpenClaw with `brain skills install --scope local --agent codex --agent openclaw --project .`.
 - Finish with `brain session finish`.
 - If you must bypass enforcement, use `brain session finish --force --reason "..."` so the override is recorded.
 <!-- brain:end context-workflows -->

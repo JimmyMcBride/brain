@@ -201,9 +201,16 @@ brain skills install --scope local --agent copilot --project .
 brain skills install --scope global --agent pi
 brain skills install --scope local --agent pi --project .
 brain skills install --scope global --agent openclaw --mode copy
+brain skills install --scope local --agent openclaw --project .
 ```
 
 `brain skills install` always installs the Brain skill. Use `--scope global` to add it to your machine and `--scope local --project .` to add it to the current project.
+
+When a branch changes Brain's command surface or agent-facing workflow guidance, update `skills/brain/SKILL.md` in that same branch and reinstall the local Brain skill for Codex and OpenClaw before closing the work:
+
+```bash
+brain skills install --scope local --agent codex --agent openclaw --project .
+```
 
 ## History And Undo
 
