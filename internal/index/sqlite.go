@@ -29,12 +29,15 @@ type Store struct {
 }
 
 type ChunkRecord struct {
-	ChunkID  int64   `json:"chunk_id"`
-	NotePath string  `json:"note_path"`
-	Heading  string  `json:"heading"`
-	Content  string  `json:"content"`
-	Snippet  string  `json:"snippet"`
-	Score    float64 `json:"score"`
+	ChunkID    int64   `json:"chunk_id"`
+	NotePath   string  `json:"note_path"`
+	NoteTitle  string  `json:"note_title,omitempty"`
+	NoteType   string  `json:"note_type,omitempty"`
+	ModifiedAt string  `json:"modified_at,omitempty"`
+	Heading    string  `json:"heading"`
+	Content    string  `json:"content"`
+	Snippet    string  `json:"snippet"`
+	Score      float64 `json:"score"`
 }
 
 type Stats struct {
@@ -251,7 +254,8 @@ func (s *Store) Reindex(ctx context.Context, workspaceSvc *workspace.Service, pr
 		if err != nil {
 			return Stats{}, fmt.Errorf("marshal note metadata: %w", err)
 		}
-		if _, err := insertNote.ExecContext(ctx, rel, title, noteType, string(metaJSON), body, time.Now().UTC().Format(time.RFC3339)); err != nil {
+		modifiedAt := noteModifiedAt(meta, file)
+		if _, err := insertNote.ExecContext(ctx, rel, title, noteType, string(metaJSON), body, modifiedAt); err != nil {
 			return Stats{}, fmt.Errorf("insert note: %w", err)
 		}
 		stats.Notes++
@@ -397,10 +401,11 @@ func (s *Store) SearchFTS(ctx context.Context, query string, limit int) ([]Chunk
 		return nil, nil
 	}
 	rows, err := s.DB.QueryContext(ctx, `
-		SELECT rowid, note_path, heading,
+		SELECT c.rowid, c.note_path, n.title, n.type, n.modified_at, c.heading,
 		       snippet(chunk_fts, 2, '[', ']', ' … ', 18) AS snippet,
 		       bm25(chunk_fts) AS rank
-		FROM chunk_fts
+		FROM chunk_fts c
+		JOIN notes n ON n.path = c.note_path
 		WHERE chunk_fts MATCH ?
 		ORDER BY rank
 		LIMIT ?`, query, limit)
@@ -413,7 +418,7 @@ func (s *Store) SearchFTS(ctx context.Context, query string, limit int) ([]Chunk
 	for rows.Next() {
 		var rec ChunkRecord
 		var rank float64
-		if err := rows.Scan(&rec.ChunkID, &rec.NotePath, &rec.Heading, &rec.Snippet, &rank); err != nil {
+		if err := rows.Scan(&rec.ChunkID, &rec.NotePath, &rec.NoteTitle, &rec.NoteType, &rec.ModifiedAt, &rec.Heading, &rec.Snippet, &rank); err != nil {
 			return nil, err
 		}
 		rec.Score = rank
@@ -424,8 +429,9 @@ func (s *Store) SearchFTS(ctx context.Context, query string, limit int) ([]Chunk
 
 func (s *Store) EmbeddingCandidates(ctx context.Context, provider, model string) ([]ChunkRecord, [][]float32, error) {
 	rows, err := s.DB.QueryContext(ctx, `
-		SELECT c.id, c.note_path, c.heading, c.content, e.vector
+		SELECT c.id, c.note_path, n.title, n.type, n.modified_at, c.heading, c.content, e.vector
 		FROM chunks c
+		JOIN notes n ON n.path = c.note_path
 		JOIN embeddings e ON e.chunk_id = c.id
 		WHERE e.provider = ? AND e.model = ?`, provider, model)
 	if err != nil {
@@ -438,7 +444,7 @@ func (s *Store) EmbeddingCandidates(ctx context.Context, provider, model string)
 	for rows.Next() {
 		var rec ChunkRecord
 		var blob []byte
-		if err := rows.Scan(&rec.ChunkID, &rec.NotePath, &rec.Heading, &rec.Content, &blob); err != nil {
+		if err := rows.Scan(&rec.ChunkID, &rec.NotePath, &rec.NoteTitle, &rec.NoteType, &rec.ModifiedAt, &rec.Heading, &rec.Content, &blob); err != nil {
 			return nil, nil, err
 		}
 		rec.Snippet = snippet(rec.Content)
@@ -546,6 +552,23 @@ func typeFromMeta(path string, meta map[string]any) string {
 	default:
 		return "note"
 	}
+}
+
+func noteModifiedAt(meta map[string]any, path string) string {
+	for _, key := range []string{"updated", "created"} {
+		switch raw := meta[key].(type) {
+		case string:
+			if ts, err := time.Parse(time.RFC3339, raw); err == nil {
+				return ts.UTC().Format(time.RFC3339)
+			}
+		case time.Time:
+			return raw.UTC().Format(time.RFC3339)
+		}
+	}
+	if info, err := os.Stat(path); err == nil {
+		return info.ModTime().UTC().Format(time.RFC3339)
+	}
+	return time.Now().UTC().Format(time.RFC3339)
 }
 
 func snippet(content string) string {

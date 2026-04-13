@@ -219,6 +219,18 @@ func defaultProjectDir(dir string) string {
 	return dir
 }
 
+func (m *Manager) Active(projectDir string) (*ActiveSession, error) {
+	projectDir, err := filepath.Abs(defaultProjectDir(projectDir))
+	if err != nil {
+		return nil, err
+	}
+	policy, _, _, err := projectcontext.LoadPolicy(projectDir)
+	if err != nil {
+		return nil, err
+	}
+	return loadActiveSessionIfExists(filepath.Join(projectDir, filepath.FromSlash(policy.Session.ActiveFile)))
+}
+
 func (m *Manager) Validate(ctx context.Context, req ValidateRequest) (*ValidationResult, error) {
 	projectDir, err := filepath.Abs(defaultProjectDir(req.ProjectDir))
 	if err != nil {

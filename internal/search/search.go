@@ -3,7 +3,10 @@ package search
 import (
 	"context"
 	"math"
+	"regexp"
 	"sort"
+	"strings"
+	"time"
 
 	"brain/internal/embeddings"
 	"brain/internal/index"
@@ -11,12 +14,22 @@ import (
 
 type Result struct {
 	NotePath      string  `json:"note_path"`
+	NoteTitle     string  `json:"note_title,omitempty"`
+	NoteType      string  `json:"note_type,omitempty"`
+	ModifiedAt    string  `json:"modified_at,omitempty"`
 	Heading       string  `json:"heading"`
 	Snippet       string  `json:"snippet"`
 	Score         float64 `json:"score"`
 	LexicalScore  float64 `json:"lexical_score,omitempty"`
 	SemanticScore float64 `json:"semantic_score,omitempty"`
+	RecencyBoost  float64 `json:"recency_boost,omitempty"`
+	TypeBoost     float64 `json:"type_boost,omitempty"`
+	ContextBoost  float64 `json:"context_boost,omitempty"`
 	Source        string  `json:"source,omitempty"`
+}
+
+type Options struct {
+	ActiveTask string
 }
 
 type Engine struct {
@@ -24,19 +37,29 @@ type Engine struct {
 	embedder embeddings.Provider
 }
 
+var tokenPattern = regexp.MustCompile(`[[:alnum:]_]+`)
+
 func New(store *index.Store, embedder embeddings.Provider) *Engine {
 	return &Engine{store: store, embedder: embedder}
 }
 
 func (e *Engine) Search(ctx context.Context, query string, limit int) ([]Result, error) {
-	return e.search(ctx, query, limit, false)
+	return e.SearchWithOptions(ctx, query, limit, Options{})
 }
 
 func (e *Engine) SearchWithExplain(ctx context.Context, query string, limit int) ([]Result, error) {
-	return e.search(ctx, query, limit, true)
+	return e.SearchWithExplainOptions(ctx, query, limit, Options{})
 }
 
-func (e *Engine) search(ctx context.Context, query string, limit int, explain bool) ([]Result, error) {
+func (e *Engine) SearchWithOptions(ctx context.Context, query string, limit int, opts Options) ([]Result, error) {
+	return e.search(ctx, query, limit, false, opts)
+}
+
+func (e *Engine) SearchWithExplainOptions(ctx context.Context, query string, limit int, opts Options) ([]Result, error) {
+	return e.search(ctx, query, limit, true, opts)
+}
+
+func (e *Engine) search(ctx context.Context, query string, limit int, explain bool, opts Options) ([]Result, error) {
 	fts, err := e.store.SearchFTS(ctx, query, max(limit*3, 15))
 	if err != nil {
 		return nil, err
@@ -47,10 +70,13 @@ func (e *Engine) search(ctx context.Context, query string, limit int, explain bo
 	for i, rec := range fts {
 		lexicalScore := ftsScores[i] * 0.45
 		combined[rec.ChunkID] = &Result{
-			NotePath: rec.NotePath,
-			Heading:  rec.Heading,
-			Snippet:  rec.Snippet,
-			Score:    lexicalScore,
+			NotePath:   rec.NotePath,
+			NoteTitle:  rec.NoteTitle,
+			NoteType:   rec.NoteType,
+			ModifiedAt: rec.ModifiedAt,
+			Heading:    rec.Heading,
+			Snippet:    rec.Snippet,
+			Score:      lexicalScore,
 		}
 		if explain {
 			combined[rec.ChunkID].LexicalScore = lexicalScore
@@ -83,10 +109,13 @@ func (e *Engine) search(ctx context.Context, query string, limit int, explain bo
 						continue
 					}
 					combined[rec.ChunkID] = &Result{
-						NotePath: rec.NotePath,
-						Heading:  rec.Heading,
-						Snippet:  rec.Snippet,
-						Score:    semanticScore,
+						NotePath:   rec.NotePath,
+						NoteTitle:  rec.NoteTitle,
+						NoteType:   rec.NoteType,
+						ModifiedAt: rec.ModifiedAt,
+						Heading:    rec.Heading,
+						Snippet:    rec.Snippet,
+						Score:      semanticScore,
 					}
 					if explain {
 						combined[rec.ChunkID].SemanticScore = semanticScore
@@ -95,6 +124,10 @@ func (e *Engine) search(ctx context.Context, query string, limit int, explain bo
 			}
 		}
 	}
+
+	applyRecencyBoosts(combined, explain)
+	applyTypeBoosts(combined, explain)
+	applyContextBoosts(combined, opts.ActiveTask, explain)
 
 	results := make([]Result, 0, len(combined))
 	for _, result := range combined {
@@ -123,6 +156,115 @@ func (e *Engine) search(ctx context.Context, query string, limit int, explain bo
 		results = results[:limit]
 	}
 	return results, nil
+}
+
+func applyRecencyBoosts(combined map[int64]*Result, explain bool) {
+	if len(combined) == 0 {
+		return
+	}
+	type stampEntry struct {
+		id   int64
+		unix float64
+	}
+	var stamps []float64
+	var parsed []stampEntry
+	for id, result := range combined {
+		if ts, err := time.Parse(time.RFC3339, result.ModifiedAt); err == nil {
+			unix := float64(ts.UTC().Unix())
+			parsed = append(parsed, stampEntry{id: id, unix: unix})
+			stamps = append(stamps, unix)
+		}
+	}
+	norm := normalizeDense(stamps)
+	if len(norm) == 0 {
+		return
+	}
+	for i, entry := range parsed {
+		boost := norm[i] * 0.08
+		combined[entry.id].Score += boost
+		if explain {
+			combined[entry.id].RecencyBoost = boost
+		}
+	}
+}
+
+func applyTypeBoosts(combined map[int64]*Result, explain bool) {
+	for _, result := range combined {
+		boost := noteTypeBoost(result.NoteType)
+		if boost <= 0 {
+			continue
+		}
+		result.Score += boost
+		if explain {
+			result.TypeBoost = boost
+		}
+	}
+}
+
+func applyContextBoosts(combined map[int64]*Result, activeTask string, explain bool) {
+	activeTask = strings.TrimSpace(activeTask)
+	if activeTask == "" {
+		return
+	}
+	taskTokens := tokenize(activeTask)
+	if len(taskTokens) == 0 {
+		return
+	}
+	for _, result := range combined {
+		candidateTokens := tokenize(strings.Join([]string{
+			result.NotePath,
+			result.NoteTitle,
+			result.NoteType,
+			result.Heading,
+			result.Snippet,
+		}, " "))
+		if len(candidateTokens) == 0 {
+			continue
+		}
+		matches := 0
+		for token := range taskTokens {
+			if _, ok := candidateTokens[token]; ok {
+				matches++
+			}
+		}
+		if matches == 0 {
+			continue
+		}
+		boost := (float64(matches) / float64(len(taskTokens))) * 0.07
+		result.Score += boost
+		if explain {
+			result.ContextBoost = boost
+		}
+	}
+}
+
+func noteTypeBoost(noteType string) float64 {
+	switch strings.ToLower(strings.TrimSpace(noteType)) {
+	case "decision":
+		return 0.08
+	case "spec":
+		return 0.07
+	case "change":
+		return 0.06
+	case "epic", "story":
+		return 0.04
+	case "reference", "resource":
+		return 0.02
+	default:
+		return 0
+	}
+}
+
+func tokenize(text string) map[string]struct{} {
+	tokens := tokenPattern.FindAllString(strings.ToLower(text), -1)
+	if len(tokens) == 0 {
+		return nil
+	}
+	out := make(map[string]struct{}, len(tokens))
+	for _, token := range tokens {
+		out[token] = struct{}{}
+	}
+	return out
 }
 
 func cosine(a, b []float32) float64 {

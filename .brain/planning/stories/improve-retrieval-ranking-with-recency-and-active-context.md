@@ -3,10 +3,10 @@ created: "2026-04-13T06:23:52Z"
 epic: retrieval-and-index-lifecycle
 project: brain
 spec: retrieval-and-index-lifecycle
-status: todo
+status: done
 title: Improve Retrieval Ranking With Recency And Active Context
 type: story
-updated: "2026-04-13T06:23:52Z"
+updated: "2026-04-13T07:17:02Z"
 ---
 # Improve Retrieval Ranking With Recency And Active Context
 

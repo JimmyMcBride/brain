@@ -233,7 +233,7 @@ func TestCLISearchStatusAndExplain(t *testing.T) {
 
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "edit", "docs/project-overview.md", "-b", "# Project Overview\n\nRetrieval status should become observable."))
 	searchOutput := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "search", "--explain", "retrieval observable"))
-	if !strings.Contains(searchOutput, "[") || !strings.Contains(searchOutput, "lex=") || !strings.Contains(searchOutput, "sem=") {
+	if !strings.Contains(searchOutput, "[") || !strings.Contains(searchOutput, "lex=") || !strings.Contains(searchOutput, "sem=") || !strings.Contains(searchOutput, "rec=") || !strings.Contains(searchOutput, "type=") || !strings.Contains(searchOutput, "ctx=") {
 		t.Fatalf("expected explain output:\n%s", searchOutput)
 	}
 

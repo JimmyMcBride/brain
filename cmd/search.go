@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 
+	"brain/internal/search"
+
 	"github.com/spf13/cobra"
 )
 
@@ -24,9 +26,17 @@ func addSearchCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoa
 			if _, err := appCtx.EnsureFreshIndex(cmd.Context()); err != nil {
 				return err
 			}
+			searchOpts := search.Options{}
+			active, err := appCtx.Session.Active(flags.projectPath)
+			if err != nil {
+				return err
+			}
+			if active != nil {
+				searchOpts.ActiveTask = active.Task
+			}
 
 			if explain {
-				results, err := appCtx.Search.SearchWithExplain(cmd.Context(), args[0], limit)
+				results, err := appCtx.Search.SearchWithExplainOptions(cmd.Context(), args[0], limit, searchOpts)
 				if err != nil {
 					return err
 				}
@@ -36,7 +46,7 @@ func addSearchCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoa
 						return err
 					}
 					for _, result := range results {
-						if _, err := fmt.Fprintf(w, "%.3f  [%s lex=%.3f sem=%.3f] %s", result.Score, result.Source, result.LexicalScore, result.SemanticScore, result.NotePath); err != nil {
+						if _, err := fmt.Fprintf(w, "%.3f  [%s lex=%.3f sem=%.3f rec=%.3f type=%.3f ctx=%.3f] %s", result.Score, result.Source, result.LexicalScore, result.SemanticScore, result.RecencyBoost, result.TypeBoost, result.ContextBoost, result.NotePath); err != nil {
 							return err
 						}
 						if result.Heading != "" {
@@ -52,7 +62,7 @@ func addSearchCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoa
 				})
 			}
 
-			results, err := appCtx.Search.Search(cmd.Context(), args[0], limit)
+			results, err := appCtx.Search.SearchWithOptions(cmd.Context(), args[0], limit, searchOpts)
 			if err != nil {
 				return err
 			}
