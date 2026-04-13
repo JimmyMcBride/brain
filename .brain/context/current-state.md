@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-13T14:54:45Z"
+updated: "2026-04-13T15:09:36Z"
 ---
 # Current State
 
@@ -82,3 +82,5 @@ Add repo-specific notes here. `brain context refresh` preserves content outside 
 - 2026-04-12: Returned the local checkout to `main` after PR #5 merged and fast-forwarded the repo to `v0.1.7`, which includes the README urgency follow-up and aligned supporting docs.
 
 - 2026-04-13: Updated `skills/brain/SKILL.md` and refreshed the global Codex `brain` skill so it now teaches `brain distill`, `brain search --inject`, `brain context load --level`, and the session-finish distill recovery flow.
+
+- 2026-04-13: Fixed the CLI test output normalizer so Windows no longer corrupts JSON escape sequences while replacing temp-root paths, which restores `TestCLIContextLoadLevels` and other JSON-based CLI tests on the Windows pipeline.
