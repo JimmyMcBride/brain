@@ -579,8 +579,11 @@ func TestCLIContextAssembleJSONReturnsStablePacketShape(t *testing.T) {
 		t.Fatalf("unexpected task payload: %#v", payload)
 	}
 	summary, ok := payload["summary"].(map[string]any)
-	if !ok || summary["confidence"] != "low" || summary["selected_count"].(float64) != 0 {
+	if !ok || summary["confidence"] != "low" {
 		t.Fatalf("unexpected summary payload: %#v", payload)
+	}
+	if _, ok := summary["selected_count"].(float64); !ok {
+		t.Fatalf("expected selected_count in summary payload: %#v", payload)
 	}
 	selected, ok := payload["selected"].(map[string]any)
 	if !ok {
@@ -588,8 +591,11 @@ func TestCLIContextAssembleJSONReturnsStablePacketShape(t *testing.T) {
 	}
 	for _, key := range []string{"durable_notes", "generated_context", "structural_repo", "live_work", "policy_workflow"} {
 		items, ok := selected[key].([]any)
-		if !ok || len(items) != 0 {
-			t.Fatalf("expected empty %s group in payload: %#v", key, payload)
+		if !ok {
+			t.Fatalf("expected %s group in payload: %#v", key, payload)
+		}
+		if (key == "structural_repo" || key == "live_work") && len(items) != 0 {
+			t.Fatalf("expected future %s group to remain empty: %#v", key, payload)
 		}
 	}
 	omitted, ok := payload["omitted_nearby"].(map[string]any)
@@ -601,6 +607,34 @@ func TestCLIContextAssembleJSONReturnsStablePacketShape(t *testing.T) {
 		if !ok || len(items) != 0 {
 			t.Fatalf("expected empty omitted %s group in payload: %#v", key, payload)
 		}
+	}
+}
+
+func TestCLIContextAssembleSelectsFirstWaveSourceGroups(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "context", "install", "--project", env.project))
+	if err := os.MkdirAll(filepath.Join(env.project, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(env.project, "docs", "auth-flow.md"), []byte("# Auth Flow\n\nTighten the auth flow around bearer token refresh.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "assemble", "--task", "auth flow"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, jsonOut)
+	}
+	summary := payload["summary"].(map[string]any)
+	if summary["selected_count"].(float64) == 0 {
+		t.Fatalf("expected selected sources in packet: %#v", payload)
+	}
+	groupCounts := summary["group_counts"].(map[string]any)
+	if groupCounts["durable_notes"].(float64) == 0 || groupCounts["generated_context"].(float64) == 0 || groupCounts["policy_workflow"].(float64) == 0 {
+		t.Fatalf("expected first-wave groups to be selected: %#v", payload)
+	}
+	if groupCounts["structural_repo"].(float64) != 0 || groupCounts["live_work"].(float64) != 0 {
+		t.Fatalf("expected future groups to remain empty: %#v", payload)
 	}
 }
 

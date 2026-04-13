@@ -4,9 +4,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 
+	"brain/internal/notes"
 	"brain/internal/projectcontext"
+	"brain/internal/search"
 )
 
 type Manager struct {
@@ -14,11 +20,12 @@ type Manager struct {
 }
 
 type Request struct {
-	ProjectDir string
-	Task       string
-	TaskSource string
-	Limit      int
-	Explain    bool
+	ProjectDir    string
+	Task          string
+	TaskSource    string
+	Limit         int
+	Explain       bool
+	SearchResults []search.Result
 }
 
 type Packet struct {
@@ -72,6 +79,39 @@ type ItemDiagnostics struct {
 	Notes       []string `json:"notes,omitempty"`
 }
 
+type candidate struct {
+	group string
+	item  Item
+	score float64
+	key   string
+}
+
+type staticSource struct {
+	Path         string
+	Label        string
+	Group        string
+	Kind         string
+	BaseScore    float64
+	DefaultWhy   string
+	SectionTitle string
+}
+
+var taskTokenPattern = regexp.MustCompile(`[[:alnum:]_]+`)
+
+var generatedContextSources = []staticSource{
+	{Path: ".brain/context/current-state.md", Label: "Current State", Group: "generated_context", Kind: "generated_context", BaseScore: 0.040, DefaultWhy: "default current-state context for task assembly"},
+	{Path: ".brain/context/overview.md", Label: "Overview", Group: "generated_context", Kind: "generated_context", BaseScore: 0.030, DefaultWhy: "default overview context for task assembly"},
+	{Path: ".brain/context/architecture.md", Label: "Architecture", Group: "generated_context", Kind: "generated_context", BaseScore: 0.020, DefaultWhy: "default architecture context for task assembly"},
+	{Path: ".brain/context/standards.md", Label: "Standards", Group: "generated_context", Kind: "generated_context", BaseScore: 0.010, DefaultWhy: "default standards context for task assembly"},
+}
+
+var policyWorkflowSources = []staticSource{
+	{Path: "AGENTS.md", Label: "Required Workflow", Group: "policy_workflow", Kind: "policy", BaseScore: 0.040, DefaultWhy: "default required workflow guidance for task assembly", SectionTitle: "Required Workflow"},
+	{Path: ".brain/context/workflows.md", Label: "Workflow Guidance", Group: "policy_workflow", Kind: "policy", BaseScore: 0.030, DefaultWhy: "default workflow guidance for task assembly"},
+	{Path: ".brain/context/memory-policy.md", Label: "Memory Policy", Group: "policy_workflow", Kind: "policy", BaseScore: 0.020, DefaultWhy: "default memory guidance for task assembly"},
+	{Path: ".brain/policy.yaml", Label: "Policy", Group: "policy_workflow", Kind: "policy", BaseScore: 0.010, DefaultWhy: "default policy contract for task assembly"},
+}
+
 func New(contextManager *projectcontext.Manager) *Manager {
 	return &Manager{Context: contextManager}
 }
@@ -98,6 +138,20 @@ func (m *Manager) Assemble(req Request) (*Packet, error) {
 		Selected:      newGroupedItems(),
 		Ambiguities:   []string{},
 		OmittedNearby: newGroupedItems(),
+	}
+	limit := req.Limit
+	if limit <= 0 {
+		limit = 8
+	}
+	selected := selectCandidates(task, req.ProjectDir, limit, req.SearchResults)
+	packet.Selected = selected
+	packet.Summary.SelectedCount = totalItems(selected)
+	packet.Summary.GroupCounts = GroupCounts{
+		DurableNotes:     len(selected.DurableNotes),
+		GeneratedContext: len(selected.GeneratedContext),
+		StructuralRepo:   len(selected.StructuralRepo),
+		LiveWork:         len(selected.LiveWork),
+		PolicyWorkflow:   len(selected.PolicyWorkflow),
 	}
 	return packet, nil
 }
@@ -132,7 +186,13 @@ func RenderHuman(w io.Writer, packet *Packet, explain bool) error {
 				return err
 			}
 			for _, item := range items {
-				if _, err := fmt.Fprintf(w, "- `%s`: %s\n", item.Source, item.Why); err != nil {
+				line := fmt.Sprintf("- %s (`%s`)", item.Label, item.Source)
+				if strings.TrimSpace(item.Excerpt) != "" {
+					line += ": " + item.Excerpt
+				} else if strings.TrimSpace(item.Why) != "" {
+					line += ": " + item.Why
+				}
+				if _, err := fmt.Fprintln(w, line); err != nil {
 					return err
 				}
 			}
@@ -194,4 +254,298 @@ func countNonEmptyGroups(groups GroupedItems) int {
 		}
 	}
 	return count
+}
+
+func totalItems(groups GroupedItems) int {
+	return len(groups.DurableNotes) + len(groups.GeneratedContext) + len(groups.StructuralRepo) + len(groups.LiveWork) + len(groups.PolicyWorkflow)
+}
+
+func selectCandidates(task, projectDir string, limit int, searchResults []search.Result) GroupedItems {
+	selected := newGroupedItems()
+	taskTokens := tokenize(task)
+	grouped := map[string][]candidate{
+		"durable_notes":     durableNoteCandidates(searchResults),
+		"generated_context": staticCandidates(projectDir, taskTokens, generatedContextSources),
+		"policy_workflow":   staticCandidates(projectDir, taskTokens, policyWorkflowSources),
+	}
+	groupCaps := map[string]int{
+		"durable_notes":     3,
+		"generated_context": 2,
+		"policy_workflow":   2,
+	}
+
+	seen := map[string]struct{}{}
+	for _, group := range []string{"durable_notes", "generated_context", "policy_workflow"} {
+		candidates := grouped[group]
+		selectedCount := 0
+		for _, candidate := range candidates {
+			if totalItems(selected) >= limit || selectedCount >= groupCaps[group] {
+				break
+			}
+			if _, ok := seen[candidate.key]; ok {
+				continue
+			}
+			addItem(&selected, group, candidate.item)
+			seen[candidate.key] = struct{}{}
+			selectedCount++
+		}
+	}
+
+	if totalItems(selected) < limit {
+		var remaining []candidate
+		for _, group := range []string{"durable_notes", "generated_context", "policy_workflow"} {
+			for _, candidate := range grouped[group] {
+				if _, ok := seen[candidate.key]; ok {
+					continue
+				}
+				remaining = append(remaining, candidate)
+			}
+		}
+		sortCandidates(remaining)
+		for _, candidate := range remaining {
+			if totalItems(selected) >= limit {
+				break
+			}
+			if _, ok := seen[candidate.key]; ok {
+				continue
+			}
+			addItem(&selected, candidate.group, candidate.item)
+			seen[candidate.key] = struct{}{}
+		}
+	}
+
+	return selected
+}
+
+func durableNoteCandidates(results []search.Result) []candidate {
+	candidates := make([]candidate, 0, len(results))
+	for _, result := range results {
+		if classifyResultGroup(result.NotePath) != "durable_notes" {
+			continue
+		}
+		label := strings.TrimSpace(result.NoteTitle)
+		if label == "" && strings.TrimSpace(result.Heading) != "" {
+			label = strings.TrimSpace(result.Heading)
+		}
+		if label == "" {
+			label = filepath.Base(result.NotePath)
+		}
+		excerpt := compactSnippet(result.Snippet)
+		candidates = append(candidates, candidate{
+			group: "durable_notes",
+			score: result.Score,
+			key:   result.NotePath + "#" + strings.TrimSpace(result.Heading),
+			item: Item{
+				Source:  result.NotePath,
+				Label:   label,
+				Kind:    "note",
+				Excerpt: excerpt,
+				Why:     "high search rank for the task",
+			},
+		})
+	}
+	sortCandidates(candidates)
+	return candidates
+}
+
+func staticCandidates(projectDir string, taskTokens map[string]struct{}, specs []staticSource) []candidate {
+	candidates := make([]candidate, 0, len(specs))
+	for _, spec := range specs {
+		content, err := loadStaticSource(projectDir, spec)
+		if err != nil {
+			continue
+		}
+		score := spec.BaseScore + overlapScore(taskTokens, strings.Join([]string{spec.Path, spec.Label, content}, " "))
+		why := spec.DefaultWhy
+		if overlap := overlapScore(taskTokens, strings.Join([]string{spec.Path, spec.Label, content}, " ")); overlap > 0 {
+			why = "matched task terms in " + strings.ToLower(spec.Label)
+		}
+		candidates = append(candidates, candidate{
+			group: spec.Group,
+			score: score,
+			key:   spec.Path,
+			item: Item{
+				Source:  spec.Path,
+				Label:   spec.Label,
+				Kind:    spec.Kind,
+				Excerpt: compactSnippet(content),
+				Why:     why,
+			},
+		})
+	}
+	sortCandidates(candidates)
+	return candidates
+}
+
+func loadStaticSource(projectDir string, spec staticSource) (string, error) {
+	raw, err := os.ReadFile(filepath.Join(projectDir, filepath.FromSlash(spec.Path)))
+	if err != nil {
+		return "", err
+	}
+	content := strings.ReplaceAll(string(raw), "\r\n", "\n")
+	if spec.Path == ".brain/policy.yaml" {
+		return strings.TrimSpace(content), nil
+	}
+	meta, body, err := notes.ParseFrontmatter(content)
+	if err == nil && len(meta) >= 0 {
+		content = body
+	}
+	content = strings.TrimSpace(content)
+	if spec.SectionTitle != "" {
+		if section := extractMarkdownSection(content, spec.SectionTitle); section != "" {
+			return section, nil
+		}
+	}
+	return content, nil
+}
+
+func classifyResultGroup(path string) string {
+	switch {
+	case path == "AGENTS.md":
+		return ""
+	case isGeneratedContextPath(path):
+		return ""
+	case path == ".brain/context/workflows.md", path == ".brain/context/memory-policy.md", path == ".brain/policy.yaml":
+		return ""
+	case strings.HasPrefix(path, "docs/"):
+		return "durable_notes"
+	case strings.HasPrefix(path, ".brain/") && !strings.HasPrefix(path, ".brain/context/"):
+		return "durable_notes"
+	default:
+		return ""
+	}
+}
+
+func isGeneratedContextPath(path string) bool {
+	switch path {
+	case ".brain/context/current-state.md", ".brain/context/overview.md", ".brain/context/architecture.md", ".brain/context/standards.md":
+		return true
+	default:
+		return false
+	}
+}
+
+func addItem(groups *GroupedItems, group string, item Item) {
+	switch group {
+	case "durable_notes":
+		groups.DurableNotes = append(groups.DurableNotes, item)
+	case "generated_context":
+		groups.GeneratedContext = append(groups.GeneratedContext, item)
+	case "policy_workflow":
+		groups.PolicyWorkflow = append(groups.PolicyWorkflow, item)
+	case "structural_repo":
+		groups.StructuralRepo = append(groups.StructuralRepo, item)
+	case "live_work":
+		groups.LiveWork = append(groups.LiveWork, item)
+	}
+}
+
+func sortCandidates(candidates []candidate) {
+	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].score == candidates[j].score {
+			if candidates[i].group == candidates[j].group {
+				return candidates[i].item.Source < candidates[j].item.Source
+			}
+			return candidates[i].group < candidates[j].group
+		}
+		return candidates[i].score > candidates[j].score
+	})
+}
+
+func tokenize(text string) map[string]struct{} {
+	matches := taskTokenPattern.FindAllString(strings.ToLower(text), -1)
+	if len(matches) == 0 {
+		return nil
+	}
+	out := make(map[string]struct{}, len(matches))
+	for _, match := range matches {
+		out[match] = struct{}{}
+	}
+	return out
+}
+
+func overlapScore(taskTokens map[string]struct{}, text string) float64 {
+	if len(taskTokens) == 0 {
+		return 0
+	}
+	candidateTokens := tokenize(text)
+	if len(candidateTokens) == 0 {
+		return 0
+	}
+	matches := 0
+	for token := range taskTokens {
+		if _, ok := candidateTokens[token]; ok {
+			matches++
+		}
+	}
+	if matches == 0 {
+		return 0
+	}
+	return float64(matches) / float64(len(taskTokens))
+}
+
+func compactSnippet(content string) string {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return ""
+	}
+	lines := strings.Split(content, "\n")
+	var paragraph []string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			if len(paragraph) > 0 {
+				break
+			}
+			continue
+		}
+		if strings.HasPrefix(line, "#") || strings.HasPrefix(line, "<!--") {
+			continue
+		}
+		paragraph = append(paragraph, line)
+		if len(strings.Join(paragraph, " ")) >= 160 {
+			break
+		}
+	}
+	if len(paragraph) == 0 {
+		paragraph = append(paragraph, lines[0])
+	}
+	snippet := strings.Join(paragraph, " ")
+	snippet = strings.TrimSpace(snippet)
+	if len(snippet) > 180 {
+		snippet = strings.TrimSpace(snippet[:177]) + "..."
+	}
+	return snippet
+}
+
+func extractMarkdownSection(content, heading string) string {
+	lines := strings.Split(content, "\n")
+	inSection := false
+	sectionLevel := 0
+	var out []string
+	for _, line := range lines {
+		if strings.HasPrefix(line, "#") {
+			level := 0
+			for _, ch := range line {
+				if ch == '#' {
+					level++
+				} else {
+					break
+				}
+			}
+			title := strings.TrimSpace(strings.TrimLeft(line, "#"))
+			if strings.EqualFold(title, heading) {
+				inSection = true
+				sectionLevel = level
+				continue
+			}
+			if inSection && level <= sectionLevel {
+				break
+			}
+		}
+		if inSection {
+			out = append(out, line)
+		}
+	}
+	return strings.TrimSpace(strings.Join(out, "\n"))
 }

@@ -139,14 +139,35 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 			if resolvedTask == "" {
 				return errors.New("context assemble requires --task or an active session task")
 			}
+			searchResults := []search.Result{}
+			if err := appCtx.SyncIndex(cmd.Context()); err != nil {
+				return err
+			}
+			activeTask := ""
+			active, err := appCtx.Session.Active(projectRoot)
+			if err != nil {
+				return err
+			}
+			if active != nil {
+				activeTask = strings.TrimSpace(active.Task)
+			}
+			searchLimit := 16
+			if assembleLimit > 0 && assembleLimit*4 > searchLimit {
+				searchLimit = assembleLimit * 4
+			}
+			searchResults, err = appCtx.Search.SearchWithOptions(cmd.Context(), resolvedTask, searchLimit, search.Options{ActiveTask: activeTask})
+			if err != nil {
+				return err
+			}
 
 			manager := contextassembly.New(appCtx.Context)
 			packet, err := manager.Assemble(contextassembly.Request{
-				ProjectDir: projectRoot,
-				Task:       resolvedTask,
-				TaskSource: taskSource,
-				Limit:      assembleLimit,
-				Explain:    assembleExplain,
+				ProjectDir:    projectRoot,
+				Task:          resolvedTask,
+				TaskSource:    taskSource,
+				Limit:         assembleLimit,
+				Explain:       assembleExplain,
+				SearchResults: searchResults,
 			})
 			if err != nil {
 				return err
