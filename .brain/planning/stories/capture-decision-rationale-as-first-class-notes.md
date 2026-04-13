@@ -3,10 +3,10 @@ created: "2026-04-13T06:23:52Z"
 epic: planning-and-brainstorming-ux
 project: brain
 spec: planning-and-brainstorming-ux
-status: todo
+status: done
 title: Capture Decision Rationale As First-Class Notes
 type: story
-updated: "2026-04-13T06:23:52Z"
+updated: "2026-04-13T07:12:12Z"
 ---
 # Capture Decision Rationale As First-Class Notes
 

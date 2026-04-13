@@ -75,7 +75,15 @@ func (m *Manager) Create(input CreateInput) (*Note, error) {
 		input.Template = "resource.md"
 	}
 	if input.Subdir == "" && input.Section == ".brain" {
-		input.Subdir = "resources/references"
+		switch input.NoteType {
+		case "decision":
+			input.Subdir = "resources/decisions"
+		default:
+			input.Subdir = "resources/references"
+		}
+	}
+	if input.Template == "resource.md" && input.NoteType == "decision" {
+		input.Template = "decision.md"
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	relDir := filepath.ToSlash(filepath.Join(input.Section, input.Subdir))
@@ -399,6 +407,9 @@ func inferTypeFromPath(path string) string {
 	parts := strings.Split(filepath.ToSlash(path), "/")
 	if len(parts) == 0 {
 		return "note"
+	}
+	if strings.HasPrefix(filepath.ToSlash(path), ".brain/resources/decisions/") {
+		return "decision"
 	}
 	switch parts[0] {
 	case ".brain":
