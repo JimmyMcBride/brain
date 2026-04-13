@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -246,6 +247,31 @@ func TestCLISearchStatusAndExplain(t *testing.T) {
 	stale := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "search", "status"))
 	if !strings.Contains(stale, "state: stale") || !strings.Contains(stale, "workspace signature changed") {
 		t.Fatalf("expected stale index status after managed markdown change:\n%s", stale)
+	}
+}
+
+func TestCLISearchInjectIncludesContextBlockInHumanAndJSONModes(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "edit", "docs/project-overview.md", "-b", "# Project Overview\n\nInjectable context should cite the project overview note."))
+
+	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "search", "--inject", "injectable context"))
+	if !strings.Contains(human, "## Relevant Context") || !strings.Contains(human, "docs/project-overview.md") {
+		t.Fatalf("expected injected context in human output:\n%s", human)
+	}
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "search", "--inject", "injectable context"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, jsonOut)
+	}
+	results, ok := payload["results"].([]any)
+	if !ok || len(results) == 0 {
+		t.Fatalf("expected results in json payload: %#v", payload)
+	}
+	contextBlock, ok := payload["context_block"].(string)
+	if !ok || !strings.Contains(contextBlock, "## Relevant Context") || !strings.Contains(contextBlock, "docs/project-overview.md") {
+		t.Fatalf("expected context block in json payload: %#v", payload)
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 func addSearchCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoader) {
 	var limit int
 	var explain bool
+	var inject bool
 
 	searchCmd := &cobra.Command{
 		Use:   "search <query>",
@@ -40,6 +41,33 @@ func addSearchCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoa
 				if err != nil {
 					return err
 				}
+				if inject {
+					payload := map[string]any{
+						"results":       results,
+						"context_block": search.BuildContextBlock(results),
+					}
+					return appCtx.Output.Print(payload, func(w io.Writer) error {
+						if len(results) == 0 {
+							_, err := io.WriteString(w, "No results.\n")
+							return err
+						}
+						for _, result := range results {
+							if _, err := fmt.Fprintf(w, "%.3f  [%s lex=%.3f sem=%.3f rec=%.3f type=%.3f ctx=%.3f] %s", result.Score, result.Source, result.LexicalScore, result.SemanticScore, result.RecencyBoost, result.TypeBoost, result.ContextBoost, result.NotePath); err != nil {
+								return err
+							}
+							if result.Heading != "" {
+								if _, err := fmt.Fprintf(w, " -> %s", result.Heading); err != nil {
+									return err
+								}
+							}
+							if _, err := fmt.Fprintf(w, "\n  %s\n", result.Snippet); err != nil {
+								return err
+							}
+						}
+						_, err := fmt.Fprintf(w, "\n%s", search.BuildContextBlock(results))
+						return err
+					})
+				}
 				return appCtx.Output.Print(results, func(w io.Writer) error {
 					if len(results) == 0 {
 						_, err := io.WriteString(w, "No results.\n")
@@ -66,6 +94,33 @@ func addSearchCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoa
 			if err != nil {
 				return err
 			}
+			if inject {
+				payload := map[string]any{
+					"results":       results,
+					"context_block": search.BuildContextBlock(results),
+				}
+				return appCtx.Output.Print(payload, func(w io.Writer) error {
+					if len(results) == 0 {
+						_, err := io.WriteString(w, "No results.\n")
+						return err
+					}
+					for _, result := range results {
+						if _, err := fmt.Fprintf(w, "%.3f  %s", result.Score, result.NotePath); err != nil {
+							return err
+						}
+						if result.Heading != "" {
+							if _, err := fmt.Fprintf(w, " -> %s", result.Heading); err != nil {
+								return err
+							}
+						}
+						if _, err := fmt.Fprintf(w, "\n  %s\n", result.Snippet); err != nil {
+							return err
+						}
+					}
+					_, err := fmt.Fprintf(w, "\n%s", search.BuildContextBlock(results))
+					return err
+				})
+			}
 			return appCtx.Output.Print(results, func(w io.Writer) error {
 				if len(results) == 0 {
 					_, err := io.WriteString(w, "No results.\n")
@@ -90,6 +145,7 @@ func addSearchCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoa
 	}
 	searchCmd.Flags().IntVarP(&limit, "limit", "n", 10, "maximum results")
 	searchCmd.Flags().BoolVar(&explain, "explain", false, "show lexical and semantic ranking contributions")
+	searchCmd.Flags().BoolVar(&inject, "inject", false, "include an agent-ready relevant-context block")
 
 	statusCmd := &cobra.Command{
 		Use:   "status",

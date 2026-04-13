@@ -343,3 +343,18 @@ The workflow should stay explicit and deterministic.
 		t.Fatalf("expected note path in baseline results, got %+v", withoutContext)
 	}
 }
+
+func TestBuildContextBlockDedupesNotes(t *testing.T) {
+	block := BuildContextBlock([]Result{
+		{NotePath: "docs/session.md", Heading: "Overview", Snippet: "Session guidance."},
+		{NotePath: "docs/session.md", Heading: "Details", Snippet: "More details."},
+		{NotePath: "AGENTS.md", Heading: "", Snippet: "Project contract."},
+	})
+
+	if strings.Count(block, "docs/session.md") != 1 {
+		t.Fatalf("expected deduped session note in context block:\n%s", block)
+	}
+	if !strings.Contains(block, "## Relevant Context") || !strings.Contains(block, "AGENTS.md") {
+		t.Fatalf("unexpected context block contents:\n%s", block)
+	}
+}

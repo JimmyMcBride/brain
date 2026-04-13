@@ -2,6 +2,7 @@ package search
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"regexp"
 	"sort"
@@ -265,6 +266,33 @@ func tokenize(text string) map[string]struct{} {
 		out[token] = struct{}{}
 	}
 	return out
+}
+
+func BuildContextBlock(results []Result) string {
+	if len(results) == 0 {
+		return "## Relevant Context\n\n- No relevant context found.\n"
+	}
+	seen := map[string]struct{}{}
+	lines := []string{"## Relevant Context", ""}
+	for _, result := range results {
+		if _, ok := seen[result.NotePath]; ok {
+			continue
+		}
+		seen[result.NotePath] = struct{}{}
+		source := fmt.Sprintf("- Source: `%s`", result.NotePath)
+		if result.Heading != "" {
+			source += fmt.Sprintf(" -> `%s`", result.Heading)
+		}
+		snippet := strings.TrimSpace(result.Snippet)
+		if snippet != "" {
+			source += fmt.Sprintf(": %s", snippet)
+		}
+		lines = append(lines, source)
+		if len(seen) >= 5 {
+			break
+		}
+	}
+	return strings.Join(lines, "\n") + "\n"
 }
 
 func cosine(a, b []float32) float64 {
