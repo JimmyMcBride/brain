@@ -746,6 +746,82 @@ func TestCLIContextStructureRebuildsAndSupportsPathFilter(t *testing.T) {
 	}
 }
 
+func TestCLIContextLiveRequiresTaskOrActiveSession(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "context", "install", "--project", env.project))
+
+	missing := env.run(t, "", "--config", env.config, "--project", env.project, "context", "live")
+	if missing.err == nil || !strings.Contains(missing.err.Error(), "requires --task or an active session task") {
+		t.Fatalf("expected missing-task error, got err=%v stdout=%s stderr=%s", missing.err, missing.stdout, missing.stderr)
+	}
+}
+
+func TestCLIContextLiveResolvesTaskFromFlagAndSession(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "context", "install", "--project", env.project))
+
+	byFlag := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "live", "--task", "tighten auth flow"))
+	if !strings.Contains(byFlag, "## Task") || !strings.Contains(byFlag, "- Task: `tighten auth flow`") || !strings.Contains(byFlag, "- Source: `flag`") {
+		t.Fatalf("unexpected flag-based live output:\n%s", byFlag)
+	}
+
+	initGitProject(t, env.project)
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "session live task"))
+	bySession := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "live"))
+	if !strings.Contains(bySession, "- Task: `session live task`") || !strings.Contains(bySession, "- Source: `session`") || !strings.Contains(bySession, "## Session") {
+		t.Fatalf("unexpected session-based live output:\n%s", bySession)
+	}
+}
+
+func TestCLIContextLiveJSONReturnsStablePacketShape(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "context", "install", "--project", env.project))
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "live", "--task", "tighten auth flow"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, jsonOut)
+	}
+	task, ok := payload["task"].(map[string]any)
+	if !ok || task["text"] != "tighten auth flow" || task["source"] != "flag" {
+		t.Fatalf("unexpected task payload: %#v", payload)
+	}
+	sessionPayload, ok := payload["session"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected session payload: %#v", payload)
+	}
+	if _, ok := sessionPayload["active"].(bool); !ok {
+		t.Fatalf("expected active boolean in session payload: %#v", payload)
+	}
+	worktree, ok := payload["worktree"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected worktree payload: %#v", payload)
+	}
+	for _, key := range []string{"changed_files", "touched_boundaries"} {
+		if _, ok := worktree[key].([]any); !ok {
+			t.Fatalf("expected %s array in worktree payload: %#v", key, payload)
+		}
+	}
+	if _, ok := payload["nearby_tests"].([]any); !ok {
+		t.Fatalf("expected nearby_tests array: %#v", payload)
+	}
+	verification, ok := payload["verification"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected verification payload: %#v", payload)
+	}
+	for _, key := range []string{"recent_commands", "profiles"} {
+		if _, ok := verification[key].([]any); !ok {
+			t.Fatalf("expected %s array in verification payload: %#v", key, payload)
+		}
+	}
+	if _, ok := payload["policy_hints"].([]any); !ok {
+		t.Fatalf("expected policy_hints array: %#v", payload)
+	}
+	if _, ok := payload["ambiguities"].([]any); !ok {
+		t.Fatalf("expected ambiguities array: %#v", payload)
+	}
+}
+
 func TestCLIContextAssembleExplainReportsRationaleAndAmbiguities(t *testing.T) {
 	env := newCLIEnv(t)
 	requireOK(t, env.run(t, "", "--config", env.config, "context", "install", "--project", env.project))

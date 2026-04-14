@@ -14,6 +14,7 @@ import (
 	"brain/internal/embeddings"
 	"brain/internal/history"
 	"brain/internal/index"
+	"brain/internal/livecontext"
 	"brain/internal/notes"
 	"brain/internal/output"
 	"brain/internal/plan"
@@ -46,6 +47,7 @@ type App struct {
 	Skills     *skills.Installer
 	Context    *projectcontext.Manager
 	Structure  *structure.Manager
+	Live       *livecontext.Manager
 	Session    *session.Manager
 	Output     *output.Printer
 }
@@ -103,6 +105,7 @@ func New(configPath, projectPath string, jsonOutput bool, opts Options) (*App, e
 	if err != nil {
 		return nil, err
 	}
+	liveContextManager := livecontext.New()
 
 	return &App{
 		Config:     cfg,
@@ -123,6 +126,7 @@ func New(configPath, projectPath string, jsonOutput bool, opts Options) (*App, e
 		Skills:     skills.NewInstaller(userHome),
 		Context:    projectcontext.New(userHome),
 		Structure:  structureManager,
+		Live:       liveContextManager,
 		Session:    sessionManager,
 		Output:     output.New(cfg.OutputMode, opts.Stdout),
 	}, nil

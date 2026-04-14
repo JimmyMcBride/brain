@@ -157,6 +157,8 @@ brain context load --project . --level 3 --query "auth flow"
 brain context structure --project .
 brain context structure --project . --path internal/search
 brain context structure status --project .
+brain context live --project . --task "auth flow"
+brain context live --project . --explain
 brain context assemble --project . --task "auth flow"
 brain context assemble --project . --explain
 ```
@@ -176,6 +178,13 @@ Use `--force` when adopting an existing unmanaged `AGENTS.md` or docs file into 
 - auto-rebuilds the derived structural cache when it is missing or stale
 - supports `--path` to focus on one subtree
 - `context structure status` reports freshness and counts without rebuilding
+
+`context live` is the live-work inspection surface:
+
+- resolves the task from `--task` or the active session
+- returns an on-demand packet with task, session, worktree, nearby-test, verification, policy-hint, and ambiguity sections
+- adds rationale and missing-signal reporting with `--explain`
+- does not persist live state to SQLite or the session file
 
 `context assemble` is the task-focused packet interface:
 

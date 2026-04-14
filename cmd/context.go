@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"brain/internal/contextassembly"
+	"brain/internal/livecontext"
 	"brain/internal/projectcontext"
 	"brain/internal/search"
 	"brain/internal/structure"
@@ -25,6 +26,8 @@ func addContextCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLo
 	var assembleLimit int
 	var assembleExplain bool
 	var structurePath string
+	var liveTask string
+	var liveExplain bool
 
 	contextCmd := &cobra.Command{
 		Use:   "context",
@@ -243,6 +246,47 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 		},
 	}
 
+	liveCmd := &cobra.Command{
+		Use:   "live",
+		Short: "Inspect live work context for the active task",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			projectRoot := contextProjectPath(project, flags.projectPath)
+			appCtx, err := loadApp(projectRoot)
+			if err != nil {
+				return err
+			}
+			defer appCtx.Close()
+
+			active, err := appCtx.Session.Active(projectRoot)
+			if err != nil {
+				return err
+			}
+			resolvedTask := strings.TrimSpace(liveTask)
+			taskSource := "flag"
+			if resolvedTask == "" && active != nil {
+				resolvedTask = strings.TrimSpace(active.Task)
+				taskSource = "session"
+			}
+			if resolvedTask == "" {
+				return errors.New("context live requires --task or an active session task")
+			}
+
+			packet, err := appCtx.Live.Collect(cmd.Context(), livecontext.Request{
+				ProjectDir: projectRoot,
+				Task:       resolvedTask,
+				TaskSource: taskSource,
+				Session:    active,
+				Explain:    liveExplain,
+			})
+			if err != nil {
+				return err
+			}
+			return appCtx.Output.Print(packet, func(w io.Writer) error {
+				return livecontext.RenderHuman(w, packet, liveExplain)
+			})
+		},
+	}
+
 	structureStatusCmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show structural repo context freshness and counts",
@@ -297,9 +341,12 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 	structureCmd.Flags().StringVar(&project, "project", "", "project root to inspect structure from")
 	structureCmd.Flags().StringVar(&structurePath, "path", "", "subtree path filter for structural context")
 	structureStatusCmd.Flags().StringVar(&project, "project", "", "project root to inspect structure from")
+	liveCmd.Flags().StringVar(&project, "project", "", "project root to inspect live context from")
+	liveCmd.Flags().StringVar(&liveTask, "task", "", "task text for live context; defaults to the active session task")
+	liveCmd.Flags().BoolVar(&liveExplain, "explain", false, "include rationale and missing-signal detail")
 
 	structureCmd.AddCommand(structureStatusCmd)
-	contextCmd.AddCommand(installCmd, refreshCmd, loadCmd, assembleCmd, structureCmd)
+	contextCmd.AddCommand(installCmd, refreshCmd, loadCmd, assembleCmd, structureCmd, liveCmd)
 	root.AddCommand(contextCmd)
 }
 
