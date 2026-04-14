@@ -163,6 +163,14 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 			if err != nil {
 				return err
 			}
+			structureSnapshot, err := appCtx.Structure.Snapshot(cmd.Context(), "")
+			if err != nil {
+				return err
+			}
+			structuralItems := append([]structure.Item{}, structureSnapshot.Boundaries...)
+			structuralItems = append(structuralItems, structureSnapshot.Entrypoints...)
+			structuralItems = append(structuralItems, structureSnapshot.ConfigSurfaces...)
+			structuralItems = append(structuralItems, structureSnapshot.TestSurfaces...)
 
 			manager := contextassembly.New(appCtx.Context)
 			packet, err := manager.Assemble(contextassembly.Request{
@@ -173,6 +181,7 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 				Limit:            assembleLimit,
 				Explain:          assembleExplain,
 				SearchResults:    searchResults,
+				StructuralItems:  structuralItems,
 			})
 			if err != nil {
 				return err

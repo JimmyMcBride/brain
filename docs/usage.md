@@ -154,6 +154,9 @@ brain context load --project . --level 0
 brain context load --project . --level 1
 brain context load --project . --level 2
 brain context load --project . --level 3 --query "auth flow"
+brain context structure --project .
+brain context structure --project . --path internal/search
+brain context structure status --project .
 brain context assemble --project . --task "auth flow"
 brain context assemble --project . --explain
 ```
@@ -167,10 +170,17 @@ Use `--force` when adopting an existing unmanaged `AGENTS.md` or docs file into 
 - level 2 loads the full static context bundle
 - level 3 adds search-injected relevant context, using `--query` or the active session task
 
+`context structure` is the structural repo inspection surface:
+
+- returns grouped boundaries, entrypoints, config surfaces, and test surfaces
+- auto-rebuilds the derived structural cache when it is missing or stale
+- supports `--path` to focus on one subtree
+- `context structure status` reports freshness and counts without rebuilding
+
 `context assemble` is the task-focused packet interface:
 
 - resolves the task from `--task` or the active session
-- assembles typed context from durable notes, generated context, and workflow/policy sources
+- assembles typed context from durable notes, generated context, structural repo context, and workflow/policy sources
 - shows ambiguities and confidence for the current task packet
 - adds rationale, omitted-nearby context, and missing-group reporting with `--explain`
 

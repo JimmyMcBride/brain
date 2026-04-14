@@ -13,6 +13,7 @@ import (
 	"brain/internal/notes"
 	"brain/internal/projectcontext"
 	"brain/internal/search"
+	"brain/internal/structure"
 )
 
 type Manager struct {
@@ -27,6 +28,7 @@ type Request struct {
 	Limit            int
 	Explain          bool
 	SearchResults    []search.Result
+	StructuralItems  []structure.Item
 }
 
 type Packet struct {
@@ -147,7 +149,7 @@ func (m *Manager) Assemble(req Request) (*Packet, error) {
 		limit = 8
 	}
 
-	plan := selectCandidates(task, req.ProjectDir, limit, req.SearchResults)
+	plan := selectCandidates(task, req.ProjectDir, limit, req.SearchResults, req.StructuralItems)
 	selected := plan.Selected.items(req.Explain)
 	omitted := plan.Omitted.items(req.Explain)
 	ambiguities := buildAmbiguities(req, plan)
@@ -272,7 +274,7 @@ func totalItems(groups GroupedItems) int {
 	return len(groups.DurableNotes) + len(groups.GeneratedContext) + len(groups.StructuralRepo) + len(groups.LiveWork) + len(groups.PolicyWorkflow)
 }
 
-func selectCandidates(task, projectDir string, limit int, searchResults []search.Result) selectionPlan {
+func selectCandidates(task, projectDir string, limit int, searchResults []search.Result, structuralItems []structure.Item) selectionPlan {
 	plan := selectionPlan{
 		Selected: newCandidateGroups(),
 		Omitted:  newCandidateGroups(),
@@ -281,6 +283,7 @@ func selectCandidates(task, projectDir string, limit int, searchResults []search
 	grouped := map[string][]candidate{
 		"durable_notes":     durableNoteCandidates(searchResults),
 		"generated_context": staticCandidates(projectDir, taskTokens, generatedContextSources),
+		"structural_repo":   structuralCandidates(taskTokens, structuralItems),
 		"policy_workflow":   staticCandidates(projectDir, taskTokens, policyWorkflowSources),
 	}
 	groupCaps := map[string]int{
@@ -310,7 +313,7 @@ func selectCandidates(task, projectDir string, limit int, searchResults []search
 
 	if selectedCount < limit {
 		var remaining []candidate
-		for _, group := range []string{"durable_notes", "generated_context", "policy_workflow"} {
+		for _, group := range []string{"durable_notes", "generated_context", "policy_workflow", "structural_repo"} {
 			for _, entry := range grouped[group] {
 				if _, ok := seen[entry.key]; ok {
 					continue
@@ -395,6 +398,43 @@ func staticCandidates(projectDir string, taskTokens map[string]struct{}, specs [
 				Kind:    spec.Kind,
 				Excerpt: compactSnippet(content),
 				Why:     why,
+			},
+		})
+	}
+	sortCandidates(candidates)
+	return candidates
+}
+
+func structuralCandidates(taskTokens map[string]struct{}, items []structure.Item) []candidate {
+	candidates := make([]candidate, 0, len(items))
+	for _, item := range items {
+		joinedEvidence := strings.Join(item.Evidence, " ")
+		overlap := overlapScore(taskTokens, strings.Join([]string{
+			item.Path,
+			item.Label,
+			item.Role,
+			item.Summary,
+			joinedEvidence,
+		}, " "))
+		if overlap == 0 {
+			continue
+		}
+		notes := []string{"matched task terms", "structural repo context"}
+		if joinedEvidence != "" {
+			notes = append(notes, "matched structural evidence")
+		}
+		candidates = append(candidates, candidate{
+			group:  "structural_repo",
+			score:  0.025 + overlap,
+			key:    item.Kind + ":" + item.Path,
+			method: "deterministic",
+			notes:  notes,
+			item: Item{
+				Source:  item.Path,
+				Label:   item.Label,
+				Kind:    "structural",
+				Excerpt: compactSnippet(strings.TrimSpace(item.Summary + "\n" + joinedEvidence)),
+				Why:     "matched task terms in structural repo context",
 			},
 		})
 	}

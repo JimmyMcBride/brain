@@ -645,6 +645,52 @@ func TestCLIContextAssembleSelectsFirstWaveSourceGroups(t *testing.T) {
 	}
 }
 
+func TestCLIContextAssembleIncludesStructuralRepoContext(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	for path, body := range map[string]string{
+		"go.mod":                    "module example.com/test\n\ngo 1.26\n",
+		"docs/search-overview.md":   "# Search Overview\n\nSearch context overview for task assembly.\n",
+		"internal/search/search.go": "package search\n",
+		"config/search.yaml":        "name: search\n",
+	} {
+		if err := os.MkdirAll(filepath.Join(env.project, filepath.Dir(path)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(env.project, path), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "assemble", "--task", "search config"))
+	if !strings.Contains(human, "### Structural Repo") {
+		t.Fatalf("expected structural repo section in assemble output:\n%s", human)
+	}
+	if !strings.Contains(human, "`config/`") && !strings.Contains(human, "`config/search.yaml`") && !strings.Contains(human, "`internal/search/`") {
+		t.Fatalf("expected at least one structural path in assemble output:\n%s", human)
+	}
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "assemble", "--task", "search config"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, jsonOut)
+	}
+	summary := payload["summary"].(map[string]any)
+	groupCounts := summary["group_counts"].(map[string]any)
+	if groupCounts["structural_repo"].(float64) == 0 {
+		t.Fatalf("expected structural repo count in summary: %#v", payload)
+	}
+	selected := payload["selected"].(map[string]any)
+	structural := selected["structural_repo"].([]any)
+	if len(structural) == 0 {
+		t.Fatalf("expected structural repo items in packet: %#v", payload)
+	}
+	first := structural[0].(map[string]any)
+	if first["kind"] != "structural" || first["why"] == "" {
+		t.Fatalf("expected structural packet item fields: %#v", payload)
+	}
+}
+
 func TestCLIContextStructureStatusReportsFreshness(t *testing.T) {
 	env := newCLIEnv(t)
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))

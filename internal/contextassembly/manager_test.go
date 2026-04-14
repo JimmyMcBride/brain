@@ -10,6 +10,7 @@ import (
 
 	"brain/internal/projectcontext"
 	"brain/internal/search"
+	"brain/internal/structure"
 )
 
 func TestAssembleReturnsStableEmptyPacketShape(t *testing.T) {
@@ -157,6 +158,60 @@ func TestAssembleUsesSearchAndStaticSourcesWithoutLeakingFutureGroups(t *testing
 	}
 	if packet.Summary.GroupCounts.StructuralRepo != 0 || packet.Summary.GroupCounts.LiveWork != 0 {
 		t.Fatalf("expected future groups to remain empty in summary: %#v", packet.Summary)
+	}
+}
+
+func TestAssembleIncludesStructuralRepoCandidatesWithoutRegressingCoreGroups(t *testing.T) {
+	project := t.TempDir()
+	contextManager := projectcontext.New(t.TempDir())
+	if _, err := contextManager.Install(context.Background(), projectcontext.Request{ProjectDir: project}); err != nil {
+		t.Fatal(err)
+	}
+
+	manager := New(contextManager)
+	packet, err := manager.Assemble(Request{
+		ProjectDir: project,
+		Task:       "search config",
+		TaskSource: "flag",
+		Limit:      8,
+		SearchResults: []search.Result{
+			{NotePath: filepath.ToSlash(filepath.Join("docs", "search-overview.md")), NoteTitle: "Search Overview", Heading: "Summary", Snippet: "Search context overview.", Score: 0.86},
+		},
+		StructuralItems: []structure.Item{
+			{
+				Kind:     "boundary",
+				Path:     "internal/search/",
+				Label:    "internal/search",
+				Role:     "library",
+				Summary:  "Search package boundary.",
+				Evidence: []string{"contains search implementation"},
+			},
+			{
+				Kind:     "config_surface",
+				Path:     "config/search.yaml",
+				Label:    "search config",
+				Role:     "config",
+				Summary:  "Search tuning config surface.",
+				Evidence: []string{"matched config path"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(packet.Selected.StructuralRepo) == 0 {
+		t.Fatalf("expected structural repo group to be populated: %#v", packet.Selected)
+	}
+	if packet.Summary.GroupCounts.StructuralRepo == 0 {
+		t.Fatalf("expected structural repo count in summary: %#v", packet.Summary)
+	}
+	if len(packet.Selected.DurableNotes) == 0 || len(packet.Selected.GeneratedContext) == 0 || len(packet.Selected.PolicyWorkflow) == 0 {
+		t.Fatalf("expected existing first-wave groups to remain populated: %#v", packet.Selected)
+	}
+	first := packet.Selected.StructuralRepo[0]
+	if first.Source == "" || first.Label == "" || first.Kind != "structural" || first.Excerpt == "" || first.Why == "" {
+		t.Fatalf("expected structural packet item fields to be populated: %#v", first)
 	}
 }
 

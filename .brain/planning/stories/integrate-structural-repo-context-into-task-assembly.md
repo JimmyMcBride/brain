@@ -3,10 +3,10 @@ created: "2026-04-14T00:14:43Z"
 epic: structural-repo-context
 project: brain
 spec: structural-repo-context
-status: todo
+status: done
 title: Integrate Structural Repo Context Into Task Assembly
 type: story
-updated: "2026-04-14T00:14:43Z"
+updated: "2026-04-14T00:26:10Z"
 ---
 # Integrate Structural Repo Context Into Task Assembly
 
