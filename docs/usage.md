@@ -147,8 +147,8 @@ Install or refresh project context:
 
 ```bash
 brain context install --project .
-brain context install --project . --agent codex
 brain context refresh --project .
+brain context refresh --project . --agent claude
 brain context refresh --project . --dry-run
 brain context load --project . --level 0
 brain context load --project . --level 1
@@ -195,13 +195,18 @@ Use `--force` when adopting an existing unmanaged `AGENTS.md` or docs file into 
 - shows ambiguities and confidence for the current task packet
 - adds rationale, omitted-nearby context, and missing-group reporting with `--explain`
 
-Wrappers are opt-in. Brain always installs the root contract and `.brain/context/*`; agent-specific wrapper files are only created when you pass one or more `--agent` flags.
+`context install` and `context refresh` manage the root contract plus `.brain/context/*`. They do not create missing agent-specific instruction files.
+
+If an existing agent file already contains a Brain-managed section, `context refresh --agent ...` updates that section in place. If the file is missing or has no Brain-managed section yet, `context refresh` leaves it alone.
 
 If you want the full existing-repo bootstrap instead of just context takeover, use:
 
 ```bash
 brain adopt --project .
+brain adopt --project . --agent codex
 ```
+
+`adopt` scans for existing local agent instruction files such as `.codex/AGENTS.md`, `.claude/CLAUDE.md`, or `.pi/AGENTS.md` and appends or updates a Brain-managed section inside them while preserving the rest of the file. `adopt --agent ...` is the explicit path that may create a missing agent instruction file, and unsupported agent names are rejected instead of creating ad hoc paths.
 
 ## Sessions
 
@@ -230,13 +235,25 @@ brain skills install --scope global --agent copilot
 brain skills install --scope local --agent copilot --project .
 brain skills install --scope global --agent pi
 brain skills install --scope local --agent pi --project .
-brain skills install --scope global --agent openclaw --mode copy
+brain skills install --scope global --agent openclaw
 brain skills install --scope local --agent openclaw --project .
 ```
 
 `brain skills install` always installs the Brain skill. Use `--scope global` to add it to your machine and `--scope local --project .` to add it to the current project.
 
+The Brain skill is bundled into the running binary, so `brain skills install` and `brain skills targets` work from any directory instead of depending on a nearby Brain source checkout.
+
+Brain always copies skill directories. It does not symlink them.
+
+Installed skills include a generated `.brain-skill-manifest.json` file beside `SKILL.md`. Brain uses that manifest to detect stale or legacy local installs and repair them automatically the next time you work in that project.
+
 When a branch changes Brain's command surface or agent-facing workflow guidance, update `skills/brain/SKILL.md` in that same branch and reinstall the local Brain skill for Codex and OpenClaw before closing the work:
+
+```bash
+go run . skills install --scope local --agent codex --agent openclaw --project .
+```
+
+Then reinstall or refresh with the installed binary:
 
 ```bash
 brain skills install --scope local --agent codex --agent openclaw --project .
@@ -262,3 +279,5 @@ brain update
 On Windows, `brain update` uses the same release assets and default install target as `scripts/install.ps1`.
 
 By default, `brain update` tracks the latest stable GitHub release published from `main`.
+
+When you run `brain update`, Brain refreshes any already-installed global Brain skills plus any local Brain skills inside the current `--project`. Other project-local installs repair themselves lazily the next time Brain runs in those repos.

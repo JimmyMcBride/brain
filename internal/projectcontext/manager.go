@@ -12,6 +12,8 @@ import (
 
 const localNotesSection = "## Local Notes\n\nAdd repo-specific notes here. `brain context refresh` preserves content outside managed blocks.\n"
 
+var supportedAgentIntegrationAgents = []string{"ai", "claude", "codex", "copilot", "openclaw", "pi"}
+
 type Manager struct {
 	Home string
 }
@@ -59,6 +61,14 @@ type fileSpec struct {
 	Style         string
 	LocalNote     bool
 	CommentPrefix string
+}
+
+type agentIntegrationTarget struct {
+	Agent           string
+	Path            string
+	Exists          bool
+	HasManagedBlock bool
+	LegacyBlockID   string
 }
 
 type LoadRequest struct {
@@ -281,8 +291,17 @@ func (m *Manager) apply(ctx context.Context, req Request) ([]Result, error) {
 		return nil, err
 	}
 
-	specs := bundleSpecs(snapshot, m.resolveAgents(req.Agents), policyBody)
-	results := make([]Result, 0, len(specs))
+	resolvedAgents, err := m.resolveAgents(req.Agents)
+	if err != nil {
+		return nil, err
+	}
+	specs := bundleSpecs(snapshot, policyBody)
+	targets, err := discoverAgentIntegrationTargets(projectDir, resolvedAgents)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]Result, 0, len(specs)+len(targets))
 	for _, spec := range specs {
 		result, err := syncSpec(spec, req.DryRun, req.Force, req.Adopt)
 		if err != nil {
@@ -293,17 +312,30 @@ func (m *Manager) apply(ctx context.Context, req Request) ([]Result, error) {
 		}
 		results = append(results, result)
 	}
+	for _, target := range targets {
+		result, ok, err := syncAgentIntegration(target, req.DryRun, req.Adopt, len(resolvedAgents) != 0)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			continue
+		}
+		if rel, relErr := filepath.Rel(projectDir, target.Path); relErr == nil {
+			result.Path = filepath.ToSlash(rel)
+		}
+		results = append(results, result)
+	}
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].Path < results[j].Path
 	})
 	return results, nil
 }
 
-func (m *Manager) resolveAgents(explicit []string) []string {
+func (m *Manager) resolveAgents(explicit []string) ([]string, error) {
 	return normalizeAgents(explicit)
 }
 
-func wrapperFile(projectDir, agent string) string {
+func agentInstructionFile(projectDir, agent string) string {
 	switch agent {
 	case "claude":
 		return filepath.Join(projectDir, ".claude", "CLAUDE.md")
@@ -314,7 +346,7 @@ func wrapperFile(projectDir, agent string) string {
 	}
 }
 
-func bundleSpecs(snapshot Snapshot, agents []string, policyBody string) []fileSpec {
+func bundleSpecs(snapshot Snapshot, policyBody string) []fileSpec {
 	specs := []fileSpec{
 		{
 			Path:      filepath.Join(snapshot.ProjectDir, "AGENTS.md"),
@@ -421,18 +453,59 @@ func bundleSpecs(snapshot Snapshot, agents []string, policyBody string) []fileSp
 			CommentPrefix: "# ",
 		},
 	}
-	for _, agent := range agents {
-		specs = append(specs, fileSpec{
-			Path:      wrapperFile(snapshot.ProjectDir, agent),
-			Kind:      "wrapper",
-			Title:     strings.ToUpper(agent[:1]) + agent[1:] + " Wrapper",
-			BlockID:   "agent-wrapper-" + agent,
-			Body:      renderWrapper(agent),
-			Style:     "markdown",
-			LocalNote: true,
+	return specs
+}
+
+func discoverAgentIntegrationTargets(projectDir string, agents []string) ([]agentIntegrationTarget, error) {
+	candidates := agents
+	includeMissing := len(candidates) != 0
+	if len(candidates) == 0 {
+		candidates = supportedAgentIntegrationAgents
+	}
+
+	targets := make([]agentIntegrationTarget, 0, len(candidates))
+	for _, agent := range candidates {
+		path := agentInstructionFile(projectDir, agent)
+		body, err := os.ReadFile(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				if includeMissing {
+					targets = append(targets, agentIntegrationTarget{
+						Agent: agent,
+						Path:  path,
+					})
+				}
+				continue
+			}
+			return nil, err
+		}
+		blockID := agentIntegrationBlockID(agent)
+		legacyBlockID := legacyAgentWrapperBlockID(agent)
+		hasLegacyBlock := strings.Contains(string(body), managedBegin(legacyBlockID)) && strings.Contains(string(body), managedEnd(legacyBlockID))
+		targets = append(targets, agentIntegrationTarget{
+			Agent:           agent,
+			Path:            path,
+			Exists:          true,
+			HasManagedBlock: strings.Contains(string(body), managedBegin(blockID)) && strings.Contains(string(body), managedEnd(blockID)),
+			LegacyBlockID:   legacyBlockIDIfPresent(legacyBlockID, hasLegacyBlock),
 		})
 	}
-	return specs
+	return targets, nil
+}
+
+func agentIntegrationBlockID(agent string) string {
+	return "agent-integration-" + agent
+}
+
+func legacyAgentWrapperBlockID(agent string) string {
+	return "agent-wrapper-" + agent
+}
+
+func legacyBlockIDIfPresent(blockID string, present bool) string {
+	if present {
+		return blockID
+	}
+	return ""
 }
 
 func syncSpec(spec fileSpec, dryRun, force, adopt bool) (Result, error) {
@@ -528,6 +601,60 @@ func syncMarkdownDoc(spec fileSpec, dryRun, force, adopt bool) (Result, error) {
 	}, nil
 }
 
+func syncAgentIntegration(target agentIntegrationTarget, dryRun, adopt, explicit bool) (Result, bool, error) {
+	spec := fileSpec{
+		Path:    target.Path,
+		Kind:    "agent",
+		BlockID: agentIntegrationBlockID(target.Agent),
+		Body:    renderAgentIntegration(target.Agent),
+	}
+
+	if !target.Exists {
+		if !(adopt && explicit) {
+			return Result{}, false, nil
+		}
+		content := agentIntegrationDocument(spec)
+		if !dryRun {
+			if err := os.MkdirAll(filepath.Dir(spec.Path), 0o755); err != nil {
+				return Result{}, false, err
+			}
+			if err := os.WriteFile(spec.Path, []byte(content), 0o644); err != nil {
+				return Result{}, false, err
+			}
+		}
+		return Result{
+			Path:          filepath.ToSlash(spec.Path),
+			Kind:          spec.Kind,
+			Action:        "created",
+			ManagedBlocks: []string{spec.BlockID},
+		}, true, nil
+	}
+
+	existing, err := os.ReadFile(spec.Path)
+	if err != nil {
+		return Result{}, false, err
+	}
+	content, preserved, action, apply, err := mergeAgentIntegration(string(existing), spec, adopt, target.HasManagedBlock, target.LegacyBlockID)
+	if err != nil {
+		return Result{}, false, fmt.Errorf("%s: %w", filepath.ToSlash(spec.Path), err)
+	}
+	if !apply {
+		return Result{}, false, nil
+	}
+	if !dryRun && action != "unchanged" {
+		if err := os.WriteFile(spec.Path, []byte(content), 0o644); err != nil {
+			return Result{}, false, err
+		}
+	}
+	return Result{
+		Path:                 filepath.ToSlash(spec.Path),
+		Kind:                 spec.Kind,
+		Action:               action,
+		PreservedUserContent: preserved,
+		ManagedBlocks:        []string{spec.BlockID},
+	}, true, nil
+}
+
 func mergeDocument(existing string, spec fileSpec, force, adopt, missing bool) (string, bool, string, error) {
 	begin := managedBegin(spec.BlockID)
 	end := managedEnd(spec.BlockID)
@@ -602,6 +729,86 @@ func mergeTextBlock(existing string, spec fileSpec, missing bool) (string, bool,
 	return content, strings.TrimSpace(existing) != "", "updated", nil
 }
 
+func mergeAgentIntegration(existing string, spec fileSpec, adopt, hasManagedBlock bool, legacyBlockID string) (string, bool, string, bool, error) {
+	if strings.TrimSpace(existing) == "" {
+		if !adopt {
+			return "", false, "", false, nil
+		}
+		return agentIntegrationDocument(spec), false, "adopted", true, nil
+	}
+
+	begin := managedBegin(spec.BlockID)
+	end := managedEnd(spec.BlockID)
+	section := managedSection(spec)
+	if hasManagedBlock && strings.Contains(existing, begin) && strings.Contains(existing, end) {
+		start := strings.Index(existing, begin)
+		finish := strings.Index(existing[start:], end)
+		if finish < 0 {
+			return "", false, "", false, fmt.Errorf("missing managed block end marker")
+		}
+		finish += start + len(end)
+		if finish < len(existing) && existing[finish] == '\n' {
+			finish++
+		}
+		replaced := existing[:start] + section + existing[finish:]
+		action := "updated"
+		if replaced == existing {
+			action = "unchanged"
+		}
+		return replaced, hasAgentIntegrationUserContent(existing, spec.BlockID), action, true, nil
+	}
+
+	if legacyBlockID != "" {
+		migrated, preserved, err := migrateLegacyAgentWrapper(existing, spec, legacyBlockID)
+		if err != nil {
+			return "", false, "", false, err
+		}
+		action := "updated"
+		if migrated == existing {
+			action = "unchanged"
+		}
+		return migrated, preserved, action, true, nil
+	}
+
+	if !adopt {
+		return "", false, "", false, nil
+	}
+
+	content := strings.TrimRight(existing, "\n")
+	if content != "" {
+		content += "\n\n"
+	}
+	content += agentIntegrationDocument(spec)
+	return content, strings.TrimSpace(existing) != "", "adopted", true, nil
+}
+
+func migrateLegacyAgentWrapper(existing string, spec fileSpec, legacyBlockID string) (string, bool, error) {
+	userContent, err := legacyAgentWrapperUserContent(existing, legacyBlockID)
+	if err != nil {
+		return "", false, err
+	}
+	migrated := agentIntegrationDocument(spec)
+	preserved := strings.TrimSpace(userContent) != ""
+	if preserved {
+		migrated = strings.TrimRight(migrated, "\n") + "\n\n## Local Notes\n\n" + strings.TrimSpace(userContent) + "\n"
+	}
+	return migrated, preserved, nil
+}
+
+func legacyAgentWrapperUserContent(existing, legacyBlockID string) (string, error) {
+	begin := managedBegin(legacyBlockID)
+	end := managedEnd(legacyBlockID)
+	start := strings.Index(existing, begin)
+	finish := strings.Index(existing, end)
+	if start < 0 || finish < 0 {
+		return "", fmt.Errorf("missing legacy managed block markers")
+	}
+	finish += len(end)
+	prefix := existing[:start]
+	suffix := existing[finish:]
+	return normalizeOutsideContent(strings.TrimSpace(prefix + "\n" + suffix)), nil
+}
+
 func managedBody(spec fileSpec) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# %s\n\n", spec.Title)
@@ -620,6 +827,10 @@ func managedSection(spec fileSpec) string {
 	b.WriteString("\n")
 	fmt.Fprintf(&b, "%s\n", managedEnd(spec.BlockID))
 	return b.String()
+}
+
+func agentIntegrationDocument(spec fileSpec) string {
+	return "## Brain\n\n" + managedSection(spec)
 }
 
 func textBlock(spec fileSpec) string {
@@ -661,6 +872,20 @@ func hasUserContent(existing, blockID string) bool {
 	return prefix != "" || suffix != ""
 }
 
+func hasAgentIntegrationUserContent(existing, blockID string) bool {
+	begin := managedBegin(blockID)
+	end := managedEnd(blockID)
+	start := strings.Index(existing, begin)
+	finish := strings.Index(existing, end)
+	if start < 0 || finish < 0 {
+		return strings.TrimSpace(existing) != ""
+	}
+	finish += len(end)
+	prefix := normalizeAgentIntegrationOutside(existing[:start])
+	suffix := normalizeAgentIntegrationOutside(existing[finish:])
+	return prefix != "" || suffix != ""
+}
+
 func normalizeOutsideContent(s string) string {
 	s = strings.TrimSpace(s)
 	for _, title := range []string{
@@ -683,6 +908,12 @@ func normalizeOutsideContent(s string) string {
 	return s
 }
 
+func normalizeAgentIntegrationOutside(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.TrimSpace(strings.TrimSuffix(s, "## Brain"))
+	return s
+}
+
 func normalizeOutsideText(s, begin, end string) string {
 	s = strings.TrimSpace(strings.ReplaceAll(s, begin, ""))
 	s = strings.TrimSpace(strings.ReplaceAll(s, end, ""))
@@ -696,13 +927,20 @@ func defaultProjectDir(dir string) string {
 	return dir
 }
 
-func normalizeAgents(agents []string) []string {
+func normalizeAgents(agents []string) ([]string, error) {
 	seen := map[string]struct{}{}
 	out := make([]string, 0, len(agents))
+	supported := make(map[string]struct{}, len(supportedAgentIntegrationAgents))
+	for _, agent := range supportedAgentIntegrationAgents {
+		supported[agent] = struct{}{}
+	}
 	for _, agent := range agents {
 		agent = strings.TrimSpace(strings.ToLower(agent))
 		if agent == "" {
 			continue
+		}
+		if _, ok := supported[agent]; !ok {
+			return nil, fmt.Errorf("unsupported agent %q (supported: %s)", agent, strings.Join(supportedAgentIntegrationAgents, ", "))
 		}
 		if _, ok := seen[agent]; ok {
 			continue
@@ -711,7 +949,7 @@ func normalizeAgents(agents []string) []string {
 		out = append(out, agent)
 	}
 	sort.Strings(out)
-	return out
+	return out, nil
 }
 
 func scanRepo(ctx context.Context, projectDir string) Snapshot {
@@ -900,7 +1138,7 @@ func readGoModule(projectDir string) string {
 func renderAgents(snapshot Snapshot) string {
 	var b strings.Builder
 	slug := policySlug(snapshot.ProjectName)
-	fmt.Fprintf(&b, "Use this file as the canonical project contract for `%s`.\n\n", snapshot.ProjectName)
+	fmt.Fprintf(&b, "Use this file as a Brain-managed project context entrypoint for `%s`.\n\n", snapshot.ProjectName)
 	b.WriteString("Read the linked context files before substantial work. Prefer the `brain` skill and `brain` CLI for project memory, retrieval, and durable context updates.\n\n")
 	b.WriteString("## Table Of Contents\n\n")
 	for _, entry := range []struct {
@@ -1083,23 +1321,22 @@ func renderCurrentState(snapshot Snapshot) string {
 	return b.String()
 }
 
-func renderWrapper(agent string) string {
+func renderAgentIntegration(agent string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "This `%s` wrapper delegates to the root project contract.\n\n", agent)
-	b.WriteString("## Required Reads\n\n")
-	b.WriteString("- `../AGENTS.md`\n")
-	b.WriteString("- `../.brain/policy.yaml`\n")
-	b.WriteString("- `../.brain/context/overview.md`\n")
-	b.WriteString("- `../.brain/context/architecture.md`\n")
-	b.WriteString("- `../.brain/context/workflows.md`\n")
-	b.WriteString("- `../.brain/context/memory-policy.md`\n\n")
-	b.WriteString("## Required Behavior\n\n")
-	b.WriteString("- Treat `../AGENTS.md` as the canonical project contract.\n")
-	b.WriteString("- If no validated session is active, run `brain session start --task \"<task>\"`.\n")
-	b.WriteString("- If a session is already active, run `brain session validate` before substantial work.\n")
-	b.WriteString("- Use the `brain` skill and `brain` CLI when project memory or project-local context matters.\n")
-	b.WriteString("- Use `brain session run -- <command>` for required verification commands.\n")
-	b.WriteString("- Finish with `brain session finish` and mention relevant note updates in the final response.\n")
+	fmt.Fprintf(&b, "Brain-managed project context for `%s` lives under `.brain/`.\n\n", agent)
+	b.WriteString("Read these when Brain context is relevant:\n")
+	b.WriteString("- `.brain/policy.yaml`\n")
+	b.WriteString("- `.brain/context/overview.md`\n")
+	b.WriteString("- `.brain/context/architecture.md`\n")
+	b.WriteString("- `.brain/context/workflows.md`\n")
+	b.WriteString("- `.brain/context/memory-policy.md`\n")
+	b.WriteString("- `.brain/context/current-state.md`\n\n")
+	b.WriteString("When working with Brain-managed repos:\n")
+	b.WriteString("- use the `brain` CLI for project-local memory and context workflows\n")
+	b.WriteString("- if no validated session is active, run `brain session start --task \"<task>\"`\n")
+	b.WriteString("- if a session is already active, run `brain session validate` before substantial work\n")
+	b.WriteString("- use `brain session run -- <command>` for required verification commands\n")
+	b.WriteString("- finish with `brain session finish`\n")
 	return b.String()
 }
 

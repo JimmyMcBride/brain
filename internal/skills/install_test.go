@@ -8,20 +8,11 @@ import (
 )
 
 func TestResolveTargetsGlobalAndLocal(t *testing.T) {
-	repoRoot := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(repoRoot, "skills", "brain"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(repoRoot, "skills", "brain", "SKILL.md"), []byte("skill"), 0o644); err != nil {
-		t.Fatal(err)
-	}
 	installer := NewInstaller("/home/tester")
 	targets, err := installer.ResolveTargets(InstallRequest{
 		Scope:      ScopeBoth,
 		Agents:     []string{"codex", "copilot", "pi", "zed"},
 		ProjectDir: "/tmp/project",
-		Mode:       ModeCopy,
-		RepoRoot:   repoRoot,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -54,26 +45,14 @@ func TestNormalizeAgentsSupportsAliases(t *testing.T) {
 	}
 }
 
-func TestInstallCopiesSkillBundle(t *testing.T) {
-	repoRoot := t.TempDir()
-	source := filepath.Join(repoRoot, "skills", "brain", "agents")
-	if err := os.MkdirAll(source, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(repoRoot, "skills", "brain", "SKILL.md"), []byte("skill"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(source, "openai.yaml"), []byte("name: brain"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+func TestInstallCopiesSkillBundleAndWritesManifest(t *testing.T) {
+	bundleHash := registerTestBundle(t)
 
 	home := t.TempDir()
 	installer := NewInstaller(home)
 	results, err := installer.Install(InstallRequest{
-		Mode:     ModeCopy,
-		Scope:    ScopeGlobal,
-		Agents:   []string{"codex"},
-		RepoRoot: repoRoot,
+		Scope:  ScopeGlobal,
+		Agents: []string{"codex"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -81,62 +60,119 @@ func TestInstallCopiesSkillBundle(t *testing.T) {
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
-	skillFile := filepath.Join(home, ".codex", "skills", "brain", "SKILL.md")
-	if _, err := os.Stat(skillFile); err != nil {
+	if results[0].Method != "copy" {
+		t.Fatalf("expected copy install method, got %+v", results[0])
+	}
+
+	skillDir := filepath.Join(home, ".codex", "skills", "brain")
+	if _, err := os.Stat(filepath.Join(skillDir, "SKILL.md")); err != nil {
 		t.Fatalf("expected skill file: %v", err)
 	}
-	metaFile := filepath.Join(home, ".codex", "skills", "brain", "agents", "openai.yaml")
-	if _, err := os.Stat(metaFile); err != nil {
+	if _, err := os.Stat(filepath.Join(skillDir, "agents", "openai.yaml")); err != nil {
 		t.Fatalf("expected metadata file: %v", err)
 	}
-}
-
-func TestResolveTargetsRequiresBrainSkillSource(t *testing.T) {
-	repoRoot := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(repoRoot, "skills"), 0o755); err != nil {
-		t.Fatal(err)
+	manifest, err := readManifest(skillDir)
+	if err != nil {
+		t.Fatalf("expected manifest: %v", err)
 	}
-
-	installer := NewInstaller(t.TempDir())
-	_, err := installer.ResolveTargets(InstallRequest{
-		Mode:     ModeCopy,
-		Scope:    ScopeGlobal,
-		Agents:   []string{"codex"},
-		RepoRoot: repoRoot,
-	})
-	if err == nil || !strings.Contains(err.Error(), "skill source") {
-		t.Fatalf("expected missing brain skill source error, got %v", err)
+	if manifest.BundleHash != bundleHash {
+		t.Fatalf("unexpected bundle hash: %+v", manifest)
+	}
+	if manifest.Agent != "codex" || manifest.Scope != string(ScopeGlobal) {
+		t.Fatalf("unexpected manifest routing: %+v", manifest)
 	}
 }
 
-func TestInstallForcesCopyForOpenClaw(t *testing.T) {
-	repoRoot := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(repoRoot, "skills", "brain"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(repoRoot, "skills", "brain", "SKILL.md"), []byte("skill"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+func TestInspectMarksLegacyInstallWithoutManifestForRepair(t *testing.T) {
+	registerTestBundle(t)
 
 	home := t.TempDir()
+	skillDir := filepath.Join(home, ".codex", "skills", "brain")
+	if err := os.MkdirAll(filepath.Join(skillDir, "agents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("skill"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "agents", "openai.yaml"), []byte("name: brain"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
 	installer := NewInstaller(home)
-	results, err := installer.Install(InstallRequest{
-		Mode:     ModeSymlink,
-		Scope:    ScopeGlobal,
-		Agents:   []string{"openclaw"},
-		RepoRoot: repoRoot,
+	statuses, err := installer.Inspect(InstallRequest{
+		Scope:  ScopeGlobal,
+		Agents: []string{"codex"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) != 1 || results[0].Method != string(ModeCopy) {
-		t.Fatalf("expected forced copy result, got %+v", results)
+	if len(statuses) != 1 || !statuses[0].Installed || !statuses[0].NeedsRepair || statuses[0].Reason != "legacy_install" {
+		t.Fatalf("expected legacy install repair state, got %+v", statuses)
 	}
-	info, err := os.Lstat(filepath.Join(home, ".openclaw", "skills", "brain"))
+}
+
+func TestInstallReplacesLegacySymlink(t *testing.T) {
+	registerTestBundle(t)
+
+	home := t.TempDir()
+	legacySource := filepath.Join(t.TempDir(), "legacy-brain")
+	if err := os.MkdirAll(legacySource, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(legacySource, "SKILL.md"), []byte("legacy"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	target := filepath.Join(home, ".openclaw", "skills", "brain")
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(legacySource, target); err != nil {
+		t.Fatal(err)
+	}
+
+	installer := NewInstaller(home)
+	if _, err := installer.Install(InstallRequest{
+		Scope:  ScopeGlobal,
+		Agents: []string{"openclaw"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := os.Lstat(target)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if info.Mode()&os.ModeSymlink != 0 {
-		t.Fatal("expected OpenClaw install to be a directory copy, not a symlink")
+		t.Fatal("expected legacy symlink to be replaced with a copied directory")
 	}
+	if _, err := readManifest(target); err != nil {
+		t.Fatalf("expected manifest after replacement: %v", err)
+	}
+}
+
+func registerTestBundle(t *testing.T) string {
+	t.Helper()
+
+	bundleDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(bundleDir, "agents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bundleDir, "SKILL.md"), []byte("skill"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bundleDir, "agents", "openai.yaml"), []byte("name: brain"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	RegisterBundle(os.DirFS(bundleDir))
+	t.Cleanup(func() {
+		RegisterBundle(nil)
+	})
+
+	bundle, err := loadBundle()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return bundle.Hash
 }

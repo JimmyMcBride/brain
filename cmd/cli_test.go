@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 
 	"brain/internal/buildinfo"
 	"brain/internal/config"
+	"brain/internal/skills"
 	"brain/internal/update"
 )
 
@@ -67,13 +69,18 @@ func newCLIEnv(t *testing.T) *cliEnv {
 
 func (e *cliEnv) run(t *testing.T, stdin string, args ...string) cliResult {
 	t.Helper()
+	return e.runFromDir(t, e.moduleRoot, stdin, args...)
+}
+
+func (e *cliEnv) runFromDir(t *testing.T, dir, stdin string, args ...string) cliResult {
+	t.Helper()
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	oldwd, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chdir(e.moduleRoot); err != nil {
+	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
 	defer os.Chdir(oldwd)
@@ -226,6 +233,119 @@ func TestCLIAdoptIsIdempotentOnManagedRepo(t *testing.T) {
 	}
 	if !strings.Contains(output, "unchanged") && !strings.Contains(output, "updated") {
 		t.Fatalf("unexpected idempotent adopt output:\n%s", output)
+	}
+}
+
+func TestCLIContextRefreshDoesNotCreateMissingAgentFiles(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+
+	output := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "refresh", "--agent", "codex", "--agent", "openclaw"))
+	if strings.Contains(output, ".codex/AGENTS.md") || strings.Contains(output, ".openclaw/AGENTS.md") {
+		t.Fatalf("expected context refresh to skip missing agent files:\n%s", output)
+	}
+	if _, err := os.Stat(filepath.Join(env.project, ".codex", "AGENTS.md")); !os.IsNotExist(err) {
+		t.Fatalf("expected missing codex agent file to remain missing, got err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(env.project, ".openclaw", "AGENTS.md")); !os.IsNotExist(err) {
+		t.Fatalf("expected missing openclaw agent file to remain missing, got err=%v", err)
+	}
+}
+
+func TestCLIContextRefreshUpdatesExistingManagedAgentBlock(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	if err := os.MkdirAll(filepath.Join(env.project, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(env.project, ".claude", "CLAUDE.md"), []byte("## Brain\n\n<!-- brain:begin agent-integration-claude -->\nstale\n<!-- brain:end agent-integration-claude -->\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	output := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "refresh", "--agent", "claude"))
+	if !strings.Contains(output, "updated   agent    .claude/CLAUDE.md") {
+		t.Fatalf("unexpected context refresh output:\n%s", output)
+	}
+
+	body, err := os.ReadFile(filepath.Join(env.project, ".claude", "CLAUDE.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(body)
+	if !strings.Contains(text, "Brain-managed project context for `claude` lives under `.brain/`.") {
+		t.Fatalf("expected refreshed claude integration:\n%s", text)
+	}
+	if strings.Contains(text, "canonical project contract") {
+		t.Fatalf("unexpected canonical wording:\n%s", text)
+	}
+}
+
+func TestCLIAdoptIntegratesExistingAgentFile(t *testing.T) {
+	env := newCLIEnv(t)
+	if err := os.MkdirAll(filepath.Join(env.project, ".codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(env.project, ".codex", "AGENTS.md"), []byte("# Existing Codex Notes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	output := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "adopt"))
+	if !strings.Contains(output, "adopted   agent    .codex/AGENTS.md preserve-user") {
+		t.Fatalf("unexpected adopt output:\n%s", output)
+	}
+
+	body, err := os.ReadFile(filepath.Join(env.project, ".codex", "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(body)
+	if !strings.Contains(text, "# Existing Codex Notes") || !strings.Contains(text, "## Brain") {
+		t.Fatalf("expected existing codex file to gain Brain section:\n%s", text)
+	}
+	if strings.Contains(text, "canonical project contract") {
+		t.Fatalf("unexpected canonical wording:\n%s", text)
+	}
+}
+
+func TestCLIAdoptIntegratesExistingPiAgentFile(t *testing.T) {
+	env := newCLIEnv(t)
+	if err := os.MkdirAll(filepath.Join(env.project, ".pi"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(env.project, ".pi", "AGENTS.md"), []byte("# Existing Pi Notes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	output := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "adopt"))
+	if !strings.Contains(output, "adopted   agent    .pi/AGENTS.md preserve-user") {
+		t.Fatalf("unexpected pi adopt output:\n%s", output)
+	}
+}
+
+func TestCLIAdoptWithAgentCreatesMissingAgentFile(t *testing.T) {
+	env := newCLIEnv(t)
+
+	output := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "adopt", "--agent", "codex"))
+	if !strings.Contains(output, "created   agent    .codex/AGENTS.md") {
+		t.Fatalf("unexpected adopt output:\n%s", output)
+	}
+
+	body, err := os.ReadFile(filepath.Join(env.project, ".codex", "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(body)
+	if !strings.Contains(text, "## Brain") || !strings.Contains(text, "<!-- brain:begin agent-integration-codex -->") {
+		t.Fatalf("unexpected created codex integration file:\n%s", text)
+	}
+}
+
+func TestCLIAdoptRejectsUnsupportedAgent(t *testing.T) {
+	env := newCLIEnv(t)
+
+	result := env.run(t, "", "--config", env.config, "--project", env.project, "adopt", "--agent", "codx")
+	if result.err == nil || !strings.Contains(result.err.Error(), "unsupported agent") {
+		t.Fatalf("expected unsupported agent error, got %+v", result)
 	}
 }
 
@@ -405,9 +525,12 @@ func TestCLISkillsCommands(t *testing.T) {
 	if !strings.Contains(targets, "zed [local] brain "+cliPath("<ROOT>", "project", ".zed", "skills", "brain")) {
 		t.Fatalf("missing local zed target:\n%s", targets)
 	}
-	requireOK(t, env.run(t, "", "skills", "install", "--scope", "local", "-a", "codex", "--project", env.project, "--mode", "copy"))
+	requireOK(t, env.run(t, "", "skills", "install", "--scope", "local", "-a", "codex", "--project", env.project))
 	if _, err := os.Stat(filepath.Join(env.project, ".codex", "skills", "brain", "SKILL.md")); err != nil {
 		t.Fatalf("expected local skill install: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(env.project, ".codex", "skills", "brain", ".brain-skill-manifest.json")); err != nil {
+		t.Fatalf("expected local skill manifest: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(env.project, ".codex", "skills", "googleworkspace-cli")); !os.IsNotExist(err) {
 		t.Fatalf("expected no non-brain skill installs, got err=%v", err)
@@ -416,6 +539,23 @@ func TestCLISkillsCommands(t *testing.T) {
 	help := requireOK(t, env.run(t, "", "skills", "install", "--help"))
 	if strings.Contains(help, "--skill") || strings.Contains(help, "--skill-root") {
 		t.Fatalf("expected help to omit removed flags:\n%s", help)
+	}
+	if strings.Contains(help, "--mode") {
+		t.Fatalf("expected help to omit removed mode flag:\n%s", help)
+	}
+}
+
+func TestCLISkillsCommandsWorkOutsideRepoCheckout(t *testing.T) {
+	env := newCLIEnv(t)
+
+	targets := requireOK(t, env.runFromDir(t, env.project, "", "skills", "targets", "--scope", "global", "-a", "codex"))
+	if !strings.Contains(targets, "codex [global] brain "+cliPath("<ROOT>", "home", ".codex", "skills", "brain")) {
+		t.Fatalf("missing global codex target from non-repo cwd:\n%s", targets)
+	}
+
+	requireOK(t, env.runFromDir(t, env.project, "", "skills", "install", "--scope", "global", "-a", "codex"))
+	if _, err := os.Stat(filepath.Join(env.home, ".codex", "skills", "brain", "SKILL.md")); err != nil {
+		t.Fatalf("expected global skill install from non-repo cwd: %v", err)
 	}
 }
 
@@ -1072,9 +1212,11 @@ func TestCLIVersionCommand(t *testing.T) {
 func TestCLIUpdateCommand(t *testing.T) {
 	env := newCLIEnv(t)
 	restoreUpdater := newUpdater
+	restoreSkillRunner := skillInstallRunner
 	restoreBuild := setCLICommandBuildInfo("v0.1.0", "abc123", "2026-04-10T00:00:00Z")
 	defer func() {
 		newUpdater = restoreUpdater
+		skillInstallRunner = restoreSkillRunner
 		restoreBuild()
 	}()
 
@@ -1088,9 +1230,140 @@ func TestCLIUpdateCommand(t *testing.T) {
 			Message:        "v0.1.0 -> v0.2.0",
 		}}
 	}
+	skillInstallRunner = func(binaryPath, configPath, projectPath string, scope skills.Scope, agents []string) ([]skills.InstallResult, error) {
+		t.Fatal("unexpected skill refresh during update --check")
+		return nil, nil
+	}
 	checkOnly := requireOK(t, env.run(t, "", "--config", env.config, "update", "--check"))
 	if !strings.Contains(checkOnly, "update: v0.1.0 -> v0.2.0") {
 		t.Fatalf("unexpected check output:\n%s", checkOnly)
+	}
+}
+
+func TestCLIUpdateRefreshesInstalledSkills(t *testing.T) {
+	env := newCLIEnv(t)
+	restoreUpdater := newUpdater
+	restoreSkillRunner := skillInstallRunner
+	restoreBuild := setCLICommandBuildInfo("v0.1.0", "abc123", "2026-04-10T00:00:00Z")
+	defer func() {
+		newUpdater = restoreUpdater
+		skillInstallRunner = restoreSkillRunner
+		restoreBuild()
+	}()
+
+	if err := os.MkdirAll(filepath.Join(env.home, ".codex", "skills", "brain"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(env.home, ".codex", "skills", "brain", "SKILL.md"), []byte("legacy"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(env.project, ".github", "skills", "brain"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(env.project, ".github", "skills", "brain", "SKILL.md"), []byte("legacy"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	newUpdater = func(cfg *config.Config, paths config.Paths) updater {
+		return stubUpdater{result: update.Result{
+			CurrentVersion: "v0.1.0",
+			LatestVersion:  "v0.1.0",
+			Status:         "up_to_date",
+			Message:        "already up to date (v0.1.0)",
+			CurrentPath:    filepath.Join(env.root, "bin", "brain"),
+		}}
+	}
+
+	var calls []string
+	skillInstallRunner = func(binaryPath, configPath, projectPath string, scope skills.Scope, agents []string) ([]skills.InstallResult, error) {
+		calls = append(calls, string(scope)+":"+strings.Join(agents, ","))
+		results := make([]skills.InstallResult, 0, len(agents))
+		for _, agent := range agents {
+			root := filepath.Join(env.home, "."+agent, "skills")
+			if scope == skills.ScopeLocal {
+				root = filepath.Join(projectPath, "."+agent, "skills")
+				if agent == "copilot" {
+					root = filepath.Join(projectPath, ".github", "skills")
+				}
+			}
+			results = append(results, skills.InstallResult{
+				Agent:  agent,
+				Skill:  "brain",
+				Scope:  string(scope),
+				Root:   root,
+				Path:   filepath.Join(root, "brain"),
+				Method: "copy",
+			})
+		}
+		return results, nil
+	}
+
+	output := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "update"))
+	if !strings.Contains(output, "skills:  refreshed") {
+		t.Fatalf("expected skill refresh output:\n%s", output)
+	}
+	if len(calls) != 2 || calls[0] != "global:codex" || calls[1] != "local:copilot" {
+		t.Fatalf("unexpected refresh calls: %v", calls)
+	}
+}
+
+func TestCLILocalSkillPreflightRepairsLegacyInstall(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+
+	skillDir := filepath.Join(env.project, ".codex", "skills", "brain")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("legacy"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "find", "overview"))
+	if _, err := os.Stat(filepath.Join(skillDir, ".brain-skill-manifest.json")); err != nil {
+		t.Fatalf("expected local skill repair manifest: %v", err)
+	}
+}
+
+func TestCLIUpdateFailsWhenSkillRefreshIsIncomplete(t *testing.T) {
+	env := newCLIEnv(t)
+	restoreUpdater := newUpdater
+	restoreSkillRunner := skillInstallRunner
+	restoreBuild := setCLICommandBuildInfo("v0.1.0", "abc123", "2026-04-10T00:00:00Z")
+	defer func() {
+		newUpdater = restoreUpdater
+		skillInstallRunner = restoreSkillRunner
+		restoreBuild()
+	}()
+
+	if err := os.MkdirAll(filepath.Join(env.home, ".codex", "skills", "brain"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(env.home, ".codex", "skills", "brain", "SKILL.md"), []byte("legacy"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	newUpdater = func(cfg *config.Config, paths config.Paths) updater {
+		return stubUpdater{result: update.Result{
+			CurrentVersion: "v0.1.0",
+			LatestVersion:  "v0.2.0",
+			Status:         "updated",
+			Message:        "v0.1.0 -> v0.2.0",
+			Updated:        true,
+			CurrentPath:    filepath.Join(env.root, "old-brain"),
+			InstalledPath:  filepath.Join(env.root, "new-brain"),
+		}}
+	}
+	skillInstallRunner = func(binaryPath, configPath, projectPath string, scope skills.Scope, agents []string) ([]skills.InstallResult, error) {
+		return nil, fmt.Errorf("boom")
+	}
+
+	result := env.run(t, "", "--config", env.config, "update")
+	if result.err == nil || !strings.Contains(result.err.Error(), "binary updated, skill refresh incomplete") {
+		t.Fatalf("expected incomplete skill refresh error, got %+v", result)
+	}
+	if !strings.Contains(result.stdout, "skills:  failed") {
+		t.Fatalf("expected printed failed skill refresh status:\n%s", result.stdout)
 	}
 }
 

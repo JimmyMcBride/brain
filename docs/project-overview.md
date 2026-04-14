@@ -14,6 +14,8 @@ Primary runtime: `go`
 ## Repo Map
 
 - `.brain/`
+- `.codex/`
+- `.openclaw/`
 - `cmd/`
 - `docs/`
 - `internal/`

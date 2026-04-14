@@ -38,7 +38,9 @@ brain skills install --scope local --agent copilot --project .
 brain skills install --scope local --agent pi --project .
 ```
 
-Use `--mode copy` when the target runtime does not support symlinked skill directories well. OpenClaw should generally use copy mode.
+`brain` always installs copied skill directories. It never symlinks the Brain skill.
+
+`brain skills install` and `brain skills targets` work from any directory because the Brain skill is bundled into the running binary instead of being resolved from the current working tree.
 
 Default roots:
 
@@ -54,7 +56,15 @@ Default roots:
 
 ## Repo Maintenance
 
-When a repo change updates Brain's command surface or agent-facing workflow guidance, update `skills/brain/SKILL.md` in the same branch and reinstall the local Brain skill for Codex and OpenClaw before closing the work:
+Installed skills include a generated `.brain-skill-manifest.json` file beside `SKILL.md`. Brain uses that manifest to detect stale or legacy installs and repair local project skills before work begins.
+
+When a repo change updates Brain's command surface or agent-facing workflow guidance, update `skills/brain/SKILL.md` in the same branch, validate the bundled skill with the current branch binary, and reinstall the local Brain skill for Codex and OpenClaw before closing the work:
+
+```bash
+go run . skills install --scope local --agent codex --agent openclaw --project .
+```
+
+Then reinstall or refresh with the installed binary:
 
 ```bash
 brain skills install --scope local --agent codex --agent openclaw --project .
@@ -63,7 +73,7 @@ brain skills install --scope local --agent codex --agent openclaw --project .
 ## Relationship To Project Context
 
 The skill is the generic fallback.  
-Repo-local context is the project-specific contract.
+Repo-local context is the project-specific Brain surface.
 
 Expected order:
 
@@ -72,9 +82,13 @@ Expected order:
 3. read the relevant `.brain/context/*.md` files
 4. fall back to the generic Brain skill only when repo-local context is absent or insufficient
 
-## Wrappers
+## Agent Integrations
 
-Agent-specific wrappers such as `.codex/AGENTS.md` or `.claude/CLAUDE.md` are optional and are generated only when you explicitly request them with `brain context install --agent ...` or `brain context refresh --agent ...`. They should stay thin and point back to the root contract instead of duplicating policy.
+`brain context install` and `brain context refresh` do not create missing agent-specific instruction files.
+
+`brain adopt` scans for existing local agent files such as `.codex/AGENTS.md`, `.claude/CLAUDE.md`, or `.pi/AGENTS.md` and appends or updates a Brain-managed section that points agents to `.brain/` and the Brain workflow.
+
+`brain adopt --agent ...` is the explicit path that may create a missing local agent instruction file. Unsupported agent names are rejected instead of creating arbitrary directories.
 
 ## Sessions And Verification
 

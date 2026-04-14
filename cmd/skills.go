@@ -11,7 +11,6 @@ import (
 )
 
 func addSkillsCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoader) {
-	var mode string
 	var scope string
 	var agents []string
 	var project string
@@ -31,11 +30,9 @@ func addSkillsCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoa
 			}
 			defer appCtx.Close()
 			results, err := appCtx.Skills.Install(skills.InstallRequest{
-				Mode:       skills.InstallMode(mode),
 				Scope:      skills.Scope(scope),
 				Agents:     agents,
 				ProjectDir: project,
-				RepoRoot:   repoRoot(),
 			})
 			if err != nil {
 				return err
@@ -61,11 +58,9 @@ func addSkillsCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoa
 			}
 			defer appCtx.Close()
 			targets, err := appCtx.Skills.ResolveTargets(skills.InstallRequest{
-				Mode:       skills.InstallMode(mode),
 				Scope:      skills.Scope(scope),
 				Agents:     agents,
 				ProjectDir: project,
-				RepoRoot:   repoRoot(),
 			})
 			if err != nil {
 				return err
@@ -81,12 +76,10 @@ func addSkillsCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoa
 		},
 	}
 
-	installCmd.Flags().StringVar(&mode, "mode", string(skills.ModeSymlink), "install mode: symlink or copy")
 	installCmd.Flags().StringVar(&scope, "scope", string(skills.ScopeGlobal), "install scope: global, local, or both")
 	installCmd.Flags().StringArrayVarP(&agents, "agent", "a", nil, "target agent name; repeatable, defaults to known agents")
 	installCmd.Flags().StringVar(&project, "project", ".", "project root used for local installs")
 
-	targetsCmd.Flags().StringVar(&mode, "mode", string(skills.ModeSymlink), "install mode validation: symlink or copy")
 	targetsCmd.Flags().StringVar(&scope, "scope", string(skills.ScopeGlobal), "target scope: global, local, or both")
 	targetsCmd.Flags().StringArrayVarP(&agents, "agent", "a", nil, "target agent name; repeatable, defaults to known agents")
 	targetsCmd.Flags().StringVar(&project, "project", ".", "project root used for local targets")

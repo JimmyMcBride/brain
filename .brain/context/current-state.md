@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-13T15:26:30Z"
+updated: "2026-04-14T15:25:08Z"
 ---
 # Current State
 
@@ -12,10 +12,10 @@ This file is a deterministic snapshot of the repository state at the last refres
 - Root: `.`
 - Runtime: `go`
 - Go module: `brain`
-- Current branch: `feature/mempalace-planning-roadmap`
+- Current branch: `fix/brain-skill-install`
 - Default branch: `main`
 - Remote: `https://github.com/JimmyMcBride/brain.git`
-- Go test files: `20`
+- Go test files: `23`
 
 ## Docs
 
@@ -32,6 +32,8 @@ This file is a deterministic snapshot of the repository state at the last refres
 ## Local Notes
 
 Add repo-specific notes here. `brain context refresh` preserves content outside managed blocks.
+
+- 2026-04-14: Bundled the Brain skill into the running binary, removed symlink mode from `brain skills`, added `.brain-skill-manifest.json` freshness tracking, taught `brain update` plus both install scripts to refresh existing Brain skill installs, and added lazy local skill auto-repair before app-backed Brain commands run.
 
 - 2026-04-11: Hardened note updates to normalize full-note stdin/frontmatter safely and tightened `brain skills` so it now installs only the Brain skill instead of acting like a multi-skill bundle installer.
 - 2026-04-11: Installed the updated global `brain` binary from commit `93e71a6` and pushed the note-integrity plus multi-skill install changes to `main`.
@@ -86,3 +88,6 @@ Add repo-specific notes here. `brain context refresh` preserves content outside 
 - 2026-04-13: Fixed the CLI test output normalizer so Windows no longer corrupts JSON escape sequences while replacing temp-root paths, which restores `TestCLIContextLoadLevels` and other JSON-based CLI tests on the Windows pipeline.
 
 - 2026-04-13: Fixed the remaining Windows CLI skill-target assertions to use OS-native path joins in tests, so `TestCLISkillsCommands` now accepts Windows `\` paths without regressing Unix output expectations.
+- 2026-04-14: Reworked project-context agent integrations so `brain context install` and `brain context refresh` no longer create agent-specific instruction files, `brain adopt` now appends or updates Brain-managed sections inside existing local agent files, `brain adopt --agent ...` is the only creation path for a missing local agent instruction file, and the generated Brain guidance no longer declares any AI file canonical.
+- 2026-04-14: Refreshed the checked-in project context from the current branch so `AGENTS.md`, `docs/project-workflows.md`, and `.brain/context/workflows.md` now reflect the supplemental agent-integration model and the neutral Brain wording.
+- 2026-04-14: Closed the follow-up review gaps in agent integration: Pi is now a first-class auto-detected agent target, unsupported `--agent` values fail fast instead of creating arbitrary directories, and legacy Brain wrapper files migrate in place to the new `agent-integration-*` block format without preserving stale canonical-language wrapper text.

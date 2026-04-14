@@ -344,7 +344,7 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 
 	for _, sub := range []*cobra.Command{installCmd, refreshCmd} {
 		sub.Flags().StringVar(&project, "project", "", "project root to scan and update")
-		sub.Flags().StringArrayVarP(&agents, "agent", "a", nil, "agent wrapper to generate; repeatable")
+		sub.Flags().StringArrayVarP(&agents, "agent", "a", nil, "agent instruction files to integrate when present; repeatable")
 		sub.Flags().BoolVar(&dryRun, "dry-run", false, "show planned changes without writing files")
 		sub.Flags().BoolVar(&force, "force", false, "adopt unmanaged files by preserving existing content under Local Notes")
 	}

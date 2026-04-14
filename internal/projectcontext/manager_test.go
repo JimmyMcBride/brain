@@ -9,28 +9,60 @@ import (
 	"testing"
 )
 
-func TestWrapperFile(t *testing.T) {
+func TestAgentInstructionFile(t *testing.T) {
 	project := "/tmp/project"
-	if got := filepath.ToSlash(wrapperFile(project, "codex")); got != "/tmp/project/.codex/AGENTS.md" {
-		t.Fatalf("unexpected codex wrapper path: %s", got)
+	if got := filepath.ToSlash(agentInstructionFile(project, "codex")); got != "/tmp/project/.codex/AGENTS.md" {
+		t.Fatalf("unexpected codex path: %s", got)
 	}
-	if got := filepath.ToSlash(wrapperFile(project, "claude")); got != "/tmp/project/.claude/CLAUDE.md" {
-		t.Fatalf("unexpected claude wrapper path: %s", got)
+	if got := filepath.ToSlash(agentInstructionFile(project, "claude")); got != "/tmp/project/.claude/CLAUDE.md" {
+		t.Fatalf("unexpected claude path: %s", got)
 	}
-	if got := filepath.ToSlash(wrapperFile(project, "copilot")); got != "/tmp/project/.github/copilot-instructions.md" {
-		t.Fatalf("unexpected copilot wrapper path: %s", got)
+	if got := filepath.ToSlash(agentInstructionFile(project, "copilot")); got != "/tmp/project/.github/copilot-instructions.md" {
+		t.Fatalf("unexpected copilot path: %s", got)
 	}
 }
 
 func TestResolveAgentsRequiresExplicitRequest(t *testing.T) {
 	manager := New(t.TempDir())
-	if got := manager.resolveAgents(nil); len(got) != 0 {
-		t.Fatalf("expected no implicit wrappers, got=%v", got)
+	got, err := manager.resolveAgents(nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	got := manager.resolveAgents([]string{"codex", "openclaw"})
+	if len(got) != 0 {
+		t.Fatalf("expected no implicit agent selection, got=%v", got)
+	}
+	got, err = manager.resolveAgents([]string{"codex", "openclaw"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	want := []string{"codex", "openclaw"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("unexpected resolved agents: got=%v want=%v", got, want)
+	}
+}
+
+func TestResolveAgentsRejectsUnsupportedAgent(t *testing.T) {
+	manager := New(t.TempDir())
+	if _, err := manager.resolveAgents([]string{"codx"}); err == nil {
+		t.Fatal("expected unsupported agent error")
+	}
+}
+
+func TestDiscoverAgentIntegrationTargetsDefaultToExistingFiles(t *testing.T) {
+	project := t.TempDir()
+	mustWriteFile(t, filepath.Join(project, ".codex", "AGENTS.md"), "# Codex\n")
+	mustWriteFile(t, filepath.Join(project, ".pi", "AGENTS.md"), "# Pi\n")
+
+	targets, err := discoverAgentIntegrationTargets(project, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(targets) != 2 {
+		t.Fatalf("unexpected target count: %d", len(targets))
+	}
+	agents := []string{targets[0].Agent, targets[1].Agent}
+	if strings.Join(agents, ",") != "codex,pi" {
+		t.Fatalf("unexpected targets: %+v", targets)
 	}
 }
 
@@ -160,6 +192,9 @@ func TestInstallDryRunDoesNotWrite(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(project, "AGENTS.md")); !os.IsNotExist(err) {
 		t.Fatalf("expected dry-run to avoid writes, got err=%v", err)
 	}
+	if _, err := os.Stat(filepath.Join(project, ".codex", "AGENTS.md")); !os.IsNotExist(err) {
+		t.Fatalf("expected dry-run to avoid agent writes, got err=%v", err)
+	}
 }
 
 func TestLoadReturnsDeterministicSourcesByLevel(t *testing.T) {
@@ -231,6 +266,210 @@ func TestAdoptMarksUnmanagedFilesAsAdopted(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("expected AGENTS.md result")
+	}
+}
+
+func TestAdoptAppendsBrainSectionToExistingAgentFile(t *testing.T) {
+	project := t.TempDir()
+	mustWriteFile(t, filepath.Join(project, ".claude", "CLAUDE.md"), "# Existing Claude Notes\n")
+	mustWriteFile(t, filepath.Join(project, ".pi", "AGENTS.md"), "# Existing Pi Notes\n")
+
+	manager := New(t.TempDir())
+	results, err := manager.Adopt(context.Background(), Request{ProjectDir: project})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var found bool
+	for _, result := range results {
+		if result.Path == ".claude/CLAUDE.md" {
+			found = true
+			if result.Action != "adopted" || !result.PreservedUserContent {
+				t.Fatalf("unexpected agent adoption result: %+v", result)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected claude integration result")
+	}
+	var foundPi bool
+	for _, result := range results {
+		if result.Path == ".pi/AGENTS.md" {
+			foundPi = true
+			if result.Action != "adopted" || !result.PreservedUserContent {
+				t.Fatalf("unexpected pi adoption result: %+v", result)
+			}
+		}
+	}
+	if !foundPi {
+		t.Fatal("expected pi integration result")
+	}
+
+	body, err := os.ReadFile(filepath.Join(project, ".claude", "CLAUDE.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(body)
+	if !strings.Contains(text, "# Existing Claude Notes") {
+		t.Fatalf("expected existing content to remain:\n%s", text)
+	}
+	if !strings.Contains(text, "## Brain") || !strings.Contains(text, managedBegin("agent-integration-claude")) {
+		t.Fatalf("expected Brain integration block:\n%s", text)
+	}
+	if strings.Contains(text, "canonical project contract") {
+		t.Fatalf("unexpected canonical wording:\n%s", text)
+	}
+}
+
+func TestAdoptWithExplicitAgentCreatesMissingAgentFile(t *testing.T) {
+	project := t.TempDir()
+
+	manager := New(t.TempDir())
+	results, err := manager.Adopt(context.Background(), Request{
+		ProjectDir: project,
+		Agents:     []string{"codex"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var found bool
+	for _, result := range results {
+		if result.Path == ".codex/AGENTS.md" {
+			found = true
+			if result.Action != "created" {
+				t.Fatalf("unexpected create result: %+v", result)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected created codex agent file")
+	}
+
+	body, err := os.ReadFile(filepath.Join(project, ".codex", "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(body)
+	if strings.Contains(text, "canonical project contract") {
+		t.Fatalf("unexpected canonical wording:\n%s", text)
+	}
+	if !strings.Contains(text, "## Brain") || !strings.Contains(text, managedBegin("agent-integration-codex")) {
+		t.Fatalf("unexpected created agent file:\n%s", text)
+	}
+}
+
+func TestRefreshUpdatesExistingManagedAgentBlockOnly(t *testing.T) {
+	project := t.TempDir()
+	existing := "# Existing Notes\n\n## Brain\n\n<!-- brain:begin agent-integration-codex -->\nstale\n<!-- brain:end agent-integration-codex -->\n"
+	mustWriteFile(t, filepath.Join(project, ".codex", "AGENTS.md"), existing)
+
+	manager := New(t.TempDir())
+	results, err := manager.Refresh(context.Background(), Request{
+		ProjectDir: project,
+		Agents:     []string{"codex"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var found bool
+	for _, result := range results {
+		if result.Path == ".codex/AGENTS.md" {
+			found = true
+			if result.Action != "updated" || !result.PreservedUserContent {
+				t.Fatalf("unexpected refresh result: %+v", result)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected codex refresh result")
+	}
+
+	body, err := os.ReadFile(filepath.Join(project, ".codex", "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(body)
+	if !strings.Contains(text, "# Existing Notes") {
+		t.Fatalf("expected surrounding content to remain:\n%s", text)
+	}
+	if !strings.Contains(text, "Brain-managed project context") {
+		t.Fatalf("expected refreshed block:\n%s", text)
+	}
+	if strings.Contains(text, "stale") {
+		t.Fatalf("expected stale block content to be replaced:\n%s", text)
+	}
+}
+
+func TestRefreshMigratesLegacyWrapperToAgentIntegration(t *testing.T) {
+	project := t.TempDir()
+	legacy := "# Codex Wrapper\n\n<!-- brain:begin agent-wrapper-codex -->\nThis `codex` wrapper delegates to the root project contract.\n<!-- brain:end agent-wrapper-codex -->\n"
+	mustWriteFile(t, filepath.Join(project, ".codex", "AGENTS.md"), legacy)
+
+	manager := New(t.TempDir())
+	results, err := manager.Refresh(context.Background(), Request{
+		ProjectDir: project,
+		Agents:     []string{"codex"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var found bool
+	for _, result := range results {
+		if result.Path == ".codex/AGENTS.md" {
+			found = true
+			if result.Action != "updated" {
+				t.Fatalf("unexpected legacy migration result: %+v", result)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected codex migration result")
+	}
+
+	body, err := os.ReadFile(filepath.Join(project, ".codex", "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(body)
+	if strings.Contains(text, "canonical project contract") || strings.Contains(text, "agent-wrapper-codex") {
+		t.Fatalf("expected legacy wrapper content to be removed:\n%s", text)
+	}
+	if !strings.Contains(text, managedBegin("agent-integration-codex")) {
+		t.Fatalf("expected migrated integration block:\n%s", text)
+	}
+}
+
+func TestRefreshSkipsUnmanagedAgentFileAndMissingTargets(t *testing.T) {
+	project := t.TempDir()
+	mustWriteFile(t, filepath.Join(project, ".openclaw", "AGENTS.md"), "# Manual OpenClaw\n")
+
+	manager := New(t.TempDir())
+	results, err := manager.Refresh(context.Background(), Request{
+		ProjectDir: project,
+		Agents:     []string{"codex", "openclaw"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, result := range results {
+		if result.Path == ".openclaw/AGENTS.md" || result.Path == ".codex/AGENTS.md" {
+			t.Fatalf("expected unmanaged or missing agent files to be skipped, got %+v", result)
+		}
+	}
+
+	body, err := os.ReadFile(filepath.Join(project, ".openclaw", "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != "# Manual OpenClaw\n" {
+		t.Fatalf("expected unmanaged agent file to remain unchanged:\n%s", string(body))
+	}
+	if _, err := os.Stat(filepath.Join(project, ".codex", "AGENTS.md")); !os.IsNotExist(err) {
+		t.Fatalf("expected missing codex agent file to remain missing, got err=%v", err)
 	}
 }
 
