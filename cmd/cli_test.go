@@ -664,6 +664,42 @@ func TestCLIContextStructureStatusReportsFreshness(t *testing.T) {
 	}
 }
 
+func TestCLIContextStructureRebuildsAndSupportsPathFilter(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	for path, body := range map[string]string{
+		"go.mod":                         "module example.com/test\n\ngo 1.26\n",
+		"cmd/brain/main.go":              "package main\nfunc main() {}\n",
+		"internal/search/search.go":      "package search\n",
+		"internal/search/search_test.go": "package search\n",
+		".github/workflows/ci.yml":       "name: ci\n",
+		"config/app.yaml":                "name: app\n",
+	} {
+		if err := os.MkdirAll(filepath.Join(env.project, filepath.Dir(path)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(env.project, path), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "structure"))
+	if !strings.Contains(human, "## Repository Shape") || !strings.Contains(human, "## Boundaries") || !strings.Contains(human, "## Entrypoints") || !strings.Contains(human, "## Config Surfaces") || !strings.Contains(human, "## Test Surfaces") {
+		t.Fatalf("unexpected structure output:\n%s", human)
+	}
+	if !strings.Contains(human, "`internal/search/`") || !strings.Contains(human, "`cmd/brain/main.go`") {
+		t.Fatalf("expected structural items in output:\n%s", human)
+	}
+
+	filtered := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "structure", "--path", "internal/search"))
+	if !strings.Contains(filtered, "`internal/search/`") {
+		t.Fatalf("expected filtered structural boundary:\n%s", filtered)
+	}
+	if strings.Contains(filtered, "`cmd/brain/main.go`") {
+		t.Fatalf("expected path filter to exclude unrelated entrypoints:\n%s", filtered)
+	}
+}
+
 func TestCLIContextAssembleExplainReportsRationaleAndAmbiguities(t *testing.T) {
 	env := newCLIEnv(t)
 	requireOK(t, env.run(t, "", "--config", env.config, "context", "install", "--project", env.project))

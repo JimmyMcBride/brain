@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -121,5 +122,63 @@ func TestManifestIgnoresRuntimeAndHeavyDirectories(t *testing.T) {
 	}
 	if manifest.FileCount != 1 {
 		t.Fatalf("expected manifest to ignore runtime/heavy dirs, got %+v", manifest)
+	}
+}
+
+func TestRebuildAndSnapshotReturnGroupedStructure(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	workspaceSvc := workspace.New(root)
+	if err := workspaceSvc.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	for path, body := range map[string]string{
+		"go.mod":                         "module example.com/test\n\ngo 1.26\n",
+		"cmd/brain/main.go":              "package main\nfunc main() {}\n",
+		"internal/search/search.go":      "package search\n",
+		"internal/search/search_test.go": "package search\n",
+		".github/workflows/ci.yml":       "name: ci\n",
+		"config/app.yaml":                "name: app\n",
+	} {
+		if err := os.MkdirAll(filepath.Join(root, filepath.Dir(path)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, path), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	store, err := index.New(filepath.Join(root, ".brain", "state", "brain.sqlite3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	manager, err := New(store, workspaceSvc)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	snapshot, err := manager.Rebuild(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Summary.Runtime != "go" {
+		t.Fatalf("expected go runtime, got %#v", snapshot.Summary)
+	}
+	if len(snapshot.Boundaries) == 0 || len(snapshot.Entrypoints) == 0 || len(snapshot.ConfigSurfaces) == 0 || len(snapshot.TestSurfaces) == 0 {
+		t.Fatalf("expected grouped structural items, got %#v", snapshot)
+	}
+
+	filtered, err := manager.Snapshot(ctx, "internal/search")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(filtered.Boundaries) == 0 || filtered.Boundaries[0].Path != "internal/search/" {
+		t.Fatalf("expected filtered boundary under internal/search, got %#v", filtered.Boundaries)
+	}
+	for _, item := range append(append(filtered.Entrypoints, filtered.ConfigSurfaces...), filtered.TestSurfaces...) {
+		if !strings.HasPrefix(item.Path, "internal/search") {
+			t.Fatalf("expected filtered snapshot paths under internal/search, got %#v", filtered)
+		}
 	}
 }

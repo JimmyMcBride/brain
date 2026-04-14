@@ -3,10 +3,10 @@ created: "2026-04-14T00:14:43Z"
 epic: structural-repo-context
 project: brain
 spec: structural-repo-context
-status: todo
+status: in_progress
 title: Implement Structural Scanner And Context Structure Output
 type: story
-updated: "2026-04-14T00:14:43Z"
+updated: "2026-04-14T00:18:40Z"
 ---
 # Implement Structural Scanner And Context Structure Output
 

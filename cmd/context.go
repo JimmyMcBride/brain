@@ -9,6 +9,7 @@ import (
 	"brain/internal/contextassembly"
 	"brain/internal/projectcontext"
 	"brain/internal/search"
+	"brain/internal/structure"
 
 	"github.com/spf13/cobra"
 )
@@ -23,6 +24,7 @@ func addContextCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLo
 	var assembleTask string
 	var assembleLimit int
 	var assembleExplain bool
+	var structurePath string
 
 	contextCmd := &cobra.Command{
 		Use:   "context",
@@ -184,6 +186,52 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 	structureCmd := &cobra.Command{
 		Use:   "structure",
 		Short: "Inspect structural repo context",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			projectRoot := contextProjectPath(project, flags.projectPath)
+			appCtx, err := loadApp(projectRoot)
+			if err != nil {
+				return err
+			}
+			defer appCtx.Close()
+
+			snapshot, err := appCtx.Structure.Snapshot(cmd.Context(), structurePath)
+			if err != nil {
+				return err
+			}
+			return appCtx.Output.Print(snapshot, func(w io.Writer) error {
+				if _, err := fmt.Fprintf(w, "## Repository Shape\n\n- Runtime: `%s`\n- Items: %d\n\n", snapshot.Summary.Runtime, snapshot.Summary.ItemCount); err != nil {
+					return err
+				}
+				for _, entry := range []struct {
+					label string
+					items []structure.Item
+				}{
+					{label: "Boundaries", items: snapshot.Boundaries},
+					{label: "Entrypoints", items: snapshot.Entrypoints},
+					{label: "Config Surfaces", items: snapshot.ConfigSurfaces},
+					{label: "Test Surfaces", items: snapshot.TestSurfaces},
+				} {
+					if _, err := fmt.Fprintf(w, "## %s\n\n", entry.label); err != nil {
+						return err
+					}
+					if len(entry.items) == 0 {
+						if _, err := io.WriteString(w, "- None.\n\n"); err != nil {
+							return err
+						}
+						continue
+					}
+					for _, item := range entry.items {
+						if _, err := fmt.Fprintf(w, "- `%s` [%s]: %s\n", item.Path, item.Role, item.Summary); err != nil {
+							return err
+						}
+					}
+					if _, err := io.WriteString(w, "\n"); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+		},
 	}
 
 	structureStatusCmd := &cobra.Command{
@@ -238,6 +286,7 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 	assembleCmd.Flags().IntVar(&assembleLimit, "limit", 8, "maximum selected context items")
 	assembleCmd.Flags().BoolVar(&assembleExplain, "explain", false, "include selection rationale and omitted context")
 	structureCmd.Flags().StringVar(&project, "project", "", "project root to inspect structure from")
+	structureCmd.Flags().StringVar(&structurePath, "path", "", "subtree path filter for structural context")
 	structureStatusCmd.Flags().StringVar(&project, "project", "", "project root to inspect structure from")
 
 	structureCmd.AddCommand(structureStatusCmd)
