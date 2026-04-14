@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"brain/internal/livecontext"
 	"brain/internal/projectcontext"
 	"brain/internal/search"
 	"brain/internal/structure"
@@ -156,8 +157,8 @@ func TestAssembleUsesSearchAndStaticSourcesWithoutLeakingFutureGroups(t *testing
 	if len(packet.Selected.DurableNotes) == 0 || len(packet.Selected.GeneratedContext) == 0 || len(packet.Selected.PolicyWorkflow) == 0 {
 		t.Fatalf("expected first-wave groups to be populated: %#v", packet.Selected)
 	}
-	if packet.Summary.GroupCounts.StructuralRepo != 0 || packet.Summary.GroupCounts.LiveWork != 0 {
-		t.Fatalf("expected future groups to remain empty in summary: %#v", packet.Summary)
+	if packet.Summary.GroupCounts.StructuralRepo != 0 {
+		t.Fatalf("expected structural repo group to remain empty in summary: %#v", packet.Summary)
 	}
 }
 
@@ -212,6 +213,59 @@ func TestAssembleIncludesStructuralRepoCandidatesWithoutRegressingCoreGroups(t *
 	first := packet.Selected.StructuralRepo[0]
 	if first.Source == "" || first.Label == "" || first.Kind != "structural" || first.Excerpt == "" || first.Why == "" {
 		t.Fatalf("expected structural packet item fields to be populated: %#v", first)
+	}
+}
+
+func TestAssembleIncludesLiveWorkCandidatesWithoutRegressingCoreGroups(t *testing.T) {
+	project := t.TempDir()
+	contextManager := projectcontext.New(t.TempDir())
+	if _, err := contextManager.Install(context.Background(), projectcontext.Request{ProjectDir: project}); err != nil {
+		t.Fatal(err)
+	}
+
+	manager := New(contextManager)
+	packet, err := manager.Assemble(Request{
+		ProjectDir: project,
+		Task:       "search config",
+		TaskSource: "session",
+		Limit:      8,
+		SearchResults: []search.Result{
+			{NotePath: filepath.ToSlash(filepath.Join("docs", "search-overview.md")), NoteTitle: "Search Overview", Heading: "Summary", Snippet: "Search context overview.", Score: 0.86},
+		},
+		LivePacket: &livecontext.Packet{
+			Worktree: livecontext.WorktreeInfo{
+				ChangedFiles: []livecontext.ChangedFile{
+					{Path: "internal/search/search.go", Status: "modified", Source: "worktree", Why: "present in current worktree changes"},
+				},
+				TouchedBoundaries: []livecontext.TouchedBoundary{
+					{Path: "internal/search/", Label: "internal/search", Role: "library", Why: "contains changed files"},
+				},
+			},
+			NearbyTests: []livecontext.NearbyTest{
+				{Path: "internal/search/search_test.go", Relation: "same_dir", Why: "test surface near changed code"},
+			},
+			Verification: livecontext.Verification{
+				Profiles: []livecontext.VerificationProfile{
+					{Name: "build", Satisfied: false},
+				},
+			},
+			PolicyHints: []livecontext.PolicyHint{
+				{Source: ".brain/context/workflows.md", Label: "Verification workflow", Excerpt: "Run required verification commands through brain session run.", Why: "repo changes detected but required verification is still missing"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(packet.Selected.LiveWork) == 0 {
+		t.Fatalf("expected live work group to be populated: %#v", packet.Selected)
+	}
+	if packet.Summary.GroupCounts.LiveWork == 0 {
+		t.Fatalf("expected live work count in summary: %#v", packet.Summary)
+	}
+	if len(packet.Selected.DurableNotes) == 0 || len(packet.Selected.GeneratedContext) == 0 || len(packet.Selected.PolicyWorkflow) == 0 {
+		t.Fatalf("expected existing first-wave groups to remain populated: %#v", packet.Selected)
 	}
 }
 

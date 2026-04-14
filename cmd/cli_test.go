@@ -594,12 +594,8 @@ func TestCLIContextAssembleJSONReturnsStablePacketShape(t *testing.T) {
 		t.Fatalf("expected selected groups in payload: %#v", payload)
 	}
 	for _, key := range []string{"durable_notes", "generated_context", "structural_repo", "live_work", "policy_workflow"} {
-		items, ok := selected[key].([]any)
-		if !ok {
+		if _, ok := selected[key].([]any); !ok {
 			t.Fatalf("expected %s group in payload: %#v", key, payload)
-		}
-		if (key == "structural_repo" || key == "live_work") && len(items) != 0 {
-			t.Fatalf("expected future %s group to remain empty: %#v", key, payload)
 		}
 	}
 	omitted, ok := payload["omitted_nearby"].(map[string]any)
@@ -607,12 +603,8 @@ func TestCLIContextAssembleJSONReturnsStablePacketShape(t *testing.T) {
 		t.Fatalf("expected omitted groups in payload: %#v", payload)
 	}
 	for _, key := range []string{"durable_notes", "generated_context", "structural_repo", "live_work", "policy_workflow"} {
-		items, ok := omitted[key].([]any)
-		if !ok {
+		if _, ok := omitted[key].([]any); !ok {
 			t.Fatalf("expected omitted %s group in payload: %#v", key, payload)
-		}
-		if (key == "structural_repo" || key == "live_work") && len(items) != 0 {
-			t.Fatalf("expected future omitted %s group to remain empty: %#v", key, payload)
 		}
 	}
 }
@@ -640,8 +632,8 @@ func TestCLIContextAssembleSelectsFirstWaveSourceGroups(t *testing.T) {
 	if groupCounts["durable_notes"].(float64) == 0 || groupCounts["generated_context"].(float64) == 0 || groupCounts["policy_workflow"].(float64) == 0 {
 		t.Fatalf("expected first-wave groups to be selected: %#v", payload)
 	}
-	if groupCounts["structural_repo"].(float64) != 0 || groupCounts["live_work"].(float64) != 0 {
-		t.Fatalf("expected future groups to remain empty: %#v", payload)
+	if groupCounts["structural_repo"].(float64) != 0 {
+		t.Fatalf("expected structural repo to remain empty in this packet: %#v", payload)
 	}
 }
 
@@ -865,6 +857,91 @@ func TestCLIContextLiveIncludesChangedFilesTouchedBoundariesAndNearbyTests(t *te
 	}
 	if len(payload["nearby_tests"].([]any)) == 0 {
 		t.Fatalf("expected nearby tests in payload: %#v", payload)
+	}
+}
+
+func TestCLIContextLiveReportsVerificationProfilesAndPolicyHints(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	for path, body := range map[string]string{
+		"internal/search/search.go":      "package search\n",
+		"internal/search/search_test.go": "package search\n",
+	} {
+		if err := os.MkdirAll(filepath.Join(env.project, filepath.Dir(path)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(env.project, path), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	override := "closeout:\n  verification_profiles:\n    - name: tests\n      commands:\n        - go test ./...\n    - name: build\n      commands:\n        - go build ./...\n"
+	if err := os.WriteFile(filepath.Join(env.project, ".brain", "policy.override.yaml"), []byte(override), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	initGitProject(t, env.project)
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "search config"))
+	if err := os.WriteFile(filepath.Join(env.project, "internal", "search", "search.go"), []byte("package search\n\nfunc Search() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "run", "--project", env.project, "--", "go", "test", "./..."))
+
+	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "live"))
+	if !strings.Contains(human, "## Verification") || !strings.Contains(human, "go test ./...") {
+		t.Fatalf("expected verification output in live context:\n%s", human)
+	}
+	if !strings.Contains(human, "## Policy Hints") || !strings.Contains(human, "Verification workflow") || !strings.Contains(human, "Durable memory update") {
+		t.Fatalf("expected policy hints in live context:\n%s", human)
+	}
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "live"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, jsonOut)
+	}
+	verification := payload["verification"].(map[string]any)
+	if len(verification["recent_commands"].([]any)) == 0 || len(verification["profiles"].([]any)) == 0 {
+		t.Fatalf("expected verification details in payload: %#v", payload)
+	}
+	if len(payload["policy_hints"].([]any)) == 0 {
+		t.Fatalf("expected policy hints in payload: %#v", payload)
+	}
+}
+
+func TestCLIContextAssembleIncludesLiveWorkContext(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	for path, body := range map[string]string{
+		"docs/search-overview.md":        "# Search Overview\n\nSearch context overview for task assembly.\n",
+		"internal/search/search.go":      "package search\n",
+		"internal/search/search_test.go": "package search\n",
+	} {
+		if err := os.MkdirAll(filepath.Join(env.project, filepath.Dir(path)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(env.project, path), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	initGitProject(t, env.project)
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "search config"))
+	if err := os.WriteFile(filepath.Join(env.project, "internal", "search", "search.go"), []byte("package search\n\nfunc Search() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "assemble"))
+	if !strings.Contains(human, "### Live Work") {
+		t.Fatalf("expected live work section in assemble output:\n%s", human)
+	}
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "assemble"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, jsonOut)
+	}
+	summary := payload["summary"].(map[string]any)
+	groupCounts := summary["group_counts"].(map[string]any)
+	if groupCounts["live_work"].(float64) == 0 {
+		t.Fatalf("expected live work count in summary: %#v", payload)
 	}
 }
 

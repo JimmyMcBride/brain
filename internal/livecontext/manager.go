@@ -12,11 +12,15 @@ import (
 	"sort"
 	"strings"
 
+	"brain/internal/history"
+	"brain/internal/projectcontext"
 	"brain/internal/session"
 	"brain/internal/structure"
 )
 
-type Manager struct{}
+type Manager struct {
+	History *history.Logger
+}
 
 type Request struct {
 	ProjectDir         string
@@ -101,8 +105,8 @@ type PolicyHint struct {
 	Why     string `json:"why"`
 }
 
-func New() *Manager {
-	return &Manager{}
+func New(historyLog *history.Logger) *Manager {
+	return &Manager{History: historyLog}
 }
 
 func (m *Manager) Collect(ctx context.Context, req Request) (*Packet, error) {
@@ -131,6 +135,16 @@ func (m *Manager) Collect(ctx context.Context, req Request) (*Packet, error) {
 	changedFiles := deriveChangedFiles(ctx, req.ProjectDir, req.Session, currentHead, gitAvailable)
 	touchedBoundaries, structureAvailable := deriveTouchedBoundaries(changedFiles, req.StructuralSnapshot)
 	nearbyTests := deriveNearbyTests(req.ProjectDir, changedFiles, touchedBoundaries, req.StructuralSnapshot)
+	policy, _, _, err := projectcontext.LoadPolicy(req.ProjectDir)
+	if err != nil {
+		return nil, err
+	}
+	recentCommands := collectRecentCommands(req.Session)
+	verificationProfiles := collectVerificationProfiles(policy, req.Session)
+	policyHints, err := m.collectPolicyHints(req.ProjectDir, policy, req.Session, taskSource, changedFiles, verificationProfiles)
+	if err != nil {
+		return nil, err
+	}
 
 	packet := &Packet{
 		Task: TaskInfo{
@@ -147,11 +161,11 @@ func (m *Manager) Collect(ctx context.Context, req Request) (*Packet, error) {
 		},
 		NearbyTests: nearbyTests,
 		Verification: Verification{
-			RecentCommands: []VerificationCommand{},
-			Profiles:       []VerificationProfile{},
+			RecentCommands: recentCommands,
+			Profiles:       verificationProfiles,
 		},
-		PolicyHints: []PolicyHint{},
-		Ambiguities: buildAmbiguities(req.Session, gitAvailable, structureAvailable, changedFiles, nearbyTests, nil),
+		PolicyHints: policyHints,
+		Ambiguities: buildAmbiguities(req.Session, gitAvailable, structureAvailable, changedFiles, nearbyTests, recentCommands),
 	}
 	return packet, nil
 }
@@ -304,7 +318,11 @@ func renderVerification(w io.Writer, verification Verification) error {
 		_, err := io.WriteString(w, "- No recorded verification yet.\n\n")
 		return err
 	}
-	for _, command := range verification.RecentCommands {
+	commands := verification.RecentCommands
+	if len(commands) > 5 {
+		commands = commands[len(commands)-5:]
+	}
+	for _, command := range commands {
 		if _, err := fmt.Fprintf(w, "- `%s` (exit %d)\n", command.Command, command.ExitCode); err != nil {
 			return err
 		}
@@ -333,6 +351,12 @@ func explainLines(packet *Packet) []string {
 	}
 	if packet.Worktree.GitAvailable {
 		lines = append(lines, "git availability allows live-work signals to compare current repo state")
+	}
+	if len(packet.Verification.RecentCommands) > 0 || len(packet.Verification.Profiles) > 0 {
+		lines = append(lines, "verification signals show which required checks already ran in this session")
+	}
+	if len(packet.PolicyHints) > 0 {
+		lines = append(lines, "policy hints appear only when live-work conditions strongly suggest them")
 	}
 	return lines
 }
@@ -700,4 +724,150 @@ func buildAmbiguities(active *session.ActiveSession, gitAvailable, structureAvai
 		out = append(out, "no recorded verification commands yet")
 	}
 	return out
+}
+
+func collectRecentCommands(active *session.ActiveSession) []VerificationCommand {
+	if active == nil || len(active.CommandRuns) == 0 {
+		return []VerificationCommand{}
+	}
+	out := make([]VerificationCommand, 0, len(active.CommandRuns))
+	for _, run := range active.CommandRuns {
+		out = append(out, VerificationCommand{
+			Command:   run.Command,
+			ExitCode:  run.ExitCode,
+			StartedAt: run.StartedAt.UTC().Format("2006-01-02T15:04:05Z"),
+			EndedAt:   run.EndedAt.UTC().Format("2006-01-02T15:04:05Z"),
+		})
+	}
+	return out
+}
+
+func collectVerificationProfiles(policy *projectcontext.Policy, active *session.ActiveSession) []VerificationProfile {
+	if policy == nil || len(policy.Closeout.VerificationProfiles) == 0 {
+		return []VerificationProfile{}
+	}
+	runs := []session.CommandRun{}
+	if active != nil {
+		runs = active.CommandRuns
+	}
+	out := make([]VerificationProfile, 0, len(policy.Closeout.VerificationProfiles))
+	for _, profile := range policy.Closeout.VerificationProfiles {
+		matched := matchedCommandForProfile(profile, runs)
+		out = append(out, VerificationProfile{
+			Name:           profile.Name,
+			Satisfied:      matched != "",
+			MatchedCommand: matched,
+		})
+	}
+	return out
+}
+
+func matchedCommandForProfile(profile projectcontext.VerificationProfile, runs []session.CommandRun) string {
+	for _, run := range runs {
+		if run.ExitCode != 0 {
+			continue
+		}
+		for _, command := range profile.Commands {
+			if run.Command == command {
+				return run.Command
+			}
+		}
+	}
+	return ""
+}
+
+func (m *Manager) collectPolicyHints(projectDir string, policy *projectcontext.Policy, active *session.ActiveSession, taskSource string, changedFiles []ChangedFile, profiles []VerificationProfile) ([]PolicyHint, error) {
+	hints := []PolicyHint{}
+	if active == nil && taskSource == "flag" {
+		hints = append(hints, PolicyHint{
+			Source:  ".brain/context/workflows.md",
+			Label:   "Session workflow",
+			Excerpt: `If no validated session is active, run "brain session start --task \"<task>\"" before substantial work.`,
+			Why:     "no active session exists for this task",
+		})
+	}
+	repoChanged := len(changedFiles) > 0
+	if repoChanged && hasUnsatisfiedProfiles(profiles) {
+		hints = append(hints, PolicyHint{
+			Source:  ".brain/context/workflows.md",
+			Label:   "Verification workflow",
+			Excerpt: "Run required verification commands through `brain session run -- <command>`.",
+			Why:     "repo changes detected but required verification is still missing",
+		})
+	}
+	if repoChanged && active != nil {
+		ok, err := m.hasDurableNoteUpdateSinceBaseline(projectDir, policy, active)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			hints = append(hints, PolicyHint{
+				Source:  ".brain/context/memory-policy.md",
+				Label:   "Durable memory update",
+				Excerpt: "Capture non-obvious implementation decisions, bugs, config changes, and unresolved tradeoffs in durable notes.",
+				Why:     "repo changes detected but no qualifying durable note updates were recorded since the session baseline",
+			})
+		}
+	}
+	return hints, nil
+}
+
+func hasUnsatisfiedProfiles(profiles []VerificationProfile) bool {
+	for _, profile := range profiles {
+		if !profile.Satisfied {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Manager) hasDurableNoteUpdateSinceBaseline(projectDir string, policy *projectcontext.Policy, active *session.ActiveSession) (bool, error) {
+	if m == nil || m.History == nil || active == nil || policy == nil {
+		return false, nil
+	}
+	_ = projectDir
+	entries, err := m.History.All()
+	if err != nil {
+		return false, err
+	}
+	allowed := map[string]struct{}{}
+	for _, op := range policy.Closeout.AcceptableHistoryOperations {
+		allowed[op] = struct{}{}
+	}
+	for _, entry := range entries {
+		if !entry.Timestamp.After(active.HistoryBaseline.LastTimestamp) && entry.ID != active.HistoryBaseline.LastID {
+			continue
+		}
+		if active.HistoryBaseline.LastID != "" && entry.ID == active.HistoryBaseline.LastID {
+			continue
+		}
+		if _, ok := allowed[entry.Operation]; !ok {
+			continue
+		}
+		if pathMatchesAny(entry.File, policy.Project.Memory.AcceptedNoteGlobs) || pathMatchesAny(entry.Target, policy.Project.Memory.AcceptedNoteGlobs) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func pathMatchesAny(path string, globs []string) bool {
+	if strings.TrimSpace(path) == "" {
+		return false
+	}
+	for _, glob := range globs {
+		if globMatch(glob, path) {
+			return true
+		}
+	}
+	return false
+}
+
+func globMatch(glob, path string) bool {
+	pattern := regexp.QuoteMeta(glob)
+	pattern = strings.ReplaceAll(pattern, `\*\*`, `.*`)
+	pattern = strings.ReplaceAll(pattern, `\*`, `[^/]*`)
+	pattern = "^" + pattern + "$"
+	matched, _ := regexp.MatchString(pattern, normalizePath(path))
+	return matched
 }

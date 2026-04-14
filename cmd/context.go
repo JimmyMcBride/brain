@@ -174,6 +174,17 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 			structuralItems = append(structuralItems, structureSnapshot.Entrypoints...)
 			structuralItems = append(structuralItems, structureSnapshot.ConfigSurfaces...)
 			structuralItems = append(structuralItems, structureSnapshot.TestSurfaces...)
+			livePacket, err := appCtx.Live.Collect(cmd.Context(), livecontext.Request{
+				ProjectDir:         projectRoot,
+				Task:               resolvedTask,
+				TaskSource:         taskSource,
+				Session:            active,
+				StructuralSnapshot: structureSnapshot,
+				Explain:            assembleExplain,
+			})
+			if err != nil {
+				return err
+			}
 
 			manager := contextassembly.New(appCtx.Context)
 			packet, err := manager.Assemble(contextassembly.Request{
@@ -185,6 +196,7 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 				Explain:          assembleExplain,
 				SearchResults:    searchResults,
 				StructuralItems:  structuralItems,
+				LivePacket:       livePacket,
 			})
 			if err != nil {
 				return err

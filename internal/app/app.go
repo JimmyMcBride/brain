@@ -105,7 +105,7 @@ func New(configPath, projectPath string, jsonOutput bool, opts Options) (*App, e
 	if err != nil {
 		return nil, err
 	}
-	liveContextManager := livecontext.New()
+	liveContextManager := livecontext.New(historyLog)
 
 	return &App{
 		Config:     cfg,

@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"brain/internal/livecontext"
 	"brain/internal/notes"
 	"brain/internal/projectcontext"
 	"brain/internal/search"
@@ -29,6 +30,7 @@ type Request struct {
 	Explain          bool
 	SearchResults    []search.Result
 	StructuralItems  []structure.Item
+	LivePacket       *livecontext.Packet
 }
 
 type Packet struct {
@@ -149,7 +151,7 @@ func (m *Manager) Assemble(req Request) (*Packet, error) {
 		limit = 8
 	}
 
-	plan := selectCandidates(task, req.ProjectDir, limit, req.SearchResults, req.StructuralItems)
+	plan := selectCandidates(task, req.ProjectDir, limit, req.SearchResults, req.StructuralItems, req.LivePacket)
 	selected := plan.Selected.items(req.Explain)
 	omitted := plan.Omitted.items(req.Explain)
 	ambiguities := buildAmbiguities(req, plan)
@@ -274,7 +276,7 @@ func totalItems(groups GroupedItems) int {
 	return len(groups.DurableNotes) + len(groups.GeneratedContext) + len(groups.StructuralRepo) + len(groups.LiveWork) + len(groups.PolicyWorkflow)
 }
 
-func selectCandidates(task, projectDir string, limit int, searchResults []search.Result, structuralItems []structure.Item) selectionPlan {
+func selectCandidates(task, projectDir string, limit int, searchResults []search.Result, structuralItems []structure.Item, livePacket *livecontext.Packet) selectionPlan {
 	plan := selectionPlan{
 		Selected: newCandidateGroups(),
 		Omitted:  newCandidateGroups(),
@@ -284,6 +286,7 @@ func selectCandidates(task, projectDir string, limit int, searchResults []search
 		"durable_notes":     durableNoteCandidates(searchResults),
 		"generated_context": staticCandidates(projectDir, taskTokens, generatedContextSources),
 		"structural_repo":   structuralCandidates(taskTokens, structuralItems),
+		"live_work":         liveCandidates(taskTokens, livePacket),
 		"policy_workflow":   staticCandidates(projectDir, taskTokens, policyWorkflowSources),
 	}
 	groupCaps := map[string]int{
@@ -313,7 +316,7 @@ func selectCandidates(task, projectDir string, limit int, searchResults []search
 
 	if selectedCount < limit {
 		var remaining []candidate
-		for _, group := range []string{"durable_notes", "generated_context", "policy_workflow", "structural_repo"} {
+		for _, group := range []string{"durable_notes", "generated_context", "policy_workflow", "structural_repo", "live_work"} {
 			for _, entry := range grouped[group] {
 				if _, ok := seen[entry.key]; ok {
 					continue
@@ -440,6 +443,60 @@ func structuralCandidates(taskTokens map[string]struct{}, items []structure.Item
 	}
 	sortCandidates(candidates)
 	return candidates
+}
+
+func liveCandidates(taskTokens map[string]struct{}, packet *livecontext.Packet) []candidate {
+	if packet == nil {
+		return []candidate{}
+	}
+	var candidates []candidate
+	for _, file := range packet.Worktree.ChangedFiles {
+		candidates = append(candidates, makeLiveCandidate(taskTokens, "changed_file:"+file.Path, 0.040, "Changed File", "live_signal", file.Path, file.Path, file.Why))
+	}
+	for _, boundary := range packet.Worktree.TouchedBoundaries {
+		candidates = append(candidates, makeLiveCandidate(taskTokens, "boundary:"+boundary.Path, 0.042, boundary.Label, "live_signal", boundary.Path, strings.Join([]string{boundary.Path, boundary.Label, boundary.Role}, " "), boundary.Why))
+	}
+	for _, test := range packet.NearbyTests {
+		candidates = append(candidates, makeLiveCandidate(taskTokens, "test:"+test.Path, 0.039, "Nearby Test", "live_signal", test.Path, test.Path, test.Why))
+	}
+	for _, profile := range packet.Verification.Profiles {
+		base := 0.028
+		why := "verification profile from the current live-work context"
+		excerpt := profile.Name
+		if profile.Satisfied {
+			base += 0.004
+			if profile.MatchedCommand != "" {
+				excerpt = profile.Name + ": " + profile.MatchedCommand
+			}
+		} else {
+			base += 0.012
+			why = "required verification is still unsatisfied for the current live-work context"
+		}
+		candidates = append(candidates, makeLiveCandidate(taskTokens, "profile:"+profile.Name, base, profile.Name, "live_signal", profile.Name, excerpt, why))
+	}
+	for _, hint := range packet.PolicyHints {
+		candidates = append(candidates, makeLiveCandidate(taskTokens, "policy:"+hint.Source+":"+hint.Label, 0.050, hint.Label, "live_signal", hint.Source, strings.Join([]string{hint.Label, hint.Excerpt}, " "), hint.Why))
+	}
+	sortCandidates(candidates)
+	return candidates
+}
+
+func makeLiveCandidate(taskTokens map[string]struct{}, key string, baseScore float64, label, kind, source, text, why string) candidate {
+	overlap := overlapScore(taskTokens, text)
+	return candidate{
+		group:  "live_work",
+		score:  baseScore + overlap,
+		key:    key,
+		method: "session",
+		notes:  []string{"live work context", "derived from active task and repo state"},
+		item: Item{
+			Source:  source,
+			Label:   label,
+			Kind:    kind,
+			Excerpt: compactSnippet(text),
+			Why:     why,
+		},
+	}
 }
 
 func loadStaticSource(projectDir string, spec staticSource) (string, error) {

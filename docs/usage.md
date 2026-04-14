@@ -182,14 +182,16 @@ Use `--force` when adopting an existing unmanaged `AGENTS.md` or docs file into 
 `context live` is the live-work inspection surface:
 
 - resolves the task from `--task` or the active session
-- returns an on-demand packet with task, session, worktree, nearby-test, verification, policy-hint, and ambiguity sections
+- returns an on-demand packet with task, session, changed-file, touched-boundary, nearby-test, verification, policy-hint, and ambiguity sections
 - adds rationale and missing-signal reporting with `--explain`
 - does not persist live state to SQLite or the session file
+- reports recent recorded session commands plus verification-profile satisfaction when a session is active
+- only emits policy hints for strong-match conditions such as missing verification or missing durable note updates after repo changes
 
 `context assemble` is the task-focused packet interface:
 
 - resolves the task from `--task` or the active session
-- assembles typed context from durable notes, generated context, structural repo context, and workflow/policy sources
+- assembles typed context from durable notes, generated context, structural repo context, live-work signals, and workflow/policy sources
 - shows ambiguities and confidence for the current task packet
 - adds rationale, omitted-nearby context, and missing-group reporting with `--explain`
 

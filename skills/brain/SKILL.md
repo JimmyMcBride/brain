@@ -135,7 +135,7 @@ Use these commands by default:
 3. `brain context load --level 2` when the task needs the full static context bundle.
 4. `brain context load --level 3 --query "<task or concept>"` when you need search-driven deep context.
 5. `brain context structure` when you need repo boundaries, entrypoints, config surfaces, or test surfaces before deeper retrieval.
-6. `brain context live --task "<task>"` when you need current session and worktree signals, not just static repo context.
+6. `brain context live --task "<task>"` when you need current session, changed-file, nearby-test, verification, or policy signals, not just static repo context.
 7. `brain context assemble --task "<task>"` when you need a task-focused packet instead of a raw static bundle.
 8. `brain context assemble --explain` when you need to inspect why Brain chose its packet and what it left nearby.
 9. Prefer requesting the next level explicitly instead of loading everything up front.

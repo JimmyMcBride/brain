@@ -3,10 +3,10 @@ created: "2026-04-14T00:28:50Z"
 epic: live-work-context
 project: brain
 spec: live-work-context
-status: todo
+status: done
 title: Add Verification Policy Hints And Task Assembly Integration
 type: story
-updated: "2026-04-14T00:28:50Z"
+updated: "2026-04-14T00:44:09Z"
 ---
 # Add Verification Policy Hints And Task Assembly Integration
 

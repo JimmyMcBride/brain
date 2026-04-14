@@ -10,21 +10,25 @@ import (
 	"testing"
 	"time"
 
+	"brain/internal/history"
+	"brain/internal/projectcontext"
 	"brain/internal/session"
 	"brain/internal/structure"
 )
 
 func TestCollectRequiresTask(t *testing.T) {
-	manager := New()
+	manager := New(nil)
 	if _, err := manager.Collect(context.Background(), Request{}); err == nil {
 		t.Fatal("expected task requirement error")
 	}
 }
 
 func TestCollectReturnsStablePacketShape(t *testing.T) {
-	manager := New()
+	manager := New(nil)
+	project := t.TempDir()
+	writePolicyFixture(t, project)
 	packet, err := manager.Collect(context.Background(), Request{
-		ProjectDir: t.TempDir(),
+		ProjectDir: project,
 		Task:       "tighten auth flow",
 		TaskSource: "flag",
 	})
@@ -43,10 +47,12 @@ func TestCollectReturnsStablePacketShape(t *testing.T) {
 }
 
 func TestCollectIncludesSessionMetadata(t *testing.T) {
-	manager := New()
+	manager := New(nil)
+	project := t.TempDir()
+	writePolicyFixture(t, project)
 	now := time.Date(2026, 4, 14, 0, 30, 0, 0, time.UTC)
 	packet, err := manager.Collect(context.Background(), Request{
-		ProjectDir: t.TempDir(),
+		ProjectDir: project,
 		Task:       "session task",
 		TaskSource: "session",
 		Session: &session.ActiveSession{
@@ -71,6 +77,7 @@ func TestCollectIncludesSessionMetadata(t *testing.T) {
 
 func TestCollectDerivesChangedFilesTouchedBoundariesAndNearbyTests(t *testing.T) {
 	project := t.TempDir()
+	writePolicyFixture(t, project)
 	runGitCmd(t, project, "init")
 	runGitCmd(t, project, "config", "user.name", "Test User")
 	runGitCmd(t, project, "config", "user.email", "test@example.com")
@@ -100,7 +107,7 @@ func TestCollectDerivesChangedFilesTouchedBoundariesAndNearbyTests(t *testing.T)
 		t.Fatal(err)
 	}
 
-	manager := New()
+	manager := New(nil)
 	packet, err := manager.Collect(context.Background(), Request{
 		ProjectDir: project,
 		Task:       "search config",
@@ -145,6 +152,97 @@ func TestCollectDerivesChangedFilesTouchedBoundariesAndNearbyTests(t *testing.T)
 	}
 	if len(packet.NearbyTests) == 0 || packet.NearbyTests[0].Path != "internal/search/search_test.go" {
 		t.Fatalf("expected nearby test: %#v", packet.NearbyTests)
+	}
+}
+
+func TestCollectAddsVerificationProfilesAndStrongMatchPolicyHints(t *testing.T) {
+	project := t.TempDir()
+	runGitCmd(t, project, "init")
+	runGitCmd(t, project, "config", "user.name", "Test User")
+	runGitCmd(t, project, "config", "user.email", "test@example.com")
+	policyBody, err := projectcontext.RenderPolicy(projectcontext.Snapshot{ProjectName: "brain", PrimaryRuntime: "go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for path, body := range map[string]string{
+		".brain/policy.yaml":              policyBody,
+		"AGENTS.md":                       "# Project Agent Contract\n",
+		".brain/context/overview.md":      "# Overview\n",
+		".brain/context/workflows.md":     "# Workflows\n",
+		".brain/context/memory-policy.md": "# Memory Policy\n",
+		"go.mod":                          "module example.com/test\n\ngo 1.26\n",
+		"internal/search/search.go":       "package search\n",
+		"internal/search/search_test.go":  "package search\n",
+	} {
+		if err := os.MkdirAll(filepath.Join(project, filepath.Dir(path)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(project, path), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runGitCmd(t, project, "add", ".")
+	runGitCmd(t, project, "commit", "-m", "baseline")
+	baseline := strings.TrimSpace(runGitOutputCmd(t, project, "rev-parse", "HEAD"))
+	if err := os.WriteFile(filepath.Join(project, "internal", "search", "search.go"), []byte("package search\n\nfunc Search() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	historyLog := history.New(filepath.Join(project, ".brain", "history.log"))
+	manager := New(historyLog)
+	packet, err := manager.Collect(context.Background(), Request{
+		ProjectDir: project,
+		Task:       "search config",
+		TaskSource: "session",
+		Session: &session.ActiveSession{
+			ID:        "s2",
+			Task:      "search config",
+			StartedAt: time.Now().UTC(),
+			GitBaseline: session.GitSnapshot{
+				Available: true,
+				Head:      baseline,
+			},
+			HistoryBaseline: session.HistoryBaseline{
+				LastTimestamp: time.Now().Add(-time.Hour),
+			},
+			CommandRuns: []session.CommandRun{
+				{
+					Command:   "go test ./...",
+					ExitCode:  0,
+					StartedAt: time.Now().Add(-2 * time.Minute),
+					EndedAt:   time.Now().Add(-time.Minute),
+				},
+			},
+		},
+		StructuralSnapshot: &structure.Snapshot{
+			Boundaries: []structure.Item{
+				{Kind: "boundary", Path: "internal/search/", Label: "internal/search", Role: "library"},
+			},
+			TestSurfaces: []structure.Item{
+				{Kind: "test_surface", Path: "internal/search/search_test.go", Label: "search tests", Role: "tests"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(packet.Verification.RecentCommands) != 1 || packet.Verification.RecentCommands[0].Command != "go test ./..." {
+		t.Fatalf("expected recorded verification command: %#v", packet.Verification)
+	}
+	if len(packet.Verification.Profiles) < 2 {
+		t.Fatalf("expected verification profiles from policy: %#v", packet.Verification)
+	}
+	var buildMissing bool
+	for _, profile := range packet.Verification.Profiles {
+		if profile.Name == "build" && !profile.Satisfied {
+			buildMissing = true
+		}
+	}
+	if !buildMissing {
+		t.Fatalf("expected unsatisfied build profile: %#v", packet.Verification.Profiles)
+	}
+	if len(packet.PolicyHints) < 2 {
+		t.Fatalf("expected strong-match policy hints: %#v", packet.PolicyHints)
 	}
 }
 
@@ -198,4 +296,18 @@ func runGitOutputCmd(t *testing.T, dir string, args ...string) string {
 		t.Fatalf("git %v failed: %v", args, err)
 	}
 	return string(out)
+}
+
+func writePolicyFixture(t *testing.T, project string) {
+	t.Helper()
+	body, err := projectcontext.RenderPolicy(projectcontext.Snapshot{ProjectName: "brain", PrimaryRuntime: "go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(project, ".brain"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, ".brain", "policy.yaml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
 }
