@@ -3,10 +3,10 @@ created: "2026-04-14T00:28:50Z"
 epic: live-work-context
 project: brain
 spec: live-work-context
-status: todo
+status: done
 title: Implement Changed File Boundary And Nearby Test Signals
 type: story
-updated: "2026-04-14T00:28:50Z"
+updated: "2026-04-14T00:37:30Z"
 ---
 # Implement Changed File Boundary And Nearby Test Signals
 

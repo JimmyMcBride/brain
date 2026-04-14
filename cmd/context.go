@@ -270,13 +270,18 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 			if resolvedTask == "" {
 				return errors.New("context live requires --task or an active session task")
 			}
+			structureSnapshot, err := appCtx.Structure.Snapshot(cmd.Context(), "")
+			if err != nil {
+				return err
+			}
 
 			packet, err := appCtx.Live.Collect(cmd.Context(), livecontext.Request{
-				ProjectDir: projectRoot,
-				Task:       resolvedTask,
-				TaskSource: taskSource,
-				Session:    active,
-				Explain:    liveExplain,
+				ProjectDir:         projectRoot,
+				Task:               resolvedTask,
+				TaskSource:         taskSource,
+				Session:            active,
+				StructuralSnapshot: structureSnapshot,
+				Explain:            liveExplain,
 			})
 			if err != nil {
 				return err

@@ -822,6 +822,52 @@ func TestCLIContextLiveJSONReturnsStablePacketShape(t *testing.T) {
 	}
 }
 
+func TestCLIContextLiveIncludesChangedFilesTouchedBoundariesAndNearbyTests(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	for path, body := range map[string]string{
+		"internal/search/search.go":      "package search\n",
+		"internal/search/search_test.go": "package search\n",
+		"config/search.yaml":             "name: search\n",
+	} {
+		if err := os.MkdirAll(filepath.Join(env.project, filepath.Dir(path)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(env.project, path), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	initGitProject(t, env.project)
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "search config"))
+	if err := os.WriteFile(filepath.Join(env.project, "internal", "search", "search.go"), []byte("package search\n\nfunc Search() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "live"))
+	if !strings.Contains(human, "## Changed Files") || !strings.Contains(human, "`internal/search/search.go`") {
+		t.Fatalf("expected changed files in live output:\n%s", human)
+	}
+	if !strings.Contains(human, "## Touched Boundaries") || !strings.Contains(human, "`internal/search/`") {
+		t.Fatalf("expected touched boundary in live output:\n%s", human)
+	}
+	if !strings.Contains(human, "## Nearby Tests") || !strings.Contains(human, "`internal/search/search_test.go`") {
+		t.Fatalf("expected nearby test in live output:\n%s", human)
+	}
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "live"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, jsonOut)
+	}
+	worktree := payload["worktree"].(map[string]any)
+	if len(worktree["changed_files"].([]any)) == 0 || len(worktree["touched_boundaries"].([]any)) == 0 {
+		t.Fatalf("expected changed files and touched boundaries in payload: %#v", payload)
+	}
+	if len(payload["nearby_tests"].([]any)) == 0 {
+		t.Fatalf("expected nearby tests in payload: %#v", payload)
+	}
+}
+
 func TestCLIContextAssembleExplainReportsRationaleAndAmbiguities(t *testing.T) {
 	env := newCLIEnv(t)
 	requireOK(t, env.run(t, "", "--config", env.config, "context", "install", "--project", env.project))
