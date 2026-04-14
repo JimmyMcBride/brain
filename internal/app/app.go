@@ -14,6 +14,7 @@ import (
 	"brain/internal/embeddings"
 	"brain/internal/history"
 	"brain/internal/index"
+	"brain/internal/livecontext"
 	"brain/internal/notes"
 	"brain/internal/output"
 	"brain/internal/plan"
@@ -22,6 +23,7 @@ import (
 	"brain/internal/search"
 	"brain/internal/session"
 	"brain/internal/skills"
+	"brain/internal/structure"
 	"brain/internal/templates"
 	"brain/internal/workspace"
 )
@@ -44,6 +46,8 @@ type App struct {
 	Plan       *plan.Manager
 	Skills     *skills.Installer
 	Context    *projectcontext.Manager
+	Structure  *structure.Manager
+	Live       *livecontext.Manager
 	Session    *session.Manager
 	Output     *output.Printer
 }
@@ -97,6 +101,11 @@ func New(configPath, projectPath string, jsonOutput bool, opts Options) (*App, e
 	distillManager := distill.New(notesManager, searchEngine, projectManager, historyLog, sessionManager)
 	planManager := plan.New(notesManager, projectManager)
 	userHome, _ := os.UserHomeDir()
+	structureManager, err := structure.New(store, workspaceSvc)
+	if err != nil {
+		return nil, err
+	}
+	liveContextManager := livecontext.New(historyLog)
 
 	return &App{
 		Config:     cfg,
@@ -116,6 +125,8 @@ func New(configPath, projectPath string, jsonOutput bool, opts Options) (*App, e
 		Plan:       planManager,
 		Skills:     skills.NewInstaller(userHome),
 		Context:    projectcontext.New(userHome),
+		Structure:  structureManager,
+		Live:       liveContextManager,
 		Session:    sessionManager,
 		Output:     output.New(cfg.OutputMode, opts.Stdout),
 	}, nil

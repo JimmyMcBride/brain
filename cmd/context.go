@@ -6,8 +6,11 @@ import (
 	"io"
 	"strings"
 
+	"brain/internal/contextassembly"
+	"brain/internal/livecontext"
 	"brain/internal/projectcontext"
 	"brain/internal/search"
+	"brain/internal/structure"
 
 	"github.com/spf13/cobra"
 )
@@ -19,6 +22,12 @@ func addContextCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLo
 	var force bool
 	var level int
 	var query string
+	var assembleTask string
+	var assembleLimit int
+	var assembleExplain bool
+	var structurePath string
+	var liveTask string
+	var liveExplain bool
 
 	contextCmd := &cobra.Command{
 		Use:   "context",
@@ -109,6 +118,230 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 		},
 	}
 
+	assembleCmd := &cobra.Command{
+		Use:   "assemble",
+		Short: "Assemble a task-focused context packet",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			projectRoot := contextProjectPath(project, flags.projectPath)
+			appCtx, err := loadApp(projectRoot)
+			if err != nil {
+				return err
+			}
+			defer appCtx.Close()
+
+			resolvedTask := strings.TrimSpace(assembleTask)
+			taskSource := "flag"
+			if resolvedTask == "" {
+				active, err := appCtx.Session.Active(projectRoot)
+				if err != nil {
+					return err
+				}
+				if active != nil {
+					resolvedTask = strings.TrimSpace(active.Task)
+					taskSource = "session"
+				}
+			}
+			if resolvedTask == "" {
+				return errors.New("context assemble requires --task or an active session task")
+			}
+			searchResults := []search.Result{}
+			activeTask := ""
+			hasActiveSession := false
+			active, err := appCtx.Session.Active(projectRoot)
+			if err != nil {
+				return err
+			}
+			if active != nil {
+				hasActiveSession = true
+				activeTask = strings.TrimSpace(active.Task)
+			}
+			if err := appCtx.SyncIndex(cmd.Context()); err != nil {
+				return err
+			}
+			searchLimit := 16
+			if assembleLimit > 0 && assembleLimit*4 > searchLimit {
+				searchLimit = assembleLimit * 4
+			}
+			searchResults, err = appCtx.Search.SearchWithOptions(cmd.Context(), resolvedTask, searchLimit, search.Options{ActiveTask: activeTask})
+			if err != nil {
+				return err
+			}
+			structureSnapshot, err := appCtx.Structure.Snapshot(cmd.Context(), "")
+			if err != nil {
+				return err
+			}
+			structuralItems := append([]structure.Item{}, structureSnapshot.Boundaries...)
+			structuralItems = append(structuralItems, structureSnapshot.Entrypoints...)
+			structuralItems = append(structuralItems, structureSnapshot.ConfigSurfaces...)
+			structuralItems = append(structuralItems, structureSnapshot.TestSurfaces...)
+			livePacket, err := appCtx.Live.Collect(cmd.Context(), livecontext.Request{
+				ProjectDir:         projectRoot,
+				Task:               resolvedTask,
+				TaskSource:         taskSource,
+				Session:            active,
+				StructuralSnapshot: structureSnapshot,
+				Explain:            assembleExplain,
+			})
+			if err != nil {
+				return err
+			}
+
+			manager := contextassembly.New(appCtx.Context)
+			packet, err := manager.Assemble(contextassembly.Request{
+				ProjectDir:       projectRoot,
+				Task:             resolvedTask,
+				TaskSource:       taskSource,
+				HasActiveSession: hasActiveSession,
+				Limit:            assembleLimit,
+				Explain:          assembleExplain,
+				SearchResults:    searchResults,
+				StructuralItems:  structuralItems,
+				LivePacket:       livePacket,
+			})
+			if err != nil {
+				return err
+			}
+			return appCtx.Output.Print(packet, func(w io.Writer) error {
+				return contextassembly.RenderHuman(w, packet, assembleExplain)
+			})
+		},
+	}
+
+	structureCmd := &cobra.Command{
+		Use:   "structure",
+		Short: "Inspect structural repo context",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			projectRoot := contextProjectPath(project, flags.projectPath)
+			appCtx, err := loadApp(projectRoot)
+			if err != nil {
+				return err
+			}
+			defer appCtx.Close()
+
+			snapshot, err := appCtx.Structure.Snapshot(cmd.Context(), structurePath)
+			if err != nil {
+				return err
+			}
+			return appCtx.Output.Print(snapshot, func(w io.Writer) error {
+				if _, err := fmt.Fprintf(w, "## Repository Shape\n\n- Runtime: `%s`\n- Items: %d\n\n", snapshot.Summary.Runtime, snapshot.Summary.ItemCount); err != nil {
+					return err
+				}
+				for _, entry := range []struct {
+					label string
+					items []structure.Item
+				}{
+					{label: "Boundaries", items: snapshot.Boundaries},
+					{label: "Entrypoints", items: snapshot.Entrypoints},
+					{label: "Config Surfaces", items: snapshot.ConfigSurfaces},
+					{label: "Test Surfaces", items: snapshot.TestSurfaces},
+				} {
+					if _, err := fmt.Fprintf(w, "## %s\n\n", entry.label); err != nil {
+						return err
+					}
+					if len(entry.items) == 0 {
+						if _, err := io.WriteString(w, "- None.\n\n"); err != nil {
+							return err
+						}
+						continue
+					}
+					for _, item := range entry.items {
+						if _, err := fmt.Fprintf(w, "- `%s` [%s]: %s\n", item.Path, item.Role, item.Summary); err != nil {
+							return err
+						}
+					}
+					if _, err := io.WriteString(w, "\n"); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+		},
+	}
+
+	liveCmd := &cobra.Command{
+		Use:   "live",
+		Short: "Inspect live work context for the active task",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			projectRoot := contextProjectPath(project, flags.projectPath)
+			appCtx, err := loadApp(projectRoot)
+			if err != nil {
+				return err
+			}
+			defer appCtx.Close()
+
+			active, err := appCtx.Session.Active(projectRoot)
+			if err != nil {
+				return err
+			}
+			resolvedTask := strings.TrimSpace(liveTask)
+			taskSource := "flag"
+			if resolvedTask == "" && active != nil {
+				resolvedTask = strings.TrimSpace(active.Task)
+				taskSource = "session"
+			}
+			if resolvedTask == "" {
+				return errors.New("context live requires --task or an active session task")
+			}
+			structureSnapshot, err := appCtx.Structure.Snapshot(cmd.Context(), "")
+			if err != nil {
+				return err
+			}
+
+			packet, err := appCtx.Live.Collect(cmd.Context(), livecontext.Request{
+				ProjectDir:         projectRoot,
+				Task:               resolvedTask,
+				TaskSource:         taskSource,
+				Session:            active,
+				StructuralSnapshot: structureSnapshot,
+				Explain:            liveExplain,
+			})
+			if err != nil {
+				return err
+			}
+			return appCtx.Output.Print(packet, func(w io.Writer) error {
+				return livecontext.RenderHuman(w, packet, liveExplain)
+			})
+		},
+	}
+
+	structureStatusCmd := &cobra.Command{
+		Use:   "status",
+		Short: "Show structural repo context freshness and counts",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			projectRoot := contextProjectPath(project, flags.projectPath)
+			appCtx, err := loadApp(projectRoot)
+			if err != nil {
+				return err
+			}
+			defer appCtx.Close()
+
+			status, err := appCtx.Structure.Freshness(cmd.Context())
+			if err != nil {
+				return err
+			}
+			return appCtx.Output.Print(status, func(w io.Writer) error {
+				if _, err := fmt.Fprintf(w, "state: %s (%s)\n", status.State, status.Reason); err != nil {
+					return err
+				}
+				if status.IndexedAt != "" {
+					if _, err := fmt.Fprintf(w, "indexed_at: %s\n", status.IndexedAt); err != nil {
+						return err
+					}
+				}
+				if _, err := fmt.Fprintf(w, "files: %d current, %d indexed\n", status.CurrentFileCount, status.IndexedFileCount); err != nil {
+					return err
+				}
+				if _, err := fmt.Fprintf(w, "items: %d\n", status.ItemCount); err != nil {
+					return err
+				}
+				if _, err := fmt.Fprintf(w, "boundaries: %d\nentrypoints: %d\nconfig_surfaces: %d\ntest_surfaces: %d\n", status.BoundaryCount, status.EntrypointCount, status.ConfigSurfaceCount, status.TestSurfaceCount); err != nil {
+					return err
+				}
+				return nil
+			})
+		},
+	}
+
 	for _, sub := range []*cobra.Command{installCmd, refreshCmd} {
 		sub.Flags().StringVar(&project, "project", "", "project root to scan and update")
 		sub.Flags().StringArrayVarP(&agents, "agent", "a", nil, "agent wrapper to generate; repeatable")
@@ -118,8 +351,19 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 	loadCmd.Flags().StringVar(&project, "project", "", "project root to load context from")
 	loadCmd.Flags().IntVar(&level, "level", 0, "context depth to load: 0, 1, 2, or 3")
 	loadCmd.Flags().StringVar(&query, "query", "", "search query for level 3 context")
+	assembleCmd.Flags().StringVar(&project, "project", "", "project root to assemble context from")
+	assembleCmd.Flags().StringVar(&assembleTask, "task", "", "task text to assemble context for")
+	assembleCmd.Flags().IntVar(&assembleLimit, "limit", 8, "maximum selected context items")
+	assembleCmd.Flags().BoolVar(&assembleExplain, "explain", false, "include selection rationale and omitted context")
+	structureCmd.Flags().StringVar(&project, "project", "", "project root to inspect structure from")
+	structureCmd.Flags().StringVar(&structurePath, "path", "", "subtree path filter for structural context")
+	structureStatusCmd.Flags().StringVar(&project, "project", "", "project root to inspect structure from")
+	liveCmd.Flags().StringVar(&project, "project", "", "project root to inspect live context from")
+	liveCmd.Flags().StringVar(&liveTask, "task", "", "task text for live context; defaults to the active session task")
+	liveCmd.Flags().BoolVar(&liveExplain, "explain", false, "include rationale and missing-signal detail")
 
-	contextCmd.AddCommand(installCmd, refreshCmd, loadCmd)
+	structureCmd.AddCommand(structureStatusCmd)
+	contextCmd.AddCommand(installCmd, refreshCmd, loadCmd, assembleCmd, structureCmd, liveCmd)
 	root.AddCommand(contextCmd)
 }
 

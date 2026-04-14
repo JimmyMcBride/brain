@@ -80,6 +80,20 @@ Use these commands by default:
   - Load the full static context bundle.
 - `brain context load --level 3 --query "..."`
   - Load the full static bundle plus search-injected relevant context. If a session is active, the task can stand in for `--query`.
+- `brain context structure`
+  - Inspect the derived structural repo map of boundaries, entrypoints, config surfaces, and test surfaces.
+- `brain context structure --path "..."`
+  - Focus the structural repo map on one subtree such as `internal/search`.
+- `brain context structure status`
+  - Inspect structural cache freshness and counts without rebuilding it.
+- `brain context live --task "..."`
+  - Inspect the current live-work packet for a task using the active session when available.
+- `brain context live --explain`
+  - Add rationale and missing-signal reporting for the live-work packet.
+- `brain context assemble --task "..."`
+  - Assemble a task-focused context packet from durable notes, generated context, structural repo context, and workflow/policy sources.
+- `brain context assemble --explain`
+  - Add rationale, omitted-nearby context, missing-group reporting, ambiguities, and confidence to the task packet.
 - `brain context install --project .`
   - Create or adopt the root contract plus `.brain/context`.
 - `brain context refresh --project .`
@@ -120,7 +134,11 @@ Use these commands by default:
 2. `brain context load --level 1` when you need summaries and workflows.
 3. `brain context load --level 2` when the task needs the full static context bundle.
 4. `brain context load --level 3 --query "<task or concept>"` when you need search-driven deep context.
-5. Prefer requesting the next level explicitly instead of loading everything up front.
+5. `brain context structure` when you need repo boundaries, entrypoints, config surfaces, or test surfaces before deeper retrieval.
+6. `brain context live --task "<task>"` when you need current session, changed-file, nearby-test, verification, or policy signals, not just static repo context.
+7. `brain context assemble --task "<task>"` when you need a task-focused packet instead of a raw static bundle.
+8. `brain context assemble --explain` when you need to inspect why Brain chose its packet and what it left nearby.
+9. Prefer requesting the next level explicitly instead of loading everything up front.
 
 ## Distillation Workflow
 

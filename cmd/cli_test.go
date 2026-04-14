@@ -535,6 +535,461 @@ func TestCLIContextLoadLevelThreeUsesQueryOrActiveSession(t *testing.T) {
 	}
 }
 
+func TestCLIContextAssembleRequiresTaskOrActiveSession(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "context", "install", "--project", env.project))
+
+	missing := env.run(t, "", "--config", env.config, "--project", env.project, "context", "assemble")
+	if missing.err == nil || !strings.Contains(missing.err.Error(), "requires --task or an active session task") {
+		t.Fatalf("expected missing-task error, got err=%v stdout=%s stderr=%s", missing.err, missing.stdout, missing.stderr)
+	}
+}
+
+func TestCLIContextAssembleResolvesTaskFromFlagAndSession(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "context", "install", "--project", env.project))
+
+	byFlag := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "assemble", "--task", "tighten auth flow"))
+	if !strings.Contains(byFlag, "## Task Context") || !strings.Contains(byFlag, "- Task: `tighten auth flow`") || !strings.Contains(byFlag, "- Source: `flag`") {
+		t.Fatalf("unexpected flag-based assemble output:\n%s", byFlag)
+	}
+	if !strings.Contains(byFlag, "## Selected Context") {
+		t.Fatalf("expected selected context section:\n%s", byFlag)
+	}
+
+	initGitProject(t, env.project)
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "session derived task"))
+	bySession := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "assemble"))
+	if !strings.Contains(bySession, "- Task: `session derived task`") || !strings.Contains(bySession, "- Source: `session`") {
+		t.Fatalf("unexpected session-based assemble output:\n%s", bySession)
+	}
+}
+
+func TestCLIContextAssembleJSONReturnsStablePacketShape(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "context", "install", "--project", env.project))
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "assemble", "--task", "tighten auth flow"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, jsonOut)
+	}
+	task, ok := payload["task"].(map[string]any)
+	if !ok || task["text"] != "tighten auth flow" || task["source"] != "flag" {
+		t.Fatalf("unexpected task payload: %#v", payload)
+	}
+	summary, ok := payload["summary"].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected summary payload: %#v", payload)
+	}
+	confidence, ok := summary["confidence"].(string)
+	if !ok || confidence == "" {
+		t.Fatalf("expected confidence in summary payload: %#v", payload)
+	}
+	if _, ok := summary["selected_count"].(float64); !ok {
+		t.Fatalf("expected selected_count in summary payload: %#v", payload)
+	}
+	selected, ok := payload["selected"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected selected groups in payload: %#v", payload)
+	}
+	for _, key := range []string{"durable_notes", "generated_context", "structural_repo", "live_work", "policy_workflow"} {
+		if _, ok := selected[key].([]any); !ok {
+			t.Fatalf("expected %s group in payload: %#v", key, payload)
+		}
+	}
+	omitted, ok := payload["omitted_nearby"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected omitted groups in payload: %#v", payload)
+	}
+	for _, key := range []string{"durable_notes", "generated_context", "structural_repo", "live_work", "policy_workflow"} {
+		if _, ok := omitted[key].([]any); !ok {
+			t.Fatalf("expected omitted %s group in payload: %#v", key, payload)
+		}
+	}
+}
+
+func TestCLIContextAssembleSelectsFirstWaveSourceGroups(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "context", "install", "--project", env.project))
+	if err := os.MkdirAll(filepath.Join(env.project, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(env.project, "docs", "auth-flow.md"), []byte("# Auth Flow\n\nTighten the auth flow around bearer token refresh.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "assemble", "--task", "auth flow"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, jsonOut)
+	}
+	summary := payload["summary"].(map[string]any)
+	if summary["selected_count"].(float64) == 0 {
+		t.Fatalf("expected selected sources in packet: %#v", payload)
+	}
+	groupCounts := summary["group_counts"].(map[string]any)
+	if groupCounts["durable_notes"].(float64) == 0 || groupCounts["generated_context"].(float64) == 0 || groupCounts["policy_workflow"].(float64) == 0 {
+		t.Fatalf("expected first-wave groups to be selected: %#v", payload)
+	}
+	if groupCounts["structural_repo"].(float64) != 0 {
+		t.Fatalf("expected structural repo to remain empty in this packet: %#v", payload)
+	}
+}
+
+func TestCLIContextAssembleIncludesStructuralRepoContext(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	for path, body := range map[string]string{
+		"go.mod":                    "module example.com/test\n\ngo 1.26\n",
+		"docs/search-overview.md":   "# Search Overview\n\nSearch context overview for task assembly.\n",
+		"internal/search/search.go": "package search\n",
+		"config/search.yaml":        "name: search\n",
+	} {
+		if err := os.MkdirAll(filepath.Join(env.project, filepath.Dir(path)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(env.project, path), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "assemble", "--task", "search config"))
+	if !strings.Contains(human, "### Structural Repo") {
+		t.Fatalf("expected structural repo section in assemble output:\n%s", human)
+	}
+	if !strings.Contains(human, "`config/`") && !strings.Contains(human, "`config/search.yaml`") && !strings.Contains(human, "`internal/search/`") {
+		t.Fatalf("expected at least one structural path in assemble output:\n%s", human)
+	}
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "assemble", "--task", "search config"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, jsonOut)
+	}
+	summary := payload["summary"].(map[string]any)
+	groupCounts := summary["group_counts"].(map[string]any)
+	if groupCounts["structural_repo"].(float64) == 0 {
+		t.Fatalf("expected structural repo count in summary: %#v", payload)
+	}
+	selected := payload["selected"].(map[string]any)
+	structural := selected["structural_repo"].([]any)
+	if len(structural) == 0 {
+		t.Fatalf("expected structural repo items in packet: %#v", payload)
+	}
+	first := structural[0].(map[string]any)
+	if first["kind"] != "structural" || first["why"] == "" {
+		t.Fatalf("expected structural packet item fields: %#v", payload)
+	}
+}
+
+func TestCLIContextStructureStatusReportsFreshness(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+
+	missing := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "structure", "status"))
+	if !strings.Contains(missing, "state: missing (structure metadata missing)") {
+		t.Fatalf("unexpected missing structure status:\n%s", missing)
+	}
+
+	statusJSON := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "structure", "status"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(statusJSON), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, statusJSON)
+	}
+	if payload["state"] != "missing" || payload["reason"] != "structure metadata missing" {
+		t.Fatalf("unexpected structure status payload: %#v", payload)
+	}
+}
+
+func TestCLIContextStructureRebuildsAndSupportsPathFilter(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	for path, body := range map[string]string{
+		"go.mod":                         "module example.com/test\n\ngo 1.26\n",
+		"cmd/brain/main.go":              "package main\nfunc main() {}\n",
+		"internal/search/search.go":      "package search\n",
+		"internal/search/search_test.go": "package search\n",
+		".github/workflows/ci.yml":       "name: ci\n",
+		"config/app.yaml":                "name: app\n",
+	} {
+		if err := os.MkdirAll(filepath.Join(env.project, filepath.Dir(path)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(env.project, path), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "structure"))
+	if !strings.Contains(human, "## Repository Shape") || !strings.Contains(human, "## Boundaries") || !strings.Contains(human, "## Entrypoints") || !strings.Contains(human, "## Config Surfaces") || !strings.Contains(human, "## Test Surfaces") {
+		t.Fatalf("unexpected structure output:\n%s", human)
+	}
+	if !strings.Contains(human, "`internal/search/`") || !strings.Contains(human, "`cmd/brain/main.go`") {
+		t.Fatalf("expected structural items in output:\n%s", human)
+	}
+
+	filtered := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "structure", "--path", "internal/search"))
+	if !strings.Contains(filtered, "`internal/search/`") {
+		t.Fatalf("expected filtered structural boundary:\n%s", filtered)
+	}
+	if strings.Contains(filtered, "`cmd/brain/main.go`") {
+		t.Fatalf("expected path filter to exclude unrelated entrypoints:\n%s", filtered)
+	}
+}
+
+func TestCLIContextLiveRequiresTaskOrActiveSession(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "context", "install", "--project", env.project))
+
+	missing := env.run(t, "", "--config", env.config, "--project", env.project, "context", "live")
+	if missing.err == nil || !strings.Contains(missing.err.Error(), "requires --task or an active session task") {
+		t.Fatalf("expected missing-task error, got err=%v stdout=%s stderr=%s", missing.err, missing.stdout, missing.stderr)
+	}
+}
+
+func TestCLIContextLiveResolvesTaskFromFlagAndSession(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "context", "install", "--project", env.project))
+
+	byFlag := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "live", "--task", "tighten auth flow"))
+	if !strings.Contains(byFlag, "## Task") || !strings.Contains(byFlag, "- Task: `tighten auth flow`") || !strings.Contains(byFlag, "- Source: `flag`") {
+		t.Fatalf("unexpected flag-based live output:\n%s", byFlag)
+	}
+
+	initGitProject(t, env.project)
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "session live task"))
+	bySession := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "live"))
+	if !strings.Contains(bySession, "- Task: `session live task`") || !strings.Contains(bySession, "- Source: `session`") || !strings.Contains(bySession, "## Session") {
+		t.Fatalf("unexpected session-based live output:\n%s", bySession)
+	}
+}
+
+func TestCLIContextLiveJSONReturnsStablePacketShape(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "context", "install", "--project", env.project))
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "live", "--task", "tighten auth flow"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, jsonOut)
+	}
+	task, ok := payload["task"].(map[string]any)
+	if !ok || task["text"] != "tighten auth flow" || task["source"] != "flag" {
+		t.Fatalf("unexpected task payload: %#v", payload)
+	}
+	sessionPayload, ok := payload["session"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected session payload: %#v", payload)
+	}
+	if _, ok := sessionPayload["active"].(bool); !ok {
+		t.Fatalf("expected active boolean in session payload: %#v", payload)
+	}
+	worktree, ok := payload["worktree"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected worktree payload: %#v", payload)
+	}
+	for _, key := range []string{"changed_files", "touched_boundaries"} {
+		if _, ok := worktree[key].([]any); !ok {
+			t.Fatalf("expected %s array in worktree payload: %#v", key, payload)
+		}
+	}
+	if _, ok := payload["nearby_tests"].([]any); !ok {
+		t.Fatalf("expected nearby_tests array: %#v", payload)
+	}
+	verification, ok := payload["verification"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected verification payload: %#v", payload)
+	}
+	for _, key := range []string{"recent_commands", "profiles"} {
+		if _, ok := verification[key].([]any); !ok {
+			t.Fatalf("expected %s array in verification payload: %#v", key, payload)
+		}
+	}
+	if _, ok := payload["policy_hints"].([]any); !ok {
+		t.Fatalf("expected policy_hints array: %#v", payload)
+	}
+	if _, ok := payload["ambiguities"].([]any); !ok {
+		t.Fatalf("expected ambiguities array: %#v", payload)
+	}
+}
+
+func TestCLIContextLiveIncludesChangedFilesTouchedBoundariesAndNearbyTests(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	for path, body := range map[string]string{
+		"internal/search/search.go":      "package search\n",
+		"internal/search/search_test.go": "package search\n",
+		"config/search.yaml":             "name: search\n",
+	} {
+		if err := os.MkdirAll(filepath.Join(env.project, filepath.Dir(path)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(env.project, path), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	initGitProject(t, env.project)
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "search config"))
+	if err := os.WriteFile(filepath.Join(env.project, "internal", "search", "search.go"), []byte("package search\n\nfunc Search() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "live"))
+	if !strings.Contains(human, "## Changed Files") || !strings.Contains(human, "`internal/search/search.go`") {
+		t.Fatalf("expected changed files in live output:\n%s", human)
+	}
+	if !strings.Contains(human, "## Touched Boundaries") || !strings.Contains(human, "`internal/search/`") {
+		t.Fatalf("expected touched boundary in live output:\n%s", human)
+	}
+	if !strings.Contains(human, "## Nearby Tests") || !strings.Contains(human, "`internal/search/search_test.go`") {
+		t.Fatalf("expected nearby test in live output:\n%s", human)
+	}
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "live"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, jsonOut)
+	}
+	worktree := payload["worktree"].(map[string]any)
+	if len(worktree["changed_files"].([]any)) == 0 || len(worktree["touched_boundaries"].([]any)) == 0 {
+		t.Fatalf("expected changed files and touched boundaries in payload: %#v", payload)
+	}
+	if len(payload["nearby_tests"].([]any)) == 0 {
+		t.Fatalf("expected nearby tests in payload: %#v", payload)
+	}
+}
+
+func TestCLIContextLiveReportsVerificationProfilesAndPolicyHints(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	for path, body := range map[string]string{
+		"internal/search/search.go":      "package search\n",
+		"internal/search/search_test.go": "package search\n",
+	} {
+		if err := os.MkdirAll(filepath.Join(env.project, filepath.Dir(path)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(env.project, path), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	override := "closeout:\n  verification_profiles:\n    - name: tests\n      commands:\n        - go test ./...\n    - name: build\n      commands:\n        - go build ./...\n"
+	if err := os.WriteFile(filepath.Join(env.project, ".brain", "policy.override.yaml"), []byte(override), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	initGitProject(t, env.project)
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "search config"))
+	if err := os.WriteFile(filepath.Join(env.project, "internal", "search", "search.go"), []byte("package search\n\nfunc Search() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "run", "--project", env.project, "--", "go", "test", "./..."))
+
+	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "live"))
+	if !strings.Contains(human, "## Verification") || !strings.Contains(human, "go test ./...") {
+		t.Fatalf("expected verification output in live context:\n%s", human)
+	}
+	if !strings.Contains(human, "## Policy Hints") || !strings.Contains(human, "Verification workflow") || !strings.Contains(human, "Durable memory update") {
+		t.Fatalf("expected policy hints in live context:\n%s", human)
+	}
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "live"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, jsonOut)
+	}
+	verification := payload["verification"].(map[string]any)
+	if len(verification["recent_commands"].([]any)) == 0 || len(verification["profiles"].([]any)) == 0 {
+		t.Fatalf("expected verification details in payload: %#v", payload)
+	}
+	if len(payload["policy_hints"].([]any)) == 0 {
+		t.Fatalf("expected policy hints in payload: %#v", payload)
+	}
+}
+
+func TestCLIContextAssembleIncludesLiveWorkContext(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	for path, body := range map[string]string{
+		"docs/search-overview.md":        "# Search Overview\n\nSearch context overview for task assembly.\n",
+		"internal/search/search.go":      "package search\n",
+		"internal/search/search_test.go": "package search\n",
+	} {
+		if err := os.MkdirAll(filepath.Join(env.project, filepath.Dir(path)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(env.project, path), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	initGitProject(t, env.project)
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "search config"))
+	if err := os.WriteFile(filepath.Join(env.project, "internal", "search", "search.go"), []byte("package search\n\nfunc Search() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "assemble"))
+	if !strings.Contains(human, "### Live Work") {
+		t.Fatalf("expected live work section in assemble output:\n%s", human)
+	}
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "assemble"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, jsonOut)
+	}
+	summary := payload["summary"].(map[string]any)
+	groupCounts := summary["group_counts"].(map[string]any)
+	if groupCounts["live_work"].(float64) == 0 {
+		t.Fatalf("expected live work count in summary: %#v", payload)
+	}
+}
+
+func TestCLIContextAssembleExplainReportsRationaleAndAmbiguities(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "context", "install", "--project", env.project))
+	if err := os.MkdirAll(filepath.Join(env.project, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(env.project, "docs", "workflow-guide.md"), []byte("# Workflow Guide\n\nTask workflow guide for auth flow changes.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(env.project, "docs", "workflow-extra.md"), []byte("# Workflow Extra\n\nNearby workflow notes for auth flow changes.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "assemble", "--task", "auth flow workflow", "--explain"))
+	if !strings.Contains(human, "## Why This Was Selected") || !strings.Contains(human, "## Omitted Nearby Context") || !strings.Contains(human, "## Missing Or Unused Source Groups") {
+		t.Fatalf("expected explain sections in human output:\n%s", human)
+	}
+	if !strings.Contains(human, "## Ambiguities") {
+		t.Fatalf("expected ambiguity section in explain output:\n%s", human)
+	}
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "assemble", "--task", "auth flow workflow", "--explain"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, jsonOut)
+	}
+	summary := payload["summary"].(map[string]any)
+	if summary["confidence"] != "medium" && summary["confidence"] != "low" {
+		t.Fatalf("expected explain run to compute a non-empty confidence bucket: %#v", payload)
+	}
+	ambiguities := payload["ambiguities"].([]any)
+	if len(ambiguities) == 0 {
+		t.Fatalf("expected explain run to report ambiguities: %#v", payload)
+	}
+	selected := payload["selected"].(map[string]any)
+	durable := selected["durable_notes"].([]any)
+	if len(durable) == 0 {
+		t.Fatalf("expected durable notes in explain packet: %#v", payload)
+	}
+	first := durable[0].(map[string]any)
+	if first["selection_method"] == "" || first["rank"].(float64) == 0 {
+		t.Fatalf("expected explain metadata on selected item: %#v", payload)
+	}
+}
+
 func TestCLISessionWorkflow(t *testing.T) {
 	env := newCLIEnv(t)
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))

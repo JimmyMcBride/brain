@@ -154,6 +154,13 @@ brain context load --project . --level 0
 brain context load --project . --level 1
 brain context load --project . --level 2
 brain context load --project . --level 3 --query "auth flow"
+brain context structure --project .
+brain context structure --project . --path internal/search
+brain context structure status --project .
+brain context live --project . --task "auth flow"
+brain context live --project . --explain
+brain context assemble --project . --task "auth flow"
+brain context assemble --project . --explain
 ```
 
 Use `--force` when adopting an existing unmanaged `AGENTS.md` or docs file into the managed-block model.
@@ -164,6 +171,29 @@ Use `--force` when adopting an existing unmanaged `AGENTS.md` or docs file into 
 - level 1 adds overview and workflows
 - level 2 loads the full static context bundle
 - level 3 adds search-injected relevant context, using `--query` or the active session task
+
+`context structure` is the structural repo inspection surface:
+
+- returns grouped boundaries, entrypoints, config surfaces, and test surfaces
+- auto-rebuilds the derived structural cache when it is missing or stale
+- supports `--path` to focus on one subtree
+- `context structure status` reports freshness and counts without rebuilding
+
+`context live` is the live-work inspection surface:
+
+- resolves the task from `--task` or the active session
+- returns an on-demand packet with task, session, changed-file, touched-boundary, nearby-test, verification, policy-hint, and ambiguity sections
+- adds rationale and missing-signal reporting with `--explain`
+- does not persist live state to SQLite or the session file
+- reports recent recorded session commands plus verification-profile satisfaction when a session is active
+- only emits policy hints for strong-match conditions such as missing verification or missing durable note updates after repo changes
+
+`context assemble` is the task-focused packet interface:
+
+- resolves the task from `--task` or the active session
+- assembles typed context from durable notes, generated context, structural repo context, live-work signals, and workflow/policy sources
+- shows ambiguities and confidence for the current task packet
+- adds rationale, omitted-nearby context, and missing-group reporting with `--explain`
 
 Wrappers are opt-in. Brain always installs the root contract and `.brain/context/*`; agent-specific wrapper files are only created when you pass one or more `--agent` flags.
 
