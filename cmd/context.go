@@ -181,6 +181,49 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 		},
 	}
 
+	structureCmd := &cobra.Command{
+		Use:   "structure",
+		Short: "Inspect structural repo context",
+	}
+
+	structureStatusCmd := &cobra.Command{
+		Use:   "status",
+		Short: "Show structural repo context freshness and counts",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			projectRoot := contextProjectPath(project, flags.projectPath)
+			appCtx, err := loadApp(projectRoot)
+			if err != nil {
+				return err
+			}
+			defer appCtx.Close()
+
+			status, err := appCtx.Structure.Freshness(cmd.Context())
+			if err != nil {
+				return err
+			}
+			return appCtx.Output.Print(status, func(w io.Writer) error {
+				if _, err := fmt.Fprintf(w, "state: %s (%s)\n", status.State, status.Reason); err != nil {
+					return err
+				}
+				if status.IndexedAt != "" {
+					if _, err := fmt.Fprintf(w, "indexed_at: %s\n", status.IndexedAt); err != nil {
+						return err
+					}
+				}
+				if _, err := fmt.Fprintf(w, "files: %d current, %d indexed\n", status.CurrentFileCount, status.IndexedFileCount); err != nil {
+					return err
+				}
+				if _, err := fmt.Fprintf(w, "items: %d\n", status.ItemCount); err != nil {
+					return err
+				}
+				if _, err := fmt.Fprintf(w, "boundaries: %d\nentrypoints: %d\nconfig_surfaces: %d\ntest_surfaces: %d\n", status.BoundaryCount, status.EntrypointCount, status.ConfigSurfaceCount, status.TestSurfaceCount); err != nil {
+					return err
+				}
+				return nil
+			})
+		},
+	}
+
 	for _, sub := range []*cobra.Command{installCmd, refreshCmd} {
 		sub.Flags().StringVar(&project, "project", "", "project root to scan and update")
 		sub.Flags().StringArrayVarP(&agents, "agent", "a", nil, "agent wrapper to generate; repeatable")
@@ -194,8 +237,11 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 	assembleCmd.Flags().StringVar(&assembleTask, "task", "", "task text to assemble context for")
 	assembleCmd.Flags().IntVar(&assembleLimit, "limit", 8, "maximum selected context items")
 	assembleCmd.Flags().BoolVar(&assembleExplain, "explain", false, "include selection rationale and omitted context")
+	structureCmd.Flags().StringVar(&project, "project", "", "project root to inspect structure from")
+	structureStatusCmd.Flags().StringVar(&project, "project", "", "project root to inspect structure from")
 
-	contextCmd.AddCommand(installCmd, refreshCmd, loadCmd, assembleCmd)
+	structureCmd.AddCommand(structureStatusCmd)
+	contextCmd.AddCommand(installCmd, refreshCmd, loadCmd, assembleCmd, structureCmd)
 	root.AddCommand(contextCmd)
 }
 

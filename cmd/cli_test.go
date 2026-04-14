@@ -645,6 +645,25 @@ func TestCLIContextAssembleSelectsFirstWaveSourceGroups(t *testing.T) {
 	}
 }
 
+func TestCLIContextStructureStatusReportsFreshness(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+
+	missing := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "structure", "status"))
+	if !strings.Contains(missing, "state: missing (structure metadata missing)") {
+		t.Fatalf("unexpected missing structure status:\n%s", missing)
+	}
+
+	statusJSON := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "structure", "status"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(statusJSON), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, statusJSON)
+	}
+	if payload["state"] != "missing" || payload["reason"] != "structure metadata missing" {
+		t.Fatalf("unexpected structure status payload: %#v", payload)
+	}
+}
+
 func TestCLIContextAssembleExplainReportsRationaleAndAmbiguities(t *testing.T) {
 	env := newCLIEnv(t)
 	requireOK(t, env.run(t, "", "--config", env.config, "context", "install", "--project", env.project))
