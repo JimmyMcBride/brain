@@ -10,10 +10,12 @@ Use this file for the structural shape of the repository.
 - `internal/brainstorm/`
 - `internal/buildinfo/`
 - `internal/config/`
+- `internal/contextassembly/`
 - `internal/distill/`
 - `internal/embeddings/`
 - `internal/history/`
 - `internal/index/`
+- `internal/livecontext/`
 - `internal/notes/`
 - `internal/output/`
 - `internal/plan/`
@@ -22,6 +24,7 @@ Use this file for the structural shape of the repository.
 - `internal/search/`
 - `internal/session/`
 - `internal/skills/`
+- `internal/structure/`
 - `internal/templates/`
 - `internal/update/`
 - `internal/workspace/`

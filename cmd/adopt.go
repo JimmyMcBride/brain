@@ -80,7 +80,7 @@ func addAdoptCommand(root *cobra.Command, flags *rootFlagsState) {
 
 	cmd.Flags().StringVar(&provider, "embedding-provider", "", "embedding provider (localhash, openai, none)")
 	cmd.Flags().StringVar(&model, "embedding-model", "", "embedding model name")
-	cmd.Flags().StringArrayVarP(&agents, "agent", "a", nil, "agent wrapper to generate; repeatable")
+	cmd.Flags().StringArrayVarP(&agents, "agent", "a", nil, "agent instruction files to integrate or create; repeatable")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "show the adoption plan without writing files")
 	root.AddCommand(cmd)
 }

@@ -2,20 +2,15 @@ package skills
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 )
 
-type InstallMode string
 type Scope string
 
 const (
-	ModeSymlink InstallMode = "symlink"
-	ModeCopy    InstallMode = "copy"
-
 	ScopeGlobal Scope = "global"
 	ScopeLocal  Scope = "local"
 	ScopeBoth   Scope = "both"
@@ -26,11 +21,9 @@ type Installer struct {
 }
 
 type InstallRequest struct {
-	Mode       InstallMode
 	Scope      Scope
 	Agents     []string
 	ProjectDir string
-	RepoRoot   string
 }
 
 type InstallResult struct {
@@ -43,11 +36,18 @@ type InstallResult struct {
 }
 
 type Target struct {
-	Agent  string `json:"agent"`
-	Scope  string `json:"scope"`
-	Root   string `json:"root"`
-	Path   string `json:"path"`
-	Source string `json:"-"`
+	Agent string `json:"agent"`
+	Scope string `json:"scope"`
+	Root  string `json:"root"`
+	Path  string `json:"path"`
+}
+
+type TargetStatus struct {
+	Target
+	Installed   bool      `json:"installed"`
+	NeedsRepair bool      `json:"needs_repair"`
+	Reason      string    `json:"reason,omitempty"`
+	Manifest    *Manifest `json:"manifest,omitempty"`
 }
 
 func NewInstaller(home string) *Installer {
@@ -64,13 +64,17 @@ func (i *Installer) Install(req InstallRequest) ([]InstallResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	bundle, err := loadBundle()
+	if err != nil {
+		return nil, err
+	}
+
 	results := make([]InstallResult, 0, len(targets))
 	for _, target := range targets {
 		if err := os.MkdirAll(target.Root, 0o755); err != nil {
 			return nil, fmt.Errorf("create skill root %s: %w", target.Root, err)
 		}
-		mode := effectiveMode(req.Mode, target)
-		if err := installPath(mode, target.Source, target.Path); err != nil {
+		if err := installPath(bundle, target); err != nil {
 			return nil, err
 		}
 		results = append(results, InstallResult{
@@ -79,20 +83,13 @@ func (i *Installer) Install(req InstallRequest) ([]InstallResult, error) {
 			Scope:  target.Scope,
 			Root:   target.Root,
 			Path:   target.Path,
-			Method: string(mode),
+			Method: "copy",
 		})
 	}
 	return results, nil
 }
 
 func (i *Installer) ResolveTargets(req InstallRequest) ([]Target, error) {
-	mode := req.Mode
-	if mode == "" {
-		mode = ModeSymlink
-	}
-	if mode != ModeSymlink && mode != ModeCopy {
-		return nil, fmt.Errorf("unsupported install mode: %s", mode)
-	}
 	scope := req.Scope
 	if scope == "" {
 		scope = ScopeGlobal
@@ -105,10 +102,6 @@ func (i *Installer) ResolveTargets(req InstallRequest) ([]Target, error) {
 	if len(agents) == 0 {
 		agents = knownAgents()
 	}
-	source, err := brainSkillSource(req.RepoRoot)
-	if err != nil {
-		return nil, err
-	}
 
 	var targets []Target
 	if scope == ScopeLocal || scope == ScopeBoth {
@@ -120,11 +113,10 @@ func (i *Installer) ResolveTargets(req InstallRequest) ([]Target, error) {
 		for _, agent := range agents {
 			root := knownLocalSkillRoot(projectDir, agent)
 			targets = append(targets, Target{
-				Agent:  agent,
-				Scope:  string(ScopeLocal),
-				Root:   root,
-				Path:   filepath.Join(root, "brain"),
-				Source: source,
+				Agent: agent,
+				Scope: string(ScopeLocal),
+				Root:  root,
+				Path:  filepath.Join(root, "brain"),
 			})
 		}
 	}
@@ -133,11 +125,10 @@ func (i *Installer) ResolveTargets(req InstallRequest) ([]Target, error) {
 		for _, agent := range agents {
 			root := knownGlobalSkillRoot(i.Home, agent)
 			targets = append(targets, Target{
-				Agent:  agent,
-				Scope:  string(ScopeGlobal),
-				Root:   root,
-				Path:   filepath.Join(root, "brain"),
-				Source: source,
+				Agent: agent,
+				Scope: string(ScopeGlobal),
+				Root:  root,
+				Path:  filepath.Join(root, "brain"),
 			})
 		}
 	}
@@ -145,91 +136,113 @@ func (i *Installer) ResolveTargets(req InstallRequest) ([]Target, error) {
 	return dedupeTargets(targets), nil
 }
 
-func brainSkillSource(repoRoot string) (string, error) {
-	source := filepath.Join(repoRoot, "skills", "brain")
-	if err := validateSkillSource(source); err != nil {
-		return "", err
+func (i *Installer) Inspect(req InstallRequest) ([]TargetStatus, error) {
+	targets, err := i.ResolveTargets(req)
+	if err != nil {
+		return nil, err
 	}
-	return source, nil
+	bundle, err := loadBundle()
+	if err != nil {
+		return nil, err
+	}
+
+	statuses := make([]TargetStatus, 0, len(targets))
+	for _, target := range targets {
+		status, err := inspectTarget(target, bundle.Hash)
+		if err != nil {
+			return nil, err
+		}
+		statuses = append(statuses, status)
+	}
+	return statuses, nil
 }
 
-func validateSkillSource(source string) error {
-	info, err := os.Stat(source)
-	if err != nil {
-		return fmt.Errorf("skill source %s: %w", source, err)
+func installPath(bundle skillBundle, target Target) error {
+	if err := os.RemoveAll(target.Path); err != nil {
+		return fmt.Errorf("clear target %s: %w", target.Path, err)
 	}
-	if !info.IsDir() {
-		return fmt.Errorf("skill source is not a directory: %s", source)
+	if err := copyBundle(bundle, target.Path); err != nil {
+		return fmt.Errorf("copy skill to %s: %w", target.Path, err)
 	}
-	if _, err := os.Stat(filepath.Join(source, "SKILL.md")); err != nil {
-		return fmt.Errorf("skill source missing SKILL.md: %w", err)
+	if err := writeManifest(target.Path, target.Agent, target.Scope, bundle.Hash); err != nil {
+		return fmt.Errorf("write skill manifest %s: %w", manifestPath(target.Path), err)
 	}
 	return nil
 }
 
-func effectiveMode(mode InstallMode, target Target) InstallMode {
-	if mode == "" {
-		mode = ModeSymlink
-	}
-	// OpenClaw's managed skill loader currently ignores symlinked skill
-	// directories, so copy is the only discoverable install mode for it.
-	if target.Agent == "openclaw" {
-		return ModeCopy
-	}
-	return mode
-}
+func inspectTarget(target Target, bundleHash string) (TargetStatus, error) {
+	status := TargetStatus{Target: target}
 
-func installPath(mode InstallMode, source, target string) error {
-	if err := os.RemoveAll(target); err != nil {
-		return fmt.Errorf("clear target %s: %w", target, err)
+	info, err := os.Lstat(target.Path)
+	if os.IsNotExist(err) {
+		return status, nil
 	}
-	switch mode {
-	case ModeSymlink:
-		return os.Symlink(source, target)
-	case ModeCopy:
-		return copyDir(source, target)
-	default:
-		return fmt.Errorf("unsupported install mode: %s", mode)
-	}
-}
-
-func copyDir(source, target string) error {
-	return filepath.Walk(source, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(source, path)
-		if err != nil {
-			return err
-		}
-		dest := filepath.Join(target, rel)
-		if info.IsDir() {
-			return os.MkdirAll(dest, info.Mode().Perm())
-		}
-		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-			return err
-		}
-		return copyFile(path, dest)
-	})
-}
-
-func copyFile(source, target string) error {
-	in, err := os.Open(source)
 	if err != nil {
-		return fmt.Errorf("open source: %w", err)
+		return status, fmt.Errorf("inspect target %s: %w", target.Path, err)
 	}
-	defer in.Close()
 
-	out, err := os.Create(target)
+	status.Installed = true
+	if info.Mode()&os.ModeSymlink != 0 {
+		status.NeedsRepair = true
+		status.Reason = "legacy_symlink"
+		return status, nil
+	}
+	if !info.IsDir() {
+		status.NeedsRepair = true
+		status.Reason = "invalid_target"
+		return status, nil
+	}
+	if _, err := os.Stat(filepath.Join(target.Path, "SKILL.md")); err != nil {
+		status.NeedsRepair = true
+		status.Reason = "missing_skill_file"
+		return status, nil
+	}
+
+	manifest, err := readManifest(target.Path)
+	if os.IsNotExist(err) {
+		status.NeedsRepair = true
+		status.Reason = "legacy_install"
+		return status, nil
+	}
 	if err != nil {
-		return fmt.Errorf("create target: %w", err)
+		status.NeedsRepair = true
+		status.Reason = "invalid_manifest"
+		return status, nil
 	}
-	defer out.Close()
+	status.Manifest = manifest
+	if manifest.BundleHash != bundleHash {
+		status.NeedsRepair = true
+		status.Reason = "stale_bundle"
+	}
+	return status, nil
+}
 
-	if _, err := io.Copy(out, in); err != nil {
-		return fmt.Errorf("copy skill: %w", err)
+func InstalledTargets(statuses []TargetStatus) []TargetStatus {
+	out := make([]TargetStatus, 0, len(statuses))
+	for _, status := range statuses {
+		if status.Installed {
+			out = append(out, status)
+		}
 	}
-	return out.Close()
+	return out
+}
+
+func RepairTargets(statuses []TargetStatus) []TargetStatus {
+	out := make([]TargetStatus, 0, len(statuses))
+	for _, status := range statuses {
+		if status.Installed && status.NeedsRepair {
+			out = append(out, status)
+		}
+	}
+	return out
+}
+
+func AgentsForTargets(statuses []TargetStatus) []string {
+	agents := make([]string, 0, len(statuses))
+	for _, status := range statuses {
+		agents = append(agents, status.Agent)
+	}
+	return normalizeAgents(agents)
 }
 
 func knownAgents() []string {
@@ -335,21 +348,4 @@ func expandHome(path, home string) string {
 		return home
 	}
 	return filepath.Join(home, strings.TrimPrefix(path, "~/"))
-}
-
-func agentNameFromRoot(root string) string {
-	base := strings.TrimPrefix(filepath.Base(root), ".")
-	if base == "" || base == "." || base == string(filepath.Separator) {
-		return "custom"
-	}
-	if base == "skills" {
-		return "custom"
-	}
-	if strings.HasSuffix(base, "-skills") {
-		base = strings.TrimSuffix(base, "-skills")
-	}
-	if base == "" {
-		return "custom"
-	}
-	return base
 }

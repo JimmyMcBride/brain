@@ -53,11 +53,17 @@ func newRootCommand(opts rootOptions) *cobra.Command {
 	}
 
 	flags := &rootFlagsState{}
+	var enableSkillPreflight bool
+	preflightDone := map[string]bool{}
 	cmd := &cobra.Command{
 		Use:           "brain",
 		Short:         "Project-local brain for docs, planning, context, and workflow",
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			enableSkillPreflight = shouldPreflightLocalSkills(cmd)
+			return nil
+		},
 	}
 	cmd.SetIn(opts.in)
 	cmd.SetOut(opts.out)
@@ -71,6 +77,19 @@ func newRootCommand(opts rootOptions) *cobra.Command {
 		if len(projectPath) != 0 && strings.TrimSpace(projectPath[0]) != "" {
 			resolvedProject = projectPath[0]
 		}
+		if enableSkillPreflight {
+			absProject, err := filepath.Abs(resolvedProject)
+			if err != nil {
+				return nil, err
+			}
+			if !preflightDone[absProject] {
+				if err := repairLocalSkillsIfNeeded(absProject); err != nil {
+					return nil, err
+				}
+				preflightDone[absProject] = true
+			}
+			resolvedProject = absProject
+		}
 		return opts.appLoad(flags.configPath, resolvedProject, flags.jsonOutput, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	}
 
@@ -83,7 +102,7 @@ func addCommands(root *cobra.Command, flags *rootFlagsState, loadApp appLoader) 
 	addAdoptCommand(root, flags)
 	addDoctorCommand(root, flags)
 	addVersionCommand(root, flags)
-	addUpdateCommand(root, flags)
+	addUpdateCommand(root, flags, loadApp)
 	addReadCommand(root, flags, loadApp)
 	addEditCommand(root, flags, loadApp)
 	addFindCommand(root, flags, loadApp)
@@ -122,17 +141,6 @@ func readBody(in io.Reader, flagValue string, fromStdin bool) (string, error) {
 		return "", err
 	}
 	return string(data), nil
-}
-
-func repoRoot() string {
-	if cwd, err := os.Getwd(); err == nil {
-		return cwd
-	}
-	exe, err := os.Executable()
-	if err != nil {
-		return "."
-	}
-	return filepath.Dir(exe)
 }
 
 func modeFromFlag(flags *rootFlagsState, configMode string) string {
@@ -185,4 +193,28 @@ func chooseTemplate(noteType, templateName string) string {
 	default:
 		return "resource.md"
 	}
+}
+
+func shouldPreflightLocalSkills(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+	name := topLevelCommandName(cmd)
+	switch name {
+	case "", "help", "init", "adopt", "doctor", "version", "update", "skills":
+		return false
+	default:
+		return true
+	}
+}
+
+func topLevelCommandName(cmd *cobra.Command) string {
+	current := cmd
+	for current != nil && current.Parent() != nil && current.Parent().Parent() != nil {
+		current = current.Parent()
+	}
+	if current == nil {
+		return ""
+	}
+	return current.Name()
 }

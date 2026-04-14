@@ -1,7 +1,7 @@
 # Project Agent Contract
 
 <!-- brain:begin agents-contract -->
-Use this file as the canonical project contract for `<PROJECT_NAME>`.
+Use this file as a Brain-managed project context entrypoint for `<PROJECT_NAME>`.
 
 Read the linked context files before substantial work. Prefer the `brain` skill and `brain` CLI for project memory, retrieval, and durable context updates.
 

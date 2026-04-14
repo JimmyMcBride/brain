@@ -19,6 +19,38 @@ need_cmd() {
   command -v "$1" >/dev/null 2>&1
 }
 
+global_skill_path() {
+  agent="$1"
+  case "$agent" in
+    codex) printf '%s\n' "${HOME}/.codex/skills/brain" ;;
+    claude) printf '%s\n' "${HOME}/.claude/skills/brain" ;;
+    copilot) printf '%s\n' "${HOME}/.copilot/skills/brain" ;;
+    openclaw) printf '%s\n' "${HOME}/.openclaw/skills/brain" ;;
+    pi) printf '%s\n' "${HOME}/.pi/agent/skills/brain" ;;
+    ai) printf '%s\n' "${HOME}/.ai/skills/brain" ;;
+    *) return 1 ;;
+  esac
+}
+
+refresh_global_skills() {
+  set --
+  for agent in codex claude copilot openclaw pi ai; do
+    path="$(global_skill_path "${agent}")"
+    if [ -e "${path}" ]; then
+      set -- "$@" --agent "${agent}"
+    fi
+  done
+
+  if [ "$#" -eq 0 ]; then
+    return 0
+  fi
+
+  if ! output="$("${INSTALL_DIR}/brain" skills install --scope global "$@" 2>&1)"; then
+    printf '%s\n' "${output}" >&2
+    die "refresh existing global skills failed"
+  fi
+}
+
 fetch() {
   url="$1"
   out="$2"
@@ -128,6 +160,7 @@ install_from_source_main() {
   fi
 
   printf 'Installed to %s/brain by building the current main branch source\n' "${INSTALL_DIR}"
+  refresh_global_skills
 
   RESOLVED="$(command -v brain 2>/dev/null || true)"
   if [ "${RESOLVED}" != "${INSTALL_DIR}/brain" ]; then
@@ -180,6 +213,7 @@ else
 fi
 
 printf 'Installed to %s/brain\n' "${INSTALL_DIR}"
+refresh_global_skills
 
 RESOLVED="$(command -v brain 2>/dev/null || true)"
 if [ "${RESOLVED}" != "${INSTALL_DIR}/brain" ]; then

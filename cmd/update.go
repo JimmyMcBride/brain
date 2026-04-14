@@ -2,8 +2,10 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 
 	"brain/internal/config"
 	"brain/internal/output"
@@ -20,7 +22,12 @@ var newUpdater = func(cfg *config.Config, paths config.Paths) updater {
 	return update.New(cfg, paths, update.Options{})
 }
 
-func addUpdateCommand(root *cobra.Command, flags *rootFlagsState) {
+type updateCommandOutput struct {
+	update.Result
+	skillRefreshResult
+}
+
+func addUpdateCommand(root *cobra.Command, flags *rootFlagsState, _ appLoader) {
 	var checkOnly bool
 	var prerelease bool
 
@@ -34,6 +41,14 @@ func addUpdateCommand(root *cobra.Command, flags *rootFlagsState) {
 			}
 
 			manager := newUpdater(cfg, paths)
+			projectRoot, err := filepath.Abs(flags.projectPath)
+			if err != nil {
+				return err
+			}
+			globalTargets, localTargets, err := inspectInstalledSkills(projectRoot)
+			if err != nil {
+				return err
+			}
 			result, err := manager.Update(cmd.Context(), update.Request{
 				CheckOnly:         checkOnly,
 				IncludePrerelease: prerelease,
@@ -41,9 +56,19 @@ func addUpdateCommand(root *cobra.Command, flags *rootFlagsState) {
 			if err != nil {
 				return err
 			}
+			out := updateCommandOutput{Result: result}
+
+			var refreshErr error
+			if !checkOnly && shouldRefreshSkills(result.Status) {
+				refreshBinary := result.CurrentPath
+				if result.InstalledPath != "" {
+					refreshBinary = result.InstalledPath
+				}
+				out.skillRefreshResult, refreshErr = refreshInstalledSkills(refreshBinary, flags.configPath, projectRoot, globalTargets, localTargets)
+			}
 
 			printer := output.New(modeFromFlag(flags, cfg.OutputMode), cmd.OutOrStdout())
-			return printer.Print(result, func(w io.Writer) error {
+			if err := printer.Print(out, func(w io.Writer) error {
 				switch result.Status {
 				case "up_to_date", "no_releases":
 					if _, err := fmt.Fprintf(w, "update: %s\n", result.Message); err != nil {
@@ -90,11 +115,39 @@ func addUpdateCommand(root *cobra.Command, flags *rootFlagsState) {
 						}
 					}
 				}
+				if !checkOnly && shouldRefreshSkills(result.Status) {
+					if _, err := fmt.Fprintf(w, "skills:  %s\n", out.SkillRefreshStatus); err != nil {
+						return err
+					}
+					for _, refreshed := range out.RefreshedSkills {
+						if _, err := fmt.Fprintf(w, "skill:   %s [%s] -> %s\n", refreshed.Agent, refreshed.Scope, refreshed.Path); err != nil {
+							return err
+						}
+					}
+				}
 				return nil
-			})
+			}); err != nil {
+				return err
+			}
+			if refreshErr != nil {
+				if result.Updated {
+					return fmt.Errorf("binary updated, skill refresh incomplete: %w", refreshErr)
+				}
+				return errors.New("skill refresh incomplete: " + refreshErr.Error())
+			}
+			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&checkOnly, "check", false, "check for updates without installing")
 	cmd.Flags().BoolVar(&prerelease, "prerelease", false, "include prereleases when selecting the latest release")
 	root.AddCommand(cmd)
+}
+
+func shouldRefreshSkills(status string) bool {
+	switch status {
+	case "updated", "installed_to_fallback", "up_to_date":
+		return true
+	default:
+		return false
+	}
 }

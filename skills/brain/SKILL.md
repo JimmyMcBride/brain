@@ -14,7 +14,7 @@ Use `brain` as the primary interface for project-local memory and workflow.
 
 ## Project-First Behavior
 
-If the current repository has Brain context, treat it as canonical:
+If the current repository has Brain context, use the repo-local Brain docs first:
 
 1. Read `AGENTS.md` at the repo root.
 2. Read `.brain/policy.yaml`.

@@ -46,6 +46,40 @@ function Get-Checksum([string]$ChecksumsPath, [string]$AssetName) {
     Fail "checksum entry missing for $AssetName"
 }
 
+function Get-GlobalSkillPath([string]$Agent) {
+    switch ($Agent) {
+        "codex" { return Join-Path $HOME ".codex\skills\brain" }
+        "claude" { return Join-Path $HOME ".claude\skills\brain" }
+        "copilot" { return Join-Path $HOME ".copilot\skills\brain" }
+        "openclaw" { return Join-Path $HOME ".openclaw\skills\brain" }
+        "pi" { return Join-Path $HOME ".pi\agent\skills\brain" }
+        "ai" { return Join-Path $HOME ".ai\skills\brain" }
+        default { return $null }
+    }
+}
+
+function Refresh-GlobalSkills([string]$BinaryPath) {
+    $agents = @()
+    foreach ($candidate in @("codex", "claude", "copilot", "openclaw", "pi", "ai")) {
+        $path = Get-GlobalSkillPath -Agent $candidate
+        if ($path -and (Test-Path $path)) {
+            $agents += $candidate
+        }
+    }
+    if ($agents.Count -eq 0) {
+        return
+    }
+
+    $arguments = @("skills", "install", "--scope", "global")
+    foreach ($agent in $agents) {
+        $arguments += @("--agent", $agent)
+    }
+    & $BinaryPath @arguments | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Fail "refresh existing global skills failed"
+    }
+}
+
 function Install-FromSourceMain([string]$TempDir, [string]$InstallDir) {
     if (-not (Get-Command go -ErrorAction SilentlyContinue)) {
         Fail "no published release found and Go is not installed"
@@ -74,6 +108,7 @@ function Install-FromSourceMain([string]$TempDir, [string]$InstallDir) {
     Copy-Item -Path $binaryPath -Destination (Join-Path $InstallDir "brain.exe") -Force
 
     Write-Host "Installed to $InstallDir\brain.exe by building the current main branch source"
+    Refresh-GlobalSkills -BinaryPath (Join-Path $InstallDir "brain.exe")
 }
 
 $arch = Get-Arch
@@ -115,6 +150,7 @@ try {
     Copy-Item -Path $binaryPath -Destination (Join-Path $InstallDir "brain.exe") -Force
 
     Write-Host "Installed to $InstallDir\brain.exe"
+    Refresh-GlobalSkills -BinaryPath (Join-Path $InstallDir "brain.exe")
     $pathEntries = ($env:Path -split ';') | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
     if ($pathEntries -notcontains $InstallDir) {
         Write-Host "PATH note: ensure $InstallDir is on PATH"
