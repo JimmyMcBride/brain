@@ -1,16 +1,19 @@
 package cmd
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"brain/internal/config"
 	"brain/internal/embeddings"
 	"brain/internal/index"
 	"brain/internal/notes"
 	"brain/internal/output"
+	"brain/internal/projectcontext"
 	"brain/internal/workspace"
 
 	"github.com/spf13/cobra"
@@ -48,6 +51,7 @@ func addDoctorCommand(root *cobra.Command, flags *rootFlagsState) {
 			} else {
 				checks = append(checks, map[string]any{"name": "workspace", "ok": true, "details": "project-local workspace present"})
 			}
+			checks = append(checks, projectMigrationDoctorCheck(projectDir))
 			if files, err := notes.ValidateWorkspaceMarkdown(workspaceSvc); err != nil {
 				checks = append(checks, map[string]any{"name": "note_integrity", "ok": false, "details": err.Error()})
 			} else {
@@ -105,4 +109,52 @@ func check(name string, ok bool) map[string]any {
 func exists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+func projectMigrationDoctorCheck(projectDir string) map[string]any {
+	plan, err := contextManager().PlanProjectMigrations(projectDir)
+	if err != nil {
+		return map[string]any{"name": "project_migrations", "ok": false, "details": err.Error()}
+	}
+
+	switch plan.Status {
+	case "not_brain_project":
+		return map[string]any{"name": "project_migrations", "ok": true, "details": "not a Brain project"}
+	case "current":
+		return map[string]any{"name": "project_migrations", "ok": true, "details": "current"}
+	case "pending":
+		return map[string]any{"name": "project_migrations", "ok": false, "details": "pending (" + projectMigrationPendingSummary(plan.PendingMigrations) + ")"}
+	case "broken":
+		details := "broken"
+		if reason := strings.TrimSpace(plan.BrokenReason); reason != "" {
+			details += " (" + reason
+			if pending := projectMigrationPendingSummary(plan.PendingMigrations); pending != "" {
+				details += "; pending: " + pending
+			}
+			details += ")"
+			return map[string]any{"name": "project_migrations", "ok": false, "details": details}
+		}
+		if pending := projectMigrationPendingSummary(plan.PendingMigrations); pending != "" {
+			details += " (pending: " + pending + ")"
+		}
+		return map[string]any{"name": "project_migrations", "ok": false, "details": details}
+	default:
+		return map[string]any{"name": "project_migrations", "ok": false, "details": fmt.Sprintf("unknown status %q", plan.Status)}
+	}
+}
+
+func projectMigrationPendingSummary(migrations []projectcontext.ProjectMigrationDefinition) string {
+	if len(migrations) == 0 {
+		return ""
+	}
+	ids := make([]string, 0, len(migrations))
+	for _, migration := range migrations {
+		if id := strings.TrimSpace(migration.ID); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
+		return ""
+	}
+	return strings.Join(ids, ", ")
 }

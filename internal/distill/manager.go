@@ -13,6 +13,7 @@ import (
 	"brain/internal/history"
 	"brain/internal/notes"
 	"brain/internal/project"
+	"brain/internal/promotion"
 	"brain/internal/search"
 	"brain/internal/session"
 )
@@ -39,104 +40,43 @@ func New(notesManager *notes.Manager, searchEngine *search.Engine, projectManage
 
 func (m *Manager) FromSession(ctx context.Context, limit int) (*notes.Note, error) {
 	projectDir := m.notes.WorkspaceAbs(".")
-	active, err := m.session.Active(projectDir)
-	if err != nil {
-		return nil, err
-	}
-	if active == nil || active.Status != "active" {
-		return nil, errors.New("distill --session requires an active session")
-	}
 	if limit <= 0 {
 		limit = 6
 	}
-
-	changedFiles, diffSummary := gitDiffSummary(ctx, projectDir, active.GitBaseline.Head)
-	recentNotes, err := m.historyAfterBaseline(active.HistoryBaseline, limit)
+	review, err := m.session.ReviewActiveSessionPromotions(ctx, projectDir, limit)
 	if err != nil {
 		return nil, err
 	}
+	if review.Session == nil || review.Session.Status != "active" {
+		return nil, errors.New("distill --session requires an active session")
+	}
+	active := review.Session
 
 	title := strings.TrimSpace(active.Task)
 	if title == "" {
 		title = "Session"
 	}
 	title += " Distill Proposal"
-	changeSlug := slugify(active.Task)
-	if changeSlug == "" {
-		changeSlug = "session"
-	}
-	decisionSlug := changeSlug
 	body := renderSessionProposal(sessionProposal{
 		Title:       title,
 		SessionID:   active.ID,
 		Task:        active.Task,
 		GitHead:     active.GitBaseline.Head,
 		Commands:    active.CommandRuns,
-		Changed:     changedFiles,
-		DiffSummary: diffSummary,
-		RecentNotes: recentNotes,
-		Targets: []proposalTarget{
-			{
-				Path:   "AGENTS.md",
-				Reason: "capture new workflow guidance, decisions, or constraints that should become part of the repo contract",
-				Body: []string{
-					fmt.Sprintf("- Add the durable guidance learned while working on %q.", active.Task),
-					"- Keep the note concise and operational so future agents can reuse it.",
-				},
-			},
-			{
-				Path:   ".brain/context/current-state.md",
-				Reason: "record what changed, what remains active, and any follow-up state that should persist beyond the session",
-				Body: []string{
-					fmt.Sprintf("- Summarize the current state of %q.", active.Task),
-					"- Note the highest-signal changed files and any remaining follow-up.",
-				},
-			},
-			{
-				Path:   filepath.ToSlash(filepath.Join(".brain/resources/changes", changeSlug+".md")),
-				Reason: "capture the implementation outcome, changed files, and verification trail as a durable change note",
-				Body: []string{
-					fmt.Sprintf("# %s", strings.TrimSpace(active.Task)),
-					"",
-					"## Outcome",
-					"- Summarize the shipped behavior from this session.",
-					"",
-					"## Verification",
-					"- Copy the passing session commands after review.",
-					"",
-					"## Changed Files",
-					"- List the durable files that materially changed.",
-				},
-			},
-			{
-				Path:   filepath.ToSlash(filepath.Join(".brain/resources/decisions", decisionSlug+".md")),
-				Reason: "preserve rationale if this session changed a technical or workflow decision instead of only changing code",
-				Body: []string{
-					fmt.Sprintf("# Why we chose %s", strings.TrimSpace(active.Task)),
-					"",
-					"## Context",
-					"",
-					"## Options Considered",
-					"",
-					"## Decision",
-					"",
-					"## Tradeoffs",
-				},
-			},
-		},
+		Changed:     review.ChangedFiles,
+		DiffSummary: review.DiffSummary,
+		RecentNotes: review.RecentNotes,
+		Assessments: review.Assessments,
 	})
 
+	promotableTargets := promotableProposalTargets(review.Assessments)
 	return m.createProposal(title, map[string]any{
-		"type":              "distill_proposal",
-		"distill_scope":     "session",
-		"source_session_id": active.ID,
-		"source_task":       active.Task,
-		"proposed_targets": proposalPaths([]proposalTarget{
-			{Path: "AGENTS.md"},
-			{Path: ".brain/context/current-state.md"},
-			{Path: filepath.ToSlash(filepath.Join(".brain/resources/changes", changeSlug+".md"))},
-			{Path: filepath.ToSlash(filepath.Join(".brain/resources/decisions", decisionSlug+".md"))},
-		}),
+		"type":                 "distill_proposal",
+		"distill_scope":        "session",
+		"source_session_id":    active.ID,
+		"source_task":          active.Task,
+		"proposed_targets":     promotableTargets,
+		"promotion_categories": promotableCategories(review.Assessments),
 	}, body)
 }
 
@@ -247,7 +187,7 @@ type sessionProposal struct {
 	Changed     []string
 	DiffSummary string
 	RecentNotes []history.Entry
-	Targets     []proposalTarget
+	Assessments []promotion.Assessment
 }
 
 type brainstormProposal struct {
@@ -303,7 +243,8 @@ func renderSessionProposal(proposal sessionProposal) string {
 			b.WriteString(fmt.Sprintf("- `%s` (%s: %s)\n", entry.File, entry.Operation, entry.Summary))
 		}
 	}
-	appendTargets(&b, proposal.Targets)
+	appendPromotionReview(&b, proposal.Assessments)
+	appendTargets(&b, promotableTargetEntries(proposal.Assessments))
 	return b.String()
 }
 
@@ -340,6 +281,10 @@ func renderBrainstormProposal(proposal brainstormProposal) string {
 
 func appendTargets(b *strings.Builder, targets []proposalTarget) {
 	b.WriteString("\n## Proposed Updates\n")
+	if len(targets) == 0 {
+		b.WriteString("\n- No promotable updates were detected yet. If durable knowledge changed, write the notes manually after review.\n")
+		return
+	}
 	for _, target := range targets {
 		b.WriteString("\n### " + target.Path + "\n\n")
 		b.WriteString("Reason: " + target.Reason + "\n\n")
@@ -348,6 +293,92 @@ func appendTargets(b *strings.Builder, targets []proposalTarget) {
 		b.WriteString(strings.TrimRight(strings.Join(target.Body, "\n"), "\n"))
 		b.WriteString("\n```\n")
 	}
+}
+
+func appendPromotionReview(b *strings.Builder, assessments []promotion.Assessment) {
+	b.WriteString("\n## Promotion Review\n")
+	if len(assessments) == 0 {
+		b.WriteString("\n- No promotion candidates were generated for this session.\n")
+		return
+	}
+	for _, assessment := range assessments {
+		b.WriteString("\n### " + string(assessment.Candidate.Category) + " [" + string(assessment.Decision) + "]\n\n")
+		b.WriteString("Summary: " + assessment.Candidate.Summary + "\n\n")
+		b.WriteString("Target: `" + assessment.Candidate.SuggestedTarget + "`\n\n")
+		switch assessment.Decision {
+		case promotion.DecisionPromotable:
+			b.WriteString("Why promotable: " + assessment.ReasonPromotable + "\n\n")
+		case promotion.DecisionRejected, promotion.DecisionInsufficient:
+			if strings.TrimSpace(assessment.ReasonRejected) != "" {
+				b.WriteString("Why not promoted: " + assessment.ReasonRejected + "\n\n")
+			}
+		}
+		if len(assessment.Diagnostics) != 0 {
+			b.WriteString("Diagnostics:\n")
+			for _, diagnostic := range assessment.Diagnostics {
+				b.WriteString("- " + diagnostic + "\n")
+			}
+			b.WriteString("\n")
+		}
+	}
+}
+
+func promotableTargetEntries(assessments []promotion.Assessment) []proposalTarget {
+	targets := []proposalTarget{}
+	seen := map[string]struct{}{}
+	for _, assessment := range assessments {
+		if assessment.Decision != promotion.DecisionPromotable {
+			continue
+		}
+		key := string(assessment.Candidate.Category) + "::" + assessment.Candidate.SuggestedTarget
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		reason := assessment.ReasonPromotable
+		if strings.TrimSpace(reason) == "" {
+			reason = assessment.Candidate.Summary
+		}
+		targets = append(targets, proposalTarget{
+			Path:   assessment.Candidate.SuggestedTarget,
+			Reason: fmt.Sprintf("%s [%s]", reason, assessment.Candidate.Category),
+			Body:   append([]string(nil), assessment.Candidate.SuggestedBody...),
+		})
+	}
+	sort.SliceStable(targets, func(i, j int) bool {
+		if targets[i].Path == targets[j].Path {
+			return targets[i].Reason < targets[j].Reason
+		}
+		return targets[i].Path < targets[j].Path
+	})
+	return targets
+}
+
+func promotableProposalTargets(assessments []promotion.Assessment) []string {
+	targets := promotableTargetEntries(assessments)
+	out := make([]string, 0, len(targets))
+	for _, target := range targets {
+		out = append(out, target.Path)
+	}
+	return out
+}
+
+func promotableCategories(assessments []promotion.Assessment) []string {
+	out := []string{}
+	seen := map[string]struct{}{}
+	for _, assessment := range assessments {
+		if assessment.Decision != promotion.DecisionPromotable {
+			continue
+		}
+		key := string(assessment.Candidate.Category)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, key)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func (m *Manager) createProposal(title string, metadata map[string]any, body string) (*notes.Note, error) {

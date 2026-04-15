@@ -15,6 +15,7 @@ import (
 
 	"brain/internal/buildinfo"
 	"brain/internal/config"
+	"brain/internal/projectcontext"
 	"brain/internal/skills"
 	"brain/internal/update"
 )
@@ -431,8 +432,8 @@ func TestCLIDistillSessionCreatesProposal(t *testing.T) {
 	if !strings.Contains(note, "## Source Provenance") || !strings.Contains(note, "go version") || !strings.Contains(note, "main.go") {
 		t.Fatalf("expected session-derived provenance in proposal:\n%s", note)
 	}
-	if !strings.Contains(note, "## Proposed Updates") || !strings.Contains(note, "### AGENTS.md") || !strings.Contains(note, "### .brain/context/current-state.md") {
-		t.Fatalf("expected target sections in proposal:\n%s", note)
+	if !strings.Contains(note, "## Promotion Review") || !strings.Contains(note, "verification_recipe [promotable]") || !strings.Contains(note, "### .brain/resources/changes/tighten-session-distill.md") {
+		t.Fatalf("expected promotion review and promotable target sections in proposal:\n%s", note)
 	}
 
 	agentsAfter, err := os.ReadFile(filepath.Join(env.project, "AGENTS.md"))
@@ -941,7 +942,7 @@ func TestCLIContextLiveJSONReturnsStablePacketShape(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected verification payload: %#v", payload)
 	}
-	for _, key := range []string{"recent_commands", "profiles"} {
+	for _, key := range []string{"recent_commands", "profiles", "recipes"} {
 		if _, ok := verification[key].([]any); !ok {
 			t.Fatalf("expected %s array in verification payload: %#v", key, payload)
 		}
@@ -1026,7 +1027,7 @@ func TestCLIContextLiveReportsVerificationProfilesAndPolicyHints(t *testing.T) {
 	requireOK(t, env.run(t, "", "--config", env.config, "session", "run", "--project", env.project, "--", "go", "test", "./..."))
 
 	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "live"))
-	if !strings.Contains(human, "## Verification") || !strings.Contains(human, "go test ./...") {
+	if !strings.Contains(human, "## Verification") || !strings.Contains(human, "go test ./...") || !strings.Contains(human, "recipe `tests`") {
 		t.Fatalf("expected verification output in live context:\n%s", human)
 	}
 	if !strings.Contains(human, "## Policy Hints") || !strings.Contains(human, "Verification workflow") || !strings.Contains(human, "Durable memory update") {
@@ -1039,7 +1040,7 @@ func TestCLIContextLiveReportsVerificationProfilesAndPolicyHints(t *testing.T) {
 		t.Fatalf("parse json output: %v\n%s", err, jsonOut)
 	}
 	verification := payload["verification"].(map[string]any)
-	if len(verification["recent_commands"].([]any)) == 0 || len(verification["profiles"].([]any)) == 0 {
+	if len(verification["recent_commands"].([]any)) == 0 || len(verification["profiles"].([]any)) == 0 || len(verification["recipes"].([]any)) == 0 {
 		t.Fatalf("expected verification details in payload: %#v", payload)
 	}
 	if len(payload["policy_hints"].([]any)) == 0 {
@@ -1130,6 +1131,240 @@ func TestCLIContextAssembleExplainReportsRationaleAndAmbiguities(t *testing.T) {
 	}
 }
 
+func TestCLIContextCompileWithExplicitTask(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	if err := os.MkdirAll(filepath.Join(env.project, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(env.project, "docs", "context-compiler.md"), []byte("# Context Compiler\n\nKeep compiled context packets compact and deterministic.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "compile", "--task", "context compiler deterministic packet"))
+	for _, section := range []string{"## Compiled Context Packet", "## Base Contract", "## Working Set", "## Verification Hints", "## Provenance"} {
+		if !strings.Contains(human, section) {
+			t.Fatalf("expected section %q in compile output:\n%s", section, human)
+		}
+	}
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "compile", "--task", "context compiler deterministic packet"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, jsonOut)
+	}
+	task := payload["task"].(map[string]any)
+	if task["text"] != "context compiler deterministic packet" || task["source"] != "flag" {
+		t.Fatalf("unexpected compile task payload: %#v", payload)
+	}
+	baseContract := payload["base_contract"].([]any)
+	if len(baseContract) != 5 {
+		t.Fatalf("expected five base contract items: %#v", payload)
+	}
+	workingSet := payload["working_set"].(map[string]any)
+	if _, ok := workingSet["notes"]; !ok {
+		t.Fatalf("expected working_set.notes in compile payload: %#v", payload)
+	}
+	if _, ok := payload["provenance"]; !ok {
+		t.Fatalf("expected provenance in compile payload: %#v", payload)
+	}
+	if _, ok := payload["verification"].([]any); !ok {
+		t.Fatalf("expected compiled verification array in payload: %#v", payload)
+	}
+	if _, err := os.Stat(filepath.Join(env.project, ".brain", "session.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected explicit no-session compile not to create an active session file, err=%v", err)
+	}
+}
+
+func TestCLIContextCompileIncludesVerificationRecipes(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	for path, body := range map[string]string{
+		"go.mod":                         "module example.com/test\n\ngo 1.26\n",
+		"internal/search/search.go":      "package search\n",
+		"internal/search/search_test.go": "package search\n",
+	} {
+		if err := os.MkdirAll(filepath.Join(env.project, filepath.Dir(path)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(env.project, path), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	override := "closeout:\n  verification_profiles:\n    - name: tests\n      commands:\n        - go test ./...\n    - name: build\n      commands:\n        - go build ./...\n"
+	if err := os.WriteFile(filepath.Join(env.project, ".brain", "policy.override.yaml"), []byte(override), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	initGitProject(t, env.project)
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "compile verification packet"))
+	if err := os.WriteFile(filepath.Join(env.project, "internal", "search", "search.go"), []byte("package search\n\nfunc Search() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "run", "--project", env.project, "--", "go", "test", "./..."))
+
+	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "compile"))
+	if !strings.Contains(human, "go test ./...") || !strings.Contains(human, "strong") {
+		t.Fatalf("expected verification recipes in compile output:\n%s", human)
+	}
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "compile"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, jsonOut)
+	}
+	verification := payload["verification"].([]any)
+	if len(verification) == 0 {
+		t.Fatalf("expected compiled verification hints in payload: %#v", payload)
+	}
+	first := verification[0].(map[string]any)
+	if first["command"] == "" || first["strength"] == "" {
+		t.Fatalf("expected command and strength in verification hint: %#v", payload)
+	}
+}
+
+func TestCLIContextCompileUsesActiveSessionTask(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	initGitProject(t, env.project)
+
+	startOutput := requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "session-backed context compile"))
+	if !strings.Contains(startOutput, "Started session") {
+		t.Fatalf("unexpected session start output:\n%s", startOutput)
+	}
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "compile"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, jsonOut)
+	}
+	task := payload["task"].(map[string]any)
+	if task["text"] != "session-backed context compile" || task["source"] != "session" {
+		t.Fatalf("expected session task resolution in compile payload: %#v", payload)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(env.project, ".brain", "session.json"))
+	if err != nil {
+		t.Fatalf("read active session: %v", err)
+	}
+	var sessionPayload map[string]any
+	if err := json.Unmarshal(raw, &sessionPayload); err != nil {
+		t.Fatalf("parse active session: %v\n%s", err, raw)
+	}
+	packetRecords := sessionPayload["packet_records"].([]any)
+	if len(packetRecords) != 1 {
+		t.Fatalf("expected one packet record after session-backed compile: %#v", sessionPayload)
+	}
+}
+
+func TestCLIContextExplainShowsRecordedPacketOutcomes(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "brainstorm", "start", "Compiler Telemetry Signal"))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "brainstorm", "idea", ".brain/brainstorms/compiler-telemetry-signal.md", "-b", "Compiler telemetry signal note for explain output."))
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "compiler telemetry signal"))
+
+	compiledJSON := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "compile"))
+	var compiled map[string]any
+	if err := json.Unmarshal([]byte(compiledJSON), &compiled); err != nil {
+		t.Fatalf("parse compile payload: %v\n%s", err, compiledJSON)
+	}
+	workingSet := compiled["working_set"].(map[string]any)
+	notes := workingSet["notes"].([]any)
+	if len(notes) == 0 {
+		t.Fatalf("expected compile packet to include at least one note: %#v", compiled)
+	}
+	firstNote := notes[0].(map[string]any)
+	anchor := firstNote["anchor"].(map[string]any)
+	notePath := anchor["path"].(string)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "read", notePath))
+
+	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "explain", "--last"))
+	for _, section := range []string{"## Packet", "## Included Items", "## Expanded Later", "## Downstream Outcomes"} {
+		if !strings.Contains(human, section) {
+			t.Fatalf("expected section %q in explain output:\n%s", section, human)
+		}
+	}
+	if !strings.Contains(human, notePath) {
+		t.Fatalf("expected explain output to reference expanded note path %q:\n%s", notePath, human)
+	}
+
+	explainJSON := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "explain", "--last"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(explainJSON), &payload); err != nil {
+		t.Fatalf("parse explain payload: %v\n%s", err, explainJSON)
+	}
+	packet := payload["packet"].(map[string]any)
+	if packet["packet_hash"] == "" {
+		t.Fatalf("expected packet hash in explain payload: %#v", payload)
+	}
+	if len(payload["included_items"].([]any)) == 0 {
+		t.Fatalf("expected included items in explain payload: %#v", payload)
+	}
+	if len(payload["expanded_later"].([]any)) == 0 {
+		t.Fatalf("expected expanded item telemetry in explain payload: %#v", payload)
+	}
+}
+
+func TestCLIContextStatsSummarizesSignalAndVerificationLinks(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "brainstorm", "start", "Compiler Telemetry Signal"))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "brainstorm", "idea", ".brain/brainstorms/compiler-telemetry-signal.md", "-b", "Compiler telemetry signal note for stats output."))
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "compiler telemetry signal"))
+
+	compiledJSON := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "compile"))
+	var compiled map[string]any
+	if err := json.Unmarshal([]byte(compiledJSON), &compiled); err != nil {
+		t.Fatalf("parse first compile payload: %v\n%s", err, compiledJSON)
+	}
+	workingSet := compiled["working_set"].(map[string]any)
+	notes := workingSet["notes"].([]any)
+	if len(notes) == 0 {
+		t.Fatalf("expected compile packet to include at least one note: %#v", compiled)
+	}
+	firstNote := notes[0].(map[string]any)
+	anchor := firstNote["anchor"].(map[string]any)
+	notePath := anchor["path"].(string)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "read", notePath))
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "run", "--project", env.project, "--", "go", "version"))
+
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "compile"))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "read", notePath))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "compile"))
+
+	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "stats", "--limit", "3"))
+	for _, section := range []string{"## Context Stats", "## Top Signal", "## Frequently Expanded", "## Common Verification Links"} {
+		if !strings.Contains(human, section) {
+			t.Fatalf("expected section %q in stats output:\n%s", section, human)
+		}
+	}
+	if !strings.Contains(human, "likely_utility=likely_signal") {
+		t.Fatalf("expected likely signal wording in stats output:\n%s", human)
+	}
+	if !strings.Contains(human, "go version") {
+		t.Fatalf("expected recorded verification command in stats output:\n%s", human)
+	}
+	explainHuman := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "explain", "--last"))
+	if !strings.Contains(explainHuman, "boosted by local utility signal") {
+		t.Fatalf("expected explain output to surface utility-aware selection reasons:\n%s", explainHuman)
+	}
+
+	statsJSON := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "stats", "--limit", "3"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(statsJSON), &payload); err != nil {
+		t.Fatalf("parse stats payload: %v\n%s", err, statsJSON)
+	}
+	if len(payload["top_signal"].([]any)) == 0 {
+		t.Fatalf("expected top signal items in stats payload: %#v", payload)
+	}
+	if len(payload["frequently_expanded"].([]any)) == 0 {
+		t.Fatalf("expected frequently expanded items in stats payload: %#v", payload)
+	}
+	if len(payload["common_verification_links"].([]any)) == 0 {
+		t.Fatalf("expected verification links in stats payload: %#v", payload)
+	}
+}
+
 func TestCLISessionWorkflow(t *testing.T) {
 	env := newCLIEnv(t)
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
@@ -1157,6 +1392,29 @@ func TestCLISessionWorkflow(t *testing.T) {
 	finishOutput := requireOK(t, env.run(t, "", "--config", env.config, "session", "finish", "--project", env.project, "--summary", "session complete"))
 	if !strings.Contains(finishOutput, "finished") || !strings.Contains(finishOutput, ".brain/sessions/") {
 		t.Fatalf("unexpected finish output:\n%s", finishOutput)
+	}
+}
+
+func TestCLISessionFinishSurfacesPromotionSuggestions(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	initGitProject(t, env.project)
+
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "replace context loading flow"))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "compile"))
+	if err := os.WriteFile(filepath.Join(env.project, "main.go"), []byte("package main\nfunc main() { println(\"x\") }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "run", "--project", env.project, "--", "go", "version"))
+
+	finishBlocked := env.run(t, "", "--config", env.config, "session", "finish", "--project", env.project, "--summary", "premature closeout")
+	if finishBlocked.err == nil {
+		t.Fatalf("expected finish to block, got stdout=%s stderr=%s", finishBlocked.stdout, finishBlocked.stderr)
+	}
+	for _, needle := range []string{"Promote: boundary_fact", "Support: packets", "Support: verification"} {
+		if !strings.Contains(finishBlocked.stdout, needle) {
+			t.Fatalf("expected %q in blocked finish output:\nstdout=%s\nstderr=%s", needle, finishBlocked.stdout, finishBlocked.stderr)
+		}
 	}
 }
 
@@ -1213,10 +1471,12 @@ func TestCLIUpdateCommand(t *testing.T) {
 	env := newCLIEnv(t)
 	restoreUpdater := newUpdater
 	restoreSkillRunner := skillInstallRunner
+	restoreMigrationRunner := projectMigrationRunner
 	restoreBuild := setCLICommandBuildInfo("v0.1.0", "abc123", "2026-04-10T00:00:00Z")
 	defer func() {
 		newUpdater = restoreUpdater
 		skillInstallRunner = restoreSkillRunner
+		projectMigrationRunner = restoreMigrationRunner
 		restoreBuild()
 	}()
 
@@ -1234,6 +1494,10 @@ func TestCLIUpdateCommand(t *testing.T) {
 		t.Fatal("unexpected skill refresh during update --check")
 		return nil, nil
 	}
+	projectMigrationRunner = func(binaryPath, configPath, projectPath string) (*projectcontext.ApplyProjectMigrationsResult, error) {
+		t.Fatal("unexpected project migration during update --check")
+		return nil, nil
+	}
 	checkOnly := requireOK(t, env.run(t, "", "--config", env.config, "update", "--check"))
 	if !strings.Contains(checkOnly, "update: v0.1.0 -> v0.2.0") {
 		t.Fatalf("unexpected check output:\n%s", checkOnly)
@@ -1244,10 +1508,12 @@ func TestCLIUpdateRefreshesInstalledSkills(t *testing.T) {
 	env := newCLIEnv(t)
 	restoreUpdater := newUpdater
 	restoreSkillRunner := skillInstallRunner
+	restoreMigrationRunner := projectMigrationRunner
 	restoreBuild := setCLICommandBuildInfo("v0.1.0", "abc123", "2026-04-10T00:00:00Z")
 	defer func() {
 		newUpdater = restoreUpdater
 		skillInstallRunner = restoreSkillRunner
+		projectMigrationRunner = restoreMigrationRunner
 		restoreBuild()
 	}()
 
@@ -1275,6 +1541,7 @@ func TestCLIUpdateRefreshesInstalledSkills(t *testing.T) {
 	}
 
 	var calls []string
+	var migrationCalls []string
 	skillInstallRunner = func(binaryPath, configPath, projectPath string, scope skills.Scope, agents []string) ([]skills.InstallResult, error) {
 		calls = append(calls, string(scope)+":"+strings.Join(agents, ","))
 		results := make([]skills.InstallResult, 0, len(agents))
@@ -1297,13 +1564,68 @@ func TestCLIUpdateRefreshesInstalledSkills(t *testing.T) {
 		}
 		return results, nil
 	}
+	projectMigrationRunner = func(binaryPath, configPath, projectPath string) (*projectcontext.ApplyProjectMigrationsResult, error) {
+		migrationCalls = append(migrationCalls, binaryPath+":"+projectPath)
+		return &projectcontext.ApplyProjectMigrationsResult{
+			UsesBrain:           true,
+			ProjectDir:          projectPath,
+			Status:              "applied",
+			AppliedMigrationIDs: []string{"refresh-brain-managed-context-v1", "refresh-existing-agent-integrations-v1"},
+		}, nil
+	}
 
 	output := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "update"))
 	if !strings.Contains(output, "skills:  refreshed") {
 		t.Fatalf("expected skill refresh output:\n%s", output)
 	}
+	if !strings.Contains(output, "project migrations: applied") || !strings.Contains(output, "migration: refresh-brain-managed-context-v1") {
+		t.Fatalf("expected project migration output:\n%s", output)
+	}
 	if len(calls) != 2 || calls[0] != "global:codex" || calls[1] != "local:copilot" {
 		t.Fatalf("unexpected refresh calls: %v", calls)
+	}
+	if len(migrationCalls) != 1 || migrationCalls[0] != filepath.Join(env.root, "bin", "brain")+":"+env.project {
+		t.Fatalf("unexpected migration calls: %v", migrationCalls)
+	}
+}
+
+func TestCLIUpdateJSONIncludesProjectMigrationStatus(t *testing.T) {
+	env := newCLIEnv(t)
+	restoreUpdater := newUpdater
+	restoreSkillRunner := skillInstallRunner
+	restoreMigrationRunner := projectMigrationRunner
+	restoreBuild := setCLICommandBuildInfo("v0.1.0", "abc123", "2026-04-10T00:00:00Z")
+	defer func() {
+		newUpdater = restoreUpdater
+		skillInstallRunner = restoreSkillRunner
+		projectMigrationRunner = restoreMigrationRunner
+		restoreBuild()
+	}()
+
+	newUpdater = func(cfg *config.Config, paths config.Paths) updater {
+		return stubUpdater{result: update.Result{
+			CurrentVersion: "v0.1.0",
+			LatestVersion:  "v0.1.0",
+			Status:         "up_to_date",
+			Message:        "already up to date (v0.1.0)",
+			CurrentPath:    filepath.Join(env.root, "bin", "brain"),
+		}}
+	}
+	skillInstallRunner = func(binaryPath, configPath, projectPath string, scope skills.Scope, agents []string) ([]skills.InstallResult, error) {
+		return nil, nil
+	}
+	projectMigrationRunner = func(binaryPath, configPath, projectPath string) (*projectcontext.ApplyProjectMigrationsResult, error) {
+		return &projectcontext.ApplyProjectMigrationsResult{
+			UsesBrain:           true,
+			ProjectDir:          projectPath,
+			Status:              "applied",
+			AppliedMigrationIDs: []string{"refresh-brain-managed-context-v1"},
+		}, nil
+	}
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "update"))
+	if !strings.Contains(jsonOut, "\"project_migration_status\": \"applied\"") || !strings.Contains(jsonOut, "\"applied_project_migrations\": [") {
+		t.Fatalf("expected project migration fields in json output:\n%s", jsonOut)
 	}
 }
 
@@ -1329,10 +1651,12 @@ func TestCLIUpdateFailsWhenSkillRefreshIsIncomplete(t *testing.T) {
 	env := newCLIEnv(t)
 	restoreUpdater := newUpdater
 	restoreSkillRunner := skillInstallRunner
+	restoreMigrationRunner := projectMigrationRunner
 	restoreBuild := setCLICommandBuildInfo("v0.1.0", "abc123", "2026-04-10T00:00:00Z")
 	defer func() {
 		newUpdater = restoreUpdater
 		skillInstallRunner = restoreSkillRunner
+		projectMigrationRunner = restoreMigrationRunner
 		restoreBuild()
 	}()
 
@@ -1357,6 +1681,10 @@ func TestCLIUpdateFailsWhenSkillRefreshIsIncomplete(t *testing.T) {
 	skillInstallRunner = func(binaryPath, configPath, projectPath string, scope skills.Scope, agents []string) ([]skills.InstallResult, error) {
 		return nil, fmt.Errorf("boom")
 	}
+	projectMigrationRunner = func(binaryPath, configPath, projectPath string) (*projectcontext.ApplyProjectMigrationsResult, error) {
+		t.Fatal("unexpected project migration when skill refresh failed")
+		return nil, nil
+	}
 
 	result := env.run(t, "", "--config", env.config, "update")
 	if result.err == nil || !strings.Contains(result.err.Error(), "binary updated, skill refresh incomplete") {
@@ -1364,6 +1692,110 @@ func TestCLIUpdateFailsWhenSkillRefreshIsIncomplete(t *testing.T) {
 	}
 	if !strings.Contains(result.stdout, "skills:  failed") {
 		t.Fatalf("expected printed failed skill refresh status:\n%s", result.stdout)
+	}
+}
+
+func TestCLILocalProjectPreflightAppliesPendingMigrations(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+
+	staleAgents := "# Project Agent Contract\n\n<!-- brain:begin agents-contract -->\nstale\n<!-- brain:end agents-contract -->\n\n## Local Notes\n\nkeep me\n"
+	if err := os.WriteFile(filepath.Join(env.project, "AGENTS.md"), []byte(staleAgents), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ledgerPath := filepath.Join(env.project, ".brain", "state", "project-migrations.json")
+	if err := os.Remove(ledgerPath); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "find", "overview"))
+	if _, err := os.Stat(ledgerPath); err != nil {
+		t.Fatalf("expected migration ledger to be written during preflight: %v", err)
+	}
+	agentsBody, err := os.ReadFile(filepath.Join(env.project, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(agentsBody), "brain context compile") || !strings.Contains(string(agentsBody), "keep me") {
+		t.Fatalf("expected preflight migration to refresh AGENTS.md:\n%s", string(agentsBody))
+	}
+}
+
+func TestCLILocalProjectPreflightReportsMigrationRemediation(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+
+	agentsPath := filepath.Join(env.project, "AGENTS.md")
+	if err := os.Remove(agentsPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(agentsPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ledgerPath := filepath.Join(env.project, ".brain", "state", "project-migrations.json")
+	if err := os.Remove(ledgerPath); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+
+	result := env.run(t, "", "--config", env.config, "--project", env.project, "find", "overview")
+	if result.err == nil || !strings.Contains(result.err.Error(), "project migrations blocked") {
+		t.Fatalf("expected project migration failure with remediation, got err=%v stdout=%s", result.err, result.stdout)
+	}
+	for _, snippet := range []string{
+		"brain doctor --project .",
+		"brain context refresh --project .",
+		"brain adopt --project .",
+	} {
+		if !strings.Contains(result.err.Error(), snippet) {
+			t.Fatalf("expected remediation snippet %q in error: %v", snippet, result.err)
+		}
+	}
+}
+
+func TestCLISkipCommandsDoNotRunMigrationPreflight(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+
+	ledgerPath := filepath.Join(env.project, ".brain", "state", "project-migrations.json")
+	if err := os.Remove(ledgerPath); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "doctor"))
+	if _, err := os.Stat(ledgerPath); !os.IsNotExist(err) {
+		t.Fatalf("expected doctor to skip migration preflight, got err=%v", err)
+	}
+}
+
+func TestCLIDoctorReportsProjectMigrationStatus(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+
+	current := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "doctor"))
+	if !strings.Contains(current, "project_migrations: ok (current)") {
+		t.Fatalf("expected current project migrations in doctor output after init:\n%s", current)
+	}
+
+	ledgerPath := filepath.Join(env.project, ".brain", "state", "project-migrations.json")
+	if err := os.Remove(ledgerPath); err != nil {
+		t.Fatal(err)
+	}
+	pending := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "doctor"))
+	if !strings.Contains(pending, "project_migrations: fail (pending") {
+		t.Fatalf("expected pending project migrations in doctor output:\n%s", pending)
+	}
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "find", "overview"))
+	currentAfterRepair := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "doctor"))
+	if !strings.Contains(currentAfterRepair, "project_migrations: ok (current)") {
+		t.Fatalf("expected current project migrations in doctor output:\n%s", currentAfterRepair)
+	}
+
+	if err := os.WriteFile(ledgerPath, []byte("{not-json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	broken := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "doctor"))
+	if !strings.Contains(broken, "project_migrations: fail (broken") {
+		t.Fatalf("expected broken project migrations in doctor output:\n%s", broken)
 	}
 }
 

@@ -121,13 +121,26 @@ func TestCollectDerivesChangedFilesTouchedBoundariesAndNearbyTests(t *testing.T)
 				Head:      baseline,
 			},
 		},
-		StructuralSnapshot: &structure.Snapshot{
-			Boundaries: []structure.Item{
-				{Kind: "boundary", Path: "internal/search/", Label: "internal/search", Role: "library"},
-				{Kind: "boundary", Path: "config/", Label: "config", Role: "config"},
-			},
-			TestSurfaces: []structure.Item{
-				{Kind: "test_surface", Path: "internal/search/search_test.go", Label: "search tests", Role: "tests"},
+		BoundaryGraph: &structure.BoundaryGraph{
+			Boundaries: []structure.BoundaryRecord{
+				{
+					ID:                 "internal/search",
+					Label:              "internal/search",
+					Role:               "library",
+					RootPath:           "internal/search/",
+					Files:              []string{"internal/search/search.go", "internal/search/search_test.go"},
+					OwnedTests:         []string{"internal/search/search_test.go"},
+					AdjacentBoundaries: []string{"config"},
+					Responsibilities:   []string{"Search implementation"},
+				},
+				{
+					ID:               "config",
+					Label:            "config",
+					Role:             "config",
+					RootPath:         "config/",
+					Files:            []string{"config/search.yaml"},
+					Responsibilities: []string{"Search configuration"},
+				},
 			},
 		},
 	})
@@ -149,6 +162,9 @@ func TestCollectDerivesChangedFilesTouchedBoundariesAndNearbyTests(t *testing.T)
 	}
 	if len(packet.Worktree.TouchedBoundaries) < 2 {
 		t.Fatalf("expected touched boundary: %#v", packet.Worktree.TouchedBoundaries)
+	}
+	if packet.Worktree.TouchedBoundaries[0].Responsibilities == nil {
+		t.Fatalf("expected responsibilities on touched boundaries: %#v", packet.Worktree.TouchedBoundaries)
 	}
 	if len(packet.NearbyTests) == 0 || packet.NearbyTests[0].Path != "internal/search/search_test.go" {
 		t.Fatalf("expected nearby test: %#v", packet.NearbyTests)
@@ -214,12 +230,17 @@ func TestCollectAddsVerificationProfilesAndStrongMatchPolicyHints(t *testing.T) 
 				},
 			},
 		},
-		StructuralSnapshot: &structure.Snapshot{
-			Boundaries: []structure.Item{
-				{Kind: "boundary", Path: "internal/search/", Label: "internal/search", Role: "library"},
-			},
-			TestSurfaces: []structure.Item{
-				{Kind: "test_surface", Path: "internal/search/search_test.go", Label: "search tests", Role: "tests"},
+		BoundaryGraph: &structure.BoundaryGraph{
+			Boundaries: []structure.BoundaryRecord{
+				{
+					ID:               "internal/search",
+					Label:            "internal/search",
+					Role:             "library",
+					RootPath:         "internal/search/",
+					Files:            []string{"internal/search/search.go", "internal/search/search_test.go"},
+					OwnedTests:       []string{"internal/search/search_test.go"},
+					Responsibilities: []string{"Search implementation"},
+				},
 			},
 		},
 	})
@@ -232,6 +253,9 @@ func TestCollectAddsVerificationProfilesAndStrongMatchPolicyHints(t *testing.T) 
 	if len(packet.Verification.Profiles) < 2 {
 		t.Fatalf("expected verification profiles from policy: %#v", packet.Verification)
 	}
+	if len(packet.Verification.Recipes) < 2 {
+		t.Fatalf("expected derived verification recipes: %#v", packet.Verification)
+	}
 	var buildMissing bool
 	for _, profile := range packet.Verification.Profiles {
 		if profile.Name == "build" && !profile.Satisfied {
@@ -243,6 +267,43 @@ func TestCollectAddsVerificationProfilesAndStrongMatchPolicyHints(t *testing.T) 
 	}
 	if len(packet.PolicyHints) < 2 {
 		t.Fatalf("expected strong-match policy hints: %#v", packet.PolicyHints)
+	}
+}
+
+func TestCollectVerificationRecipesUsesRepoAndSessionSources(t *testing.T) {
+	project := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(project, ".github", "workflows"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "Makefile"), []byte("test:\n\tgo test ./...\n\nbuild:\n\tgo build ./...\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "package.json"), []byte(`{"scripts":{"test":"vitest","build":"vite build","lint":"eslint ."}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, ".github", "workflows", "ci.yml"), []byte("jobs:\n  test:\n    steps:\n      - run: go test ./...\n      - run: go build ./...\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	recipes := collectVerificationRecipes(project, nil, &session.ActiveSession{
+		ID: "s3",
+		CommandRuns: []session.CommandRun{
+			{Command: "go test ./internal/search", ExitCode: 0},
+			{Command: "echo hello", ExitCode: 0},
+		},
+	}, nil)
+
+	if !containsRecipe(recipes, "make test", "Makefile", "strong") {
+		t.Fatalf("expected make recipe in %#v", recipes)
+	}
+	if !containsRecipe(recipes, "npm test", "package.json", "strong") {
+		t.Fatalf("expected package recipe in %#v", recipes)
+	}
+	if !containsRecipe(recipes, "go test ./...", ".github/workflows/ci.yml", "strong") {
+		t.Fatalf("expected CI recipe in %#v", recipes)
+	}
+	if !containsRecipe(recipes, "go test ./internal/search", "session_history", "suggested") {
+		t.Fatalf("expected recent session recipe in %#v", recipes)
 	}
 }
 
@@ -296,6 +357,15 @@ func runGitOutputCmd(t *testing.T, dir string, args ...string) string {
 		t.Fatalf("git %v failed: %v", args, err)
 	}
 	return string(out)
+}
+
+func containsRecipe(recipes []VerificationRecipe, command, source, strength string) bool {
+	for _, recipe := range recipes {
+		if recipe.Command == command && recipe.Source == source && recipe.Strength == strength {
+			return true
+		}
+	}
+	return false
 }
 
 func writePolicyFixture(t *testing.T, project string) {

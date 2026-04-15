@@ -50,23 +50,71 @@ type CommandRun struct {
 	ExitCode  int       `json:"exit_code"`
 }
 
+type PacketInclusionReason struct {
+	ItemID  string `json:"item_id"`
+	Section string `json:"section"`
+	Reason  string `json:"reason"`
+}
+
+type PacketTelemetryEventType string
+
+const (
+	PacketTelemetryEventCompiled      PacketTelemetryEventType = "packet_compiled"
+	PacketTelemetryEventExpanded      PacketTelemetryEventType = "item_expanded"
+	PacketTelemetryEventVerification  PacketTelemetryEventType = "verification_recorded"
+	PacketTelemetryEventDurableUpdate PacketTelemetryEventType = "durable_update_recorded"
+	PacketTelemetryEventSessionClosed PacketTelemetryEventType = "session_closed"
+	packetTelemetryVersion                                     = 1
+	maxSessionPacketRecords                                    = 64
+	maxSessionTelemetryEvents                                  = 256
+)
+
+type PacketTelemetryEvent struct {
+	Type        PacketTelemetryEventType `json:"type"`
+	Timestamp   time.Time                `json:"timestamp"`
+	SessionID   string                   `json:"session_id"`
+	PacketHash  string                   `json:"packet_hash,omitempty"`
+	ItemID      string                   `json:"item_id,omitempty"`
+	AnchorPath  string                   `json:"anchor_path,omitempty"`
+	Command     string                   `json:"command,omitempty"`
+	Success     *bool                    `json:"success,omitempty"`
+	File        string                   `json:"file,omitempty"`
+	Operation   string                   `json:"operation,omitempty"`
+	CloseStatus string                   `json:"close_status,omitempty"`
+	Metadata    map[string]any           `json:"metadata,omitempty"`
+}
+
+type PacketRecord struct {
+	PacketHash       string                         `json:"packet_hash"`
+	TaskText         string                         `json:"task_text"`
+	TaskSummary      string                         `json:"task_summary"`
+	TaskSource       string                         `json:"task_source"`
+	CompiledAt       time.Time                      `json:"compiled_at"`
+	IncludedItemIDs  []string                       `json:"included_item_ids"`
+	IncludedAnchors  []projectcontext.ContextAnchor `json:"included_anchors"`
+	InclusionReasons []PacketInclusionReason        `json:"inclusion_reasons"`
+}
+
 type ActiveSession struct {
-	ID                string          `json:"id"`
-	Status            string          `json:"status"`
-	ProjectDir        string          `json:"project_dir"`
-	Task              string          `json:"task"`
-	PolicyPath        string          `json:"policy_path"`
-	OverridePath      string          `json:"override_path,omitempty"`
-	StartedAt         time.Time       `json:"started_at"`
-	EndedAt           *time.Time      `json:"ended_at,omitempty"`
-	GitBaseline       GitSnapshot     `json:"git_baseline"`
-	HistoryBaseline   HistoryBaseline `json:"history_baseline"`
-	Checks            []Check         `json:"checks"`
-	RequiredDocs      []string        `json:"required_docs"`
-	SuggestedCommands []string        `json:"suggested_commands"`
-	CommandRuns       []CommandRun    `json:"command_runs,omitempty"`
-	TerminalSummary   string          `json:"terminal_summary,omitempty"`
-	OverrideReason    string          `json:"override_reason,omitempty"`
+	ID                string                 `json:"id"`
+	Status            string                 `json:"status"`
+	ProjectDir        string                 `json:"project_dir"`
+	Task              string                 `json:"task"`
+	PolicyPath        string                 `json:"policy_path"`
+	OverridePath      string                 `json:"override_path,omitempty"`
+	StartedAt         time.Time              `json:"started_at"`
+	EndedAt           *time.Time             `json:"ended_at,omitempty"`
+	GitBaseline       GitSnapshot            `json:"git_baseline"`
+	HistoryBaseline   HistoryBaseline        `json:"history_baseline"`
+	Checks            []Check                `json:"checks"`
+	RequiredDocs      []string               `json:"required_docs"`
+	SuggestedCommands []string               `json:"suggested_commands"`
+	CommandRuns       []CommandRun           `json:"command_runs,omitempty"`
+	PacketRecords     []PacketRecord         `json:"packet_records,omitempty"`
+	TelemetryVersion  int                    `json:"telemetry_version,omitempty"`
+	TelemetryEvents   []PacketTelemetryEvent `json:"telemetry_events,omitempty"`
+	TerminalSummary   string                 `json:"terminal_summary,omitempty"`
+	OverrideReason    string                 `json:"override_reason,omitempty"`
 }
 
 type StartRequest struct {
@@ -114,17 +162,18 @@ type RunResult struct {
 }
 
 type ValidationResult struct {
-	OK                bool     `json:"ok"`
-	Stage             string   `json:"stage"`
-	SessionID         string   `json:"session_id,omitempty"`
-	Task              string   `json:"task,omitempty"`
-	RepoChanged       bool     `json:"repo_changed"`
-	NotesChanged      bool     `json:"notes_changed"`
-	MemorySatisfiedBy string   `json:"memory_satisfied_by,omitempty"`
-	MissingCommands   []string `json:"missing_commands,omitempty"`
-	Obligations       []string `json:"obligations,omitempty"`
-	Remediation       []string `json:"remediation,omitempty"`
-	Checks            []Check  `json:"checks,omitempty"`
+	OK                   bool                  `json:"ok"`
+	Stage                string                `json:"stage"`
+	SessionID            string                `json:"session_id,omitempty"`
+	Task                 string                `json:"task,omitempty"`
+	RepoChanged          bool                  `json:"repo_changed"`
+	NotesChanged         bool                  `json:"notes_changed"`
+	MemorySatisfiedBy    string                `json:"memory_satisfied_by,omitempty"`
+	MissingCommands      []string              `json:"missing_commands,omitempty"`
+	Obligations          []string              `json:"obligations,omitempty"`
+	Remediation          []string              `json:"remediation,omitempty"`
+	PromotionSuggestions []PromotionSuggestion `json:"promotion_suggestions,omitempty"`
+	Checks               []Check               `json:"checks,omitempty"`
 }
 
 type FinishResult struct {
@@ -189,6 +238,7 @@ func (m *Manager) Start(ctx context.Context, req StartRequest) (*StartResult, er
 		Checks:            checks,
 		RequiredDocs:      append([]string(nil), policy.Preflight.RequiredDocs...),
 		SuggestedCommands: expandSuggestedCommands(policy.Preflight.SuggestedCommands, task),
+		TelemetryVersion:  packetTelemetryVersion,
 	}
 	if err := withSessionLock(activePath, func() error {
 		if policy.Session.SingleActive {
@@ -300,6 +350,11 @@ func (m *Manager) Finish(ctx context.Context, req FinishRequest) (*FinishResult,
 		if req.Force && strings.TrimSpace(req.Reason) == "" {
 			return errors.New("force finish requires --reason")
 		}
+		entries, err := m.historyAfterBaseline(active.HistoryBaseline)
+		if err != nil {
+			return err
+		}
+		appendDurableUpdateTelemetry(active, entries, policy.Closeout.AcceptableHistoryOperations, policy.Project.Memory.AcceptedNoteGlobs)
 
 		now := time.Now().UTC()
 		if validation.OK {
@@ -310,6 +365,7 @@ func (m *Manager) Finish(ctx context.Context, req FinishRequest) (*FinishResult,
 		active.EndedAt = &now
 		active.TerminalSummary = strings.TrimSpace(req.Summary)
 		active.OverrideReason = strings.TrimSpace(req.Reason)
+		appendSessionClosedTelemetry(active, now, active.Status, validation)
 		ledgerPath, err := writeLedger(projectDir, policy, active)
 		if err != nil {
 			return err
@@ -351,6 +407,7 @@ func (m *Manager) Abort(ctx context.Context, req AbortRequest) (*FinishResult, e
 		active.Status = "aborted"
 		active.EndedAt = &now
 		active.OverrideReason = strings.TrimSpace(req.Reason)
+		appendSessionClosedTelemetry(active, now, active.Status, &ValidationResult{OK: true, Stage: "abort", SessionID: active.ID, Task: active.Task})
 		ledgerPath, err := writeLedger(projectDir, policy, active)
 		if err != nil {
 			return err
@@ -449,6 +506,36 @@ func (m *Manager) RunCommand(ctx context.Context, req RunRequest, stdout, stderr
 	return result, nil
 }
 
+func (m *Manager) RecordCompiledPacket(projectDir, sessionID string, packet *projectcontext.CompiledPacket) error {
+	projectDir, err := filepath.Abs(defaultProjectDir(projectDir))
+	if err != nil {
+		return err
+	}
+	if packet == nil {
+		return errors.New("compiled packet is required")
+	}
+	policy, _, _, err := projectcontext.LoadPolicy(projectDir)
+	if err != nil {
+		return err
+	}
+	activePath := filepath.Join(projectDir, filepath.FromSlash(policy.Session.ActiveFile))
+	record := packetRecordFromCompiledPacket(packet)
+	return appendPacketRecord(activePath, sessionID, record)
+}
+
+func (m *Manager) RecordPacketExpansion(projectDir, path string) error {
+	projectDir, err := filepath.Abs(defaultProjectDir(projectDir))
+	if err != nil {
+		return err
+	}
+	policy, _, _, err := projectcontext.LoadPolicy(projectDir)
+	if err != nil {
+		return err
+	}
+	activePath := filepath.Join(projectDir, filepath.FromSlash(policy.Session.ActiveFile))
+	return appendExpansionEvent(activePath, filepath.ToSlash(strings.TrimSpace(path)))
+}
+
 func (m *Manager) preflightChecks(ctx context.Context, projectDir, configPath string, policy *projectcontext.Policy) ([]Check, error) {
 	var checks []Check
 	if policy.Preflight.RequireBrainDoctor {
@@ -522,6 +609,14 @@ func (m *Manager) evaluateFinish(ctx context.Context, policy *projectcontext.Pol
 				}
 			}
 		}
+	}
+	review, err := m.buildPromotionReview(ctx, policy, active, result.MissingCommands, 6)
+	if err != nil {
+		return nil, err
+	}
+	result.PromotionSuggestions = filterPromotionSuggestionsForValidation(result, promotionSuggestionsFromReview(review))
+	if !result.OK && len(result.PromotionSuggestions) == 0 && result.RepoChanged && result.MemorySatisfiedBy == "" {
+		result.Remediation = append(result.Remediation, "if the session changed no durable knowledge, finish only with `brain session finish --force --reason \"no durable knowledge changed\"` after review")
 	}
 	return result, nil
 }
@@ -638,8 +733,262 @@ func appendCommandRun(path, sessionID string, record CommandRun) error {
 			return fmt.Errorf("session %s is no longer active; command %q was not recorded", sessionID, record.Command)
 		}
 		active.CommandRuns = append(active.CommandRuns, record)
+		appendTelemetryEvent(active, PacketTelemetryEvent{
+			Type:       PacketTelemetryEventVerification,
+			Timestamp:  record.EndedAt.UTC(),
+			SessionID:  active.ID,
+			PacketHash: latestPacketHashBefore(active, record.EndedAt),
+			Command:    record.Command,
+			Success:    boolPtr(record.ExitCode == 0),
+		})
 		return saveActiveSession(path, active)
 	})
+}
+
+func appendPacketRecord(path, sessionID string, record PacketRecord) error {
+	return withSessionLock(path, func() error {
+		active, err := loadActiveSession(path)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("session %s ended before packet %q could be recorded", sessionID, record.PacketHash)
+			}
+			return err
+		}
+		if active.ID != sessionID || active.Status != "active" {
+			return fmt.Errorf("session %s is no longer active; packet %q was not recorded", sessionID, record.PacketHash)
+		}
+		active.PacketRecords = append(active.PacketRecords, record)
+		trimPacketRecords(active)
+		appendTelemetryEvent(active, PacketTelemetryEvent{
+			Type:       PacketTelemetryEventCompiled,
+			Timestamp:  record.CompiledAt.UTC(),
+			SessionID:  active.ID,
+			PacketHash: record.PacketHash,
+			Metadata: map[string]any{
+				"included_item_ids": append([]string(nil), record.IncludedItemIDs...),
+			},
+		})
+		return saveActiveSession(path, active)
+	})
+}
+
+func appendExpansionEvent(path, anchorPath string) error {
+	if strings.TrimSpace(anchorPath) == "" {
+		return nil
+	}
+	return withSessionLock(path, func() error {
+		active, err := loadActiveSession(path)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return nil
+			}
+			return err
+		}
+		if active.Status != "active" {
+			return nil
+		}
+		packetHash, itemID := latestPacketExpansionMatch(active, anchorPath)
+		if packetHash == "" || itemID == "" {
+			return nil
+		}
+		appendTelemetryEvent(active, PacketTelemetryEvent{
+			Type:       PacketTelemetryEventExpanded,
+			Timestamp:  time.Now().UTC(),
+			SessionID:  active.ID,
+			PacketHash: packetHash,
+			ItemID:     itemID,
+			AnchorPath: anchorPath,
+		})
+		return saveActiveSession(path, active)
+	})
+}
+
+func packetRecordFromCompiledPacket(packet *projectcontext.CompiledPacket) PacketRecord {
+	record := PacketRecord{
+		PacketHash:       packet.Hash(),
+		TaskText:         packet.Task.Text,
+		TaskSummary:      packet.Task.Summary,
+		TaskSource:       packet.Task.Source,
+		CompiledAt:       time.Now().UTC(),
+		IncludedItemIDs:  []string{},
+		IncludedAnchors:  []projectcontext.ContextAnchor{},
+		InclusionReasons: []PacketInclusionReason{},
+	}
+
+	appendItem := func(section string, item projectcontext.CompiledItem) {
+		record.IncludedItemIDs = append(record.IncludedItemIDs, item.ID)
+		record.IncludedAnchors = append(record.IncludedAnchors, item.Anchor)
+		record.InclusionReasons = append(record.InclusionReasons, PacketInclusionReason{
+			ItemID:  item.ID,
+			Section: section,
+			Reason:  item.Reason,
+		})
+	}
+
+	for _, item := range packet.BaseContract {
+		appendItem("base_contract", item)
+	}
+	for _, item := range packet.WorkingSet.Notes {
+		appendItem("working_set.notes", item)
+	}
+	for _, boundary := range packet.WorkingSet.Boundaries {
+		record.IncludedItemIDs = append(record.IncludedItemIDs, "boundary:"+boundary.Path)
+		record.IncludedAnchors = append(record.IncludedAnchors, projectcontext.ContextAnchor{
+			Path:    boundary.Path,
+			Section: boundary.Label,
+		})
+		record.InclusionReasons = append(record.InclusionReasons, PacketInclusionReason{
+			ItemID:  "boundary:" + boundary.Path,
+			Section: "working_set.boundaries",
+			Reason:  boundary.Reason,
+		})
+	}
+	for _, file := range packet.WorkingSet.Files {
+		record.IncludedItemIDs = append(record.IncludedItemIDs, "file:"+file.Path)
+		record.IncludedAnchors = append(record.IncludedAnchors, projectcontext.ContextAnchor{Path: file.Path})
+		record.InclusionReasons = append(record.InclusionReasons, PacketInclusionReason{
+			ItemID:  "file:" + file.Path,
+			Section: "working_set.files",
+			Reason:  file.Reason,
+		})
+	}
+	for _, test := range packet.WorkingSet.Tests {
+		record.IncludedItemIDs = append(record.IncludedItemIDs, "test:"+test.Path)
+		record.IncludedAnchors = append(record.IncludedAnchors, projectcontext.ContextAnchor{Path: test.Path})
+		record.InclusionReasons = append(record.InclusionReasons, PacketInclusionReason{
+			ItemID:  "test:" + test.Path,
+			Section: "working_set.tests",
+			Reason:  test.Reason,
+		})
+	}
+	for _, verification := range packet.Verification {
+		record.IncludedItemIDs = append(record.IncludedItemIDs, verification.ID)
+		record.IncludedAnchors = append(record.IncludedAnchors, projectcontext.ContextAnchor{
+			Path:    verification.Source,
+			Section: verification.Label,
+		})
+		record.InclusionReasons = append(record.InclusionReasons, PacketInclusionReason{
+			ItemID:  verification.ID,
+			Section: "verification",
+			Reason:  verification.Reason,
+		})
+	}
+	return record
+}
+
+func appendDurableUpdateTelemetry(active *ActiveSession, entries []history.Entry, acceptedOps, acceptedGlobs []string) {
+	if active == nil {
+		return
+	}
+	qualifying, _ := filterHistoryEntries(entries, acceptedOps, acceptedGlobs)
+	for _, entry := range qualifying {
+		appendTelemetryEvent(active, PacketTelemetryEvent{
+			Type:       PacketTelemetryEventDurableUpdate,
+			Timestamp:  entry.Timestamp.UTC(),
+			SessionID:  active.ID,
+			PacketHash: latestPacketHashBefore(active, entry.Timestamp),
+			File:       filepath.ToSlash(entry.File),
+			Operation:  entry.Operation,
+		})
+	}
+}
+
+func appendSessionClosedTelemetry(active *ActiveSession, ts time.Time, status string, validation *ValidationResult) {
+	if active == nil {
+		return
+	}
+	metadata := map[string]any{}
+	if validation != nil {
+		metadata["ok"] = validation.OK
+		if len(validation.MissingCommands) != 0 {
+			metadata["missing_commands"] = append([]string(nil), validation.MissingCommands...)
+		}
+		if validation.MemorySatisfiedBy != "" {
+			metadata["memory_satisfied_by"] = validation.MemorySatisfiedBy
+		}
+	}
+	appendTelemetryEvent(active, PacketTelemetryEvent{
+		Type:        PacketTelemetryEventSessionClosed,
+		Timestamp:   ts.UTC(),
+		SessionID:   active.ID,
+		PacketHash:  latestPacketHashBefore(active, ts),
+		CloseStatus: status,
+		Success:     boolPtr(validation == nil || validation.OK),
+		Metadata:    metadata,
+	})
+}
+
+func appendTelemetryEvent(active *ActiveSession, event PacketTelemetryEvent) {
+	if active == nil {
+		return
+	}
+	if event.Timestamp.IsZero() {
+		event.Timestamp = time.Now().UTC()
+	}
+	if strings.TrimSpace(event.SessionID) == "" {
+		event.SessionID = active.ID
+	}
+	active.TelemetryVersion = packetTelemetryVersion
+	active.TelemetryEvents = append(active.TelemetryEvents, event)
+	trimTelemetryEvents(active)
+}
+
+func trimPacketRecords(active *ActiveSession) {
+	if active == nil || len(active.PacketRecords) <= maxSessionPacketRecords {
+		return
+	}
+	active.PacketRecords = append([]PacketRecord(nil), active.PacketRecords[len(active.PacketRecords)-maxSessionPacketRecords:]...)
+}
+
+func trimTelemetryEvents(active *ActiveSession) {
+	if active == nil || len(active.TelemetryEvents) <= maxSessionTelemetryEvents {
+		return
+	}
+	active.TelemetryEvents = append([]PacketTelemetryEvent(nil), active.TelemetryEvents[len(active.TelemetryEvents)-maxSessionTelemetryEvents:]...)
+}
+
+func latestPacketHashBefore(active *ActiveSession, ts time.Time) string {
+	if active == nil {
+		return ""
+	}
+	var match string
+	for _, record := range active.PacketRecords {
+		if record.CompiledAt.After(ts) {
+			continue
+		}
+		match = record.PacketHash
+	}
+	if match != "" {
+		return match
+	}
+	if len(active.PacketRecords) == 0 {
+		return ""
+	}
+	return active.PacketRecords[len(active.PacketRecords)-1].PacketHash
+}
+
+func latestPacketExpansionMatch(active *ActiveSession, anchorPath string) (string, string) {
+	if active == nil {
+		return "", ""
+	}
+	anchorPath = filepath.ToSlash(strings.TrimSpace(anchorPath))
+	for i := len(active.PacketRecords) - 1; i >= 0; i-- {
+		record := active.PacketRecords[i]
+		for j, anchor := range record.IncludedAnchors {
+			if filepath.ToSlash(strings.TrimSpace(anchor.Path)) != anchorPath {
+				continue
+			}
+			if j < len(record.IncludedItemIDs) {
+				return record.PacketHash, record.IncludedItemIDs[j]
+			}
+			return record.PacketHash, ""
+		}
+	}
+	return "", ""
+}
+
+func boolPtr(v bool) *bool {
+	return &v
 }
 
 func withSessionLock(activePath string, fn func() error) error {

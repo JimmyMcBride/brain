@@ -1,12 +1,14 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 
+	"brain/internal/projectcontext"
 	"brain/internal/skills"
 )
 
@@ -15,7 +17,13 @@ type skillRefreshResult struct {
 	RefreshedSkills    []skills.InstallResult `json:"refreshed_skills,omitempty"`
 }
 
+type projectMigrationStatusResult struct {
+	ProjectMigrationStatus   string   `json:"project_migration_status,omitempty"`
+	AppliedProjectMigrations []string `json:"applied_project_migrations,omitempty"`
+}
+
 var skillInstallRunner = runSkillInstall
+var projectMigrationRunner = runProjectMigration
 
 func inspectInstalledSkills(projectPath string) ([]skills.TargetStatus, []skills.TargetStatus, error) {
 	installer := skills.NewInstaller(userHomeDir())
@@ -89,6 +97,38 @@ func repairLocalSkillsIfNeeded(projectPath string) error {
 	return nil
 }
 
+func applyProjectMigrationsIfNeeded(projectPath string) error {
+	manager := contextManager()
+	plan, err := manager.PlanProjectMigrations(projectPath)
+	if err != nil {
+		return err
+	}
+	if !plan.UsesBrain || len(plan.PendingMigrations) == 0 {
+		return nil
+	}
+	if _, err := manager.ApplyProjectMigrations(context.Background(), projectPath); err != nil {
+		return fmt.Errorf("project migrations blocked for %s: %w. Remediation: from the project root run `brain doctor --project .`; then `brain context refresh --project .`; run `brain adopt --project .` if local agent files still need Brain integration", projectPath, err)
+	}
+	return nil
+}
+
+func summarizeProjectMigrationResult(result *projectcontext.ApplyProjectMigrationsResult) projectMigrationStatusResult {
+	if result == nil || !result.UsesBrain {
+		return projectMigrationStatusResult{}
+	}
+	status := "not_needed"
+	switch result.Status {
+	case "applied":
+		status = "applied"
+	case "failed":
+		status = "failed"
+	}
+	return projectMigrationStatusResult{
+		ProjectMigrationStatus:   status,
+		AppliedProjectMigrations: append([]string(nil), result.AppliedMigrationIDs...),
+	}
+}
+
 func runSkillInstall(binaryPath, configPath, projectPath string, scope skills.Scope, agents []string) ([]skills.InstallResult, error) {
 	args := []string{}
 	if configPath != "" {
@@ -114,4 +154,25 @@ func runSkillInstall(binaryPath, configPath, projectPath string, scope skills.Sc
 		return nil, fmt.Errorf("parse skill refresh output: %w", err)
 	}
 	return results, nil
+}
+
+func runProjectMigration(binaryPath, configPath, projectPath string) (*projectcontext.ApplyProjectMigrationsResult, error) {
+	args := []string{}
+	if configPath != "" {
+		args = append(args, "--config", configPath)
+	}
+	args = append(args, "--json", "--project", projectPath, "context", "migrate")
+
+	cmd := exec.Command(binaryPath, args...)
+	cmd.Env = os.Environ()
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("%s %v: %w\n%s", filepath.Base(binaryPath), args, err, string(output))
+	}
+
+	var result projectcontext.ApplyProjectMigrationsResult
+	if err := json.Unmarshal(output, &result); err != nil {
+		return nil, fmt.Errorf("parse project migration output: %w", err)
+	}
+	return &result, nil
 }

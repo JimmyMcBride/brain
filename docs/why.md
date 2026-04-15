@@ -2,11 +2,11 @@
 
 `brain` exists because AI coding agents are strong at local execution but weak at continuity.
 
-Without durable project memory, they keep rediscovering context, repeating planning work, and drifting as the codebase evolves. `brain` makes the repo itself the memory system so docs, planning, context, and search all stay with the project instead of being scattered across chat history and external tools.
+Without durable project memory, they keep rediscovering context, repeating setup work, and drifting as the codebase evolves. `brain` makes the repo itself the memory system so docs, context, and search stay with the project instead of being scattered across chat history and external tools.
 
 ## One Brain Per Project
 
-`brain` treats every repo as its own operating environment so the docs, planning, context, and search index belong directly to that project.
+`brain` treats every repo as its own operating environment so the docs, context, and search index belong directly to that project.
 
 ## Plain Markdown First
 

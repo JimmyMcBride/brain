@@ -19,6 +19,7 @@ Use this file to decide what is worth keeping in project memory.
 
 - Trivial edits with no future value.
 - Temporary command noise already obvious from code or tests.
+- Speculative reasoning, transient scratch, or dead-end experiments unless they recur as real traps.
 - Duplicate notes when an existing note can be updated.
 <!-- brain:end context-memory-policy -->
 

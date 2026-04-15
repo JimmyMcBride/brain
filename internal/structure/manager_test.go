@@ -182,3 +182,87 @@ func TestRebuildAndSnapshotReturnGroupedStructure(t *testing.T) {
 		}
 	}
 }
+
+func TestBoundaryGraphBuildsCompilerFacingRelations(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	workspaceSvc := workspace.New(root)
+	if err := workspaceSvc.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	for path, body := range map[string]string{
+		"go.mod":                               "module example.com/test\n\ngo 1.26\n",
+		"cmd/brain/main.go":                    "package main\nfunc main() {}\n",
+		"internal/search/search.go":            "package search\n",
+		"internal/search/search_test.go":       "package search\n",
+		"internal/session/manager.go":          "package session\n",
+		"internal/session/manager_test.go":     "package session\n",
+		"docs/usage.md":                        "# usage\n",
+		".github/workflows/ci.yml":             "name: ci\n",
+		"config/app.yaml":                      "name: app\n",
+		"scripts/refresh-global-brain.sh":      "#!/usr/bin/env sh\n",
+		".brain/context/current-state.md":      "# Current State\n",
+		".brain/context/current-state_test.go": "package context\n",
+	} {
+		if err := os.MkdirAll(filepath.Join(root, filepath.Dir(path)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, path), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	store, err := index.New(filepath.Join(root, ".brain", "state", "brain.sqlite3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	manager, err := New(store, workspaceSvc)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := manager.Rebuild(ctx); err != nil {
+		t.Fatal(err)
+	}
+	graph, err := manager.BoundaryGraph(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(graph.Boundaries) == 0 {
+		t.Fatal("expected boundary graph records")
+	}
+
+	searchBoundary := graph.BoundaryByID("internal/search")
+	if searchBoundary == nil {
+		t.Fatalf("expected internal/search boundary in graph: %#v", graph.Boundaries)
+	}
+	if !contains(searchBoundary.Files, "internal/search/search.go") {
+		t.Fatalf("expected search source file mapping: %#v", searchBoundary)
+	}
+	if !contains(searchBoundary.OwnedTests, "internal/search/search_test.go") {
+		t.Fatalf("expected search test ownership: %#v", searchBoundary)
+	}
+	if !contains(searchBoundary.AdjacentBoundaries, "internal/session") {
+		t.Fatalf("expected sibling boundary adjacency: %#v", searchBoundary)
+	}
+	if len(searchBoundary.Responsibilities) == 0 {
+		t.Fatalf("expected derived responsibilities: %#v", searchBoundary)
+	}
+
+	if got := graph.BoundaryForFile("internal/search/search.go"); got == nil || got.ID != "internal/search" {
+		t.Fatalf("expected deepest file-to-boundary mapping, got %#v", got)
+	}
+	if got := graph.BoundaryForFile("cmd/brain/main.go"); got == nil || got.ID != "cmd/brain" {
+		t.Fatalf("expected nested command boundary mapping, got %#v", got)
+	}
+}
+
+func contains(items []string, want string) bool {
+	for _, item := range items {
+		if item == want {
+			return true
+		}
+	}
+	return false
+}

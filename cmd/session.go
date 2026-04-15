@@ -106,6 +106,24 @@ func addSessionCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLo
 						return err
 					}
 				}
+				for _, suggestion := range result.PromotionSuggestions {
+					if _, err := fmt.Fprintf(w, "Promote: %s -> %s\n", suggestion.Category, suggestion.SuggestedTarget); err != nil {
+						return err
+					}
+					if _, err := fmt.Fprintf(w, "Why: %s\n", suggestion.ReasonSuggested); err != nil {
+						return err
+					}
+					if len(suggestion.SupportingPacketHashes) != 0 {
+						if _, err := fmt.Fprintf(w, "Support: packets %s\n", strings.Join(suggestion.SupportingPacketHashes, ", ")); err != nil {
+							return err
+						}
+					}
+					if len(suggestion.SupportingVerification) != 0 {
+						if _, err := fmt.Fprintf(w, "Support: verification %s\n", strings.Join(suggestion.SupportingVerification, ", ")); err != nil {
+							return err
+						}
+					}
+				}
 				return nil
 			})
 			if printErr != nil {
@@ -157,6 +175,24 @@ func addSessionCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLo
 				for _, remediation := range result.Validation.Remediation {
 					if _, err := fmt.Fprintf(w, "Fix: %s\n", remediation); err != nil {
 						return err
+					}
+				}
+				for _, suggestion := range result.Validation.PromotionSuggestions {
+					if _, err := fmt.Fprintf(w, "Promote: %s -> %s\n", suggestion.Category, suggestion.SuggestedTarget); err != nil {
+						return err
+					}
+					if _, err := fmt.Fprintf(w, "Why: %s\n", suggestion.ReasonSuggested); err != nil {
+						return err
+					}
+					if len(suggestion.SupportingPacketHashes) != 0 {
+						if _, err := fmt.Fprintf(w, "Support: packets %s\n", strings.Join(suggestion.SupportingPacketHashes, ", ")); err != nil {
+							return err
+						}
+					}
+					if len(suggestion.SupportingVerification) != 0 {
+						if _, err := fmt.Fprintf(w, "Support: verification %s\n", strings.Join(suggestion.SupportingVerification, ", ")); err != nil {
+							return err
+						}
 					}
 				}
 				if result.LedgerPath != "" {

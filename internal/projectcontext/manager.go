@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 const localNotesSection = "## Local Notes\n\nAdd repo-specific notes here. `brain context refresh` preserves content outside managed blocks.\n"
@@ -90,17 +91,55 @@ func New(home string) *Manager {
 }
 
 func (m *Manager) Install(ctx context.Context, req Request) ([]Result, error) {
-	return m.apply(ctx, req)
+	results, err := m.apply(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if err := m.initializeProjectMigrationLedger(req); err != nil {
+		return nil, err
+	}
+	return results, nil
 }
 
 func (m *Manager) Adopt(ctx context.Context, req Request) ([]Result, error) {
 	req.Force = true
 	req.Adopt = true
-	return m.apply(ctx, req)
+	results, err := m.apply(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if err := m.initializeProjectMigrationLedger(req); err != nil {
+		return nil, err
+	}
+	return results, nil
 }
 
 func (m *Manager) Refresh(ctx context.Context, req Request) ([]Result, error) {
 	return m.apply(ctx, req)
+}
+
+func (m *Manager) initializeProjectMigrationLedger(req Request) error {
+	if req.DryRun {
+		return nil
+	}
+	projectDir, err := filepath.Abs(defaultProjectDir(req.ProjectDir))
+	if err != nil {
+		return err
+	}
+	if !usesBrainWorkspace(projectDir) {
+		return nil
+	}
+	now := time.Now().UTC()
+	state := defaultProjectMigrationState()
+	known := KnownProjectMigrations()
+	state.Applied = make([]AppliedProjectMigration, 0, len(known))
+	appliedIDs := make([]string, 0, len(known))
+	for _, migration := range known {
+		state.Applied = append(state.Applied, NewAppliedProjectMigration(migration.ID, now))
+		appliedIDs = append(appliedIDs, migration.ID)
+	}
+	state.LastRun = NewProjectMigrationRun("bootstrap_current", appliedIDs, appliedIDs, now, nil)
+	return m.SaveProjectMigrationState(projectDir, state)
 }
 
 func (m *Manager) Load(req LoadRequest) (*LoadedContext, error) {
@@ -285,49 +324,16 @@ func (m *Manager) apply(ctx context.Context, req Request) ([]Result, error) {
 		return nil, fmt.Errorf("project dir is not a directory: %s", projectDir)
 	}
 
-	snapshot := scanRepo(ctx, projectDir)
-	policyBody, err := RenderPolicy(snapshot)
+	specResults, err := m.syncManagedContext(ctx, projectDir, req.DryRun, req.Force, req.Adopt)
 	if err != nil {
 		return nil, err
 	}
-
-	resolvedAgents, err := m.resolveAgents(req.Agents)
+	agentResults, err := m.syncAgentIntegrations(projectDir, req.Agents, req.DryRun, req.Adopt)
 	if err != nil {
 		return nil, err
 	}
-	specs := bundleSpecs(snapshot, policyBody)
-	targets, err := discoverAgentIntegrationTargets(projectDir, resolvedAgents)
-	if err != nil {
-		return nil, err
-	}
-
-	results := make([]Result, 0, len(specs)+len(targets))
-	for _, spec := range specs {
-		result, err := syncSpec(spec, req.DryRun, req.Force, req.Adopt)
-		if err != nil {
-			return nil, err
-		}
-		if rel, relErr := filepath.Rel(projectDir, spec.Path); relErr == nil {
-			result.Path = filepath.ToSlash(rel)
-		}
-		results = append(results, result)
-	}
-	for _, target := range targets {
-		result, ok, err := syncAgentIntegration(target, req.DryRun, req.Adopt, len(resolvedAgents) != 0)
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
-			continue
-		}
-		if rel, relErr := filepath.Rel(projectDir, target.Path); relErr == nil {
-			result.Path = filepath.ToSlash(rel)
-		}
-		results = append(results, result)
-	}
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].Path < results[j].Path
-	})
+	results := append(specResults, agentResults...)
+	sortResultsByPath(results)
 	return results, nil
 }
 
@@ -454,6 +460,89 @@ func bundleSpecs(snapshot Snapshot, policyBody string) []fileSpec {
 		},
 	}
 	return specs
+}
+
+func (m *Manager) syncManagedContext(ctx context.Context, projectDir string, dryRun, force, adopt bool) ([]Result, error) {
+	return m.syncManagedContextWithMode(ctx, projectDir, dryRun, force, adopt, false)
+}
+
+func (m *Manager) syncManagedContextForMigration(ctx context.Context, projectDir string) ([]Result, error) {
+	return m.syncManagedContextWithMode(ctx, projectDir, false, false, false, true)
+}
+
+func (m *Manager) syncManagedContextWithMode(ctx context.Context, projectDir string, dryRun, force, adopt, skipUnmanaged bool) ([]Result, error) {
+	snapshot := scanRepo(ctx, projectDir)
+	policyBody, err := RenderPolicy(snapshot)
+	if err != nil {
+		return nil, err
+	}
+	specs := bundleSpecs(snapshot, policyBody)
+	results := make([]Result, 0, len(specs))
+	for _, spec := range specs {
+		result, err := syncSpecForMode(spec, dryRun, force, adopt, skipUnmanaged)
+		if err != nil {
+			return nil, err
+		}
+		if rel, relErr := filepath.Rel(projectDir, spec.Path); relErr == nil {
+			result.Path = filepath.ToSlash(rel)
+		}
+		results = append(results, result)
+	}
+	sortResultsByPath(results)
+	return results, nil
+}
+
+func syncSpecForMode(spec fileSpec, dryRun, force, adopt, skipUnmanaged bool) (Result, error) {
+	if !skipUnmanaged || spec.Style != "markdown" {
+		return syncSpec(spec, dryRun, force, adopt)
+	}
+	existing, err := os.ReadFile(spec.Path)
+	if err != nil && !os.IsNotExist(err) {
+		return Result{}, err
+	}
+	if err == nil && !strings.Contains(string(existing), managedBegin(spec.BlockID)) && !strings.Contains(string(existing), managedEnd(spec.BlockID)) && strings.TrimSpace(string(existing)) != "" {
+		return Result{
+			Path:                 filepath.ToSlash(spec.Path),
+			Kind:                 spec.Kind,
+			Action:               "unchanged",
+			PreservedUserContent: true,
+			ManagedBlocks:        []string{spec.BlockID},
+		}, nil
+	}
+	return syncSpec(spec, dryRun, force, adopt)
+}
+
+func (m *Manager) syncAgentIntegrations(projectDir string, agents []string, dryRun, adopt bool) ([]Result, error) {
+	resolvedAgents, err := m.resolveAgents(agents)
+	if err != nil {
+		return nil, err
+	}
+	targets, err := discoverAgentIntegrationTargets(projectDir, resolvedAgents)
+	if err != nil {
+		return nil, err
+	}
+	results := make([]Result, 0, len(targets))
+	for _, target := range targets {
+		result, ok, err := syncAgentIntegration(target, dryRun, adopt, len(resolvedAgents) != 0)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			continue
+		}
+		if rel, relErr := filepath.Rel(projectDir, target.Path); relErr == nil {
+			result.Path = filepath.ToSlash(rel)
+		}
+		results = append(results, result)
+	}
+	sortResultsByPath(results)
+	return results, nil
+}
+
+func sortResultsByPath(results []Result) {
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Path < results[j].Path
+	})
 }
 
 func discoverAgentIntegrationTargets(projectDir string, agents []string) ([]agentIntegrationTarget, error) {
@@ -1165,10 +1254,11 @@ func renderAgents(snapshot Snapshot) string {
 	b.WriteString("1. If no validated session is active, run `brain session start --task \"<task>\"`.\n")
 	b.WriteString("2. If a session is already active, run `brain session validate` before substantial work.\n")
 	b.WriteString("3. Read this file and the linked context files needed for the task.\n")
-	fmt.Fprintf(&b, "4. Retrieve project memory with `brain find %s` or `brain search \"%s <task>\"`.\n", slug, slug)
-	b.WriteString("5. Use `brain edit` for durable context updates to AGENTS.md, docs, or .brain notes.\n")
-	b.WriteString("6. Use `brain session run -- <command>` for required verification commands.\n")
-	b.WriteString("7. Finish with `brain session finish` so policy checks can enforce memory updates and required command runs.\n")
+	b.WriteString("4. Compile the smallest justified working set with `brain context compile --task \"<task>\"`.\n")
+	fmt.Fprintf(&b, "5. Retrieve project memory with `brain find %s` or `brain search \"%s <task>\"` when the compiled packet is not enough.\n", slug, slug)
+	b.WriteString("6. Use `brain edit` for durable context updates to AGENTS.md, docs, or .brain notes.\n")
+	b.WriteString("7. Use `brain session run -- <command>` for required verification commands.\n")
+	b.WriteString("8. Finish with `brain session finish` so policy checks can enforce verification and surface promotion review when durable follow-through is still needed.\n")
 	return b.String()
 }
 
@@ -1248,7 +1338,8 @@ func renderWorkflows(snapshot Snapshot) string {
 	b.WriteString("1. If no validated session is active, run `brain session start --task \"<task>\"`.\n")
 	b.WriteString("2. If a session already exists, run `brain session validate`.\n")
 	b.WriteString("3. Read `AGENTS.md`, `.brain/policy.yaml`, and the linked context files needed for the task.\n")
-	fmt.Fprintf(&b, "4. If project memory matters, run `brain find %s` or `brain search \"%s <task>\"`.\n\n", slug, slug)
+	b.WriteString("4. Run `brain context compile --task \"<task>\"` for the smallest justified working set.\n")
+	fmt.Fprintf(&b, "5. If project memory still matters, run `brain find %s` or `brain search \"%s <task>\"`.\n\n", slug, slug)
 	b.WriteString("## During Work\n\n")
 	b.WriteString("- Keep durable discoveries, decisions, and risks in AGENTS.md, /docs, or .brain notes.\n")
 	b.WriteString("- Update existing durable notes instead of duplicating context.\n")
@@ -1264,6 +1355,7 @@ func renderWorkflows(snapshot Snapshot) string {
 	b.WriteString("6. When the story is clean, commit it, push it, and only then move to the next story.\n\n")
 	b.WriteString("## Close-Out\n\n")
 	b.WriteString("- Refresh or update durable notes for meaningful behavior, config, or architecture changes.\n")
+	b.WriteString("- If `brain session finish` blocks, inspect the promotion suggestions or run `brain distill --session` to review promotable updates before forcing closeout.\n")
 	b.WriteString("- If `skills/brain/` changed, reinstall the local Brain skill for Codex and OpenClaw with `brain skills install --scope local --agent codex --agent openclaw --project .`.\n")
 	b.WriteString("- When opening a PR, make the title and body release-note friendly because GitHub release notes are generated from merged PR metadata.\n")
 	b.WriteString("- Summarize shipped behavior in the PR, not just implementation steps, so future changelogs stay human-readable.\n")
@@ -1286,6 +1378,7 @@ func renderMemoryPolicy(snapshot Snapshot) string {
 	b.WriteString("## Do Not Capture\n\n")
 	b.WriteString("- Trivial edits with no future value.\n")
 	b.WriteString("- Temporary command noise already obvious from code or tests.\n")
+	b.WriteString("- Speculative reasoning, transient scratch, or dead-end experiments unless they recur as real traps.\n")
 	b.WriteString("- Duplicate notes when an existing note can be updated.\n")
 	return b.String()
 }
@@ -1332,10 +1425,12 @@ func renderAgentIntegration(agent string) string {
 	b.WriteString("- `.brain/context/memory-policy.md`\n")
 	b.WriteString("- `.brain/context/current-state.md`\n\n")
 	b.WriteString("When working with Brain-managed repos:\n")
+	b.WriteString("- start with `brain context compile --task \"<task>\"` for the smallest justified packet\n")
 	b.WriteString("- use the `brain` CLI for project-local memory and context workflows\n")
 	b.WriteString("- if no validated session is active, run `brain session start --task \"<task>\"`\n")
 	b.WriteString("- if a session is already active, run `brain session validate` before substantial work\n")
 	b.WriteString("- use `brain session run -- <command>` for required verification commands\n")
+	b.WriteString("- if finish blocks, review the promotion suggestions or run `brain distill --session`\n")
 	b.WriteString("- finish with `brain session finish`\n")
 	return b.String()
 }

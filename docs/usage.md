@@ -1,6 +1,6 @@
 # Usage
 
-This is the practical operating guide for `brain` after install. Use it when you already understand the top-level pitch and want the day-to-day commands for adopting Brain in a repo, searching local context, planning work, and running the session workflow.
+This is the practical operating guide for `brain` after install. Use it when you already understand the top-level pitch and want the day-to-day commands for adopting Brain in a repo, compiling task context, retrieving local memory, and running the session workflow.
 
 `brain` is operated per project. Use `--project` when you are acting on a repo other than the current directory.
 
@@ -31,7 +31,7 @@ If no release has been published yet, the installer falls back to downloading th
 
 ## Bootstrap A Project
 
-This is the moment where a repo gets its local brain: contract, docs, generated context, planning model, and local state.
+This is the moment where a repo gets its local brain: contract, docs, generated context, and local state.
 
 For a new or mostly empty repo:
 
@@ -107,7 +107,7 @@ brain distill --project . --brainstorm .brain/brainstorms/event-follow-up-ideas.
 brain brainstorm distill --project . .brain/brainstorms/event-follow-up-ideas.md
 ```
 
-`brain distill --session` requires an active session and creates a proposal note under `.brain/resources/changes/` with source provenance, proposed target notes, and suggested markdown updates for review.
+`brain distill --session` requires an active session and creates a proposal note under `.brain/resources/changes/` with source provenance, promotion-review diagnostics, and suggested markdown updates for review.
 
 `brain distill --brainstorm ...` uses the same proposal flow for brainstorms. `brain brainstorm distill ...` remains supported as a compatibility wrapper.
 
@@ -143,17 +143,16 @@ Planning is intentionally opinionated:
 
 ## Context Management
 
-Install or refresh project context:
+Compile task context first, then reach for the compatibility views only when you need them:
 
 ```bash
+brain context compile --project . --task "auth flow"
+brain context explain --project . --last
+brain context stats --project .
 brain context install --project .
 brain context refresh --project .
 brain context refresh --project . --agent claude
 brain context refresh --project . --dry-run
-brain context load --project . --level 0
-brain context load --project . --level 1
-brain context load --project . --level 2
-brain context load --project . --level 3 --query "auth flow"
 brain context structure --project .
 brain context structure --project . --path internal/search
 brain context structure status --project .
@@ -161,16 +160,32 @@ brain context live --project . --task "auth flow"
 brain context live --project . --explain
 brain context assemble --project . --task "auth flow"
 brain context assemble --project . --explain
+brain context load --project . --level 0
+brain context load --project . --level 1
+brain context load --project . --level 2
+brain context load --project . --level 3 --query "auth flow"
 ```
 
 Use `--force` when adopting an existing unmanaged `AGENTS.md` or docs file into the managed-block model.
 
-`context load` is read-only and deterministic:
+`context compile` is the summary-first working-set compiler:
 
-- level 0 loads the AGENTS summary plus current state
-- level 1 adds overview and workflows
-- level 2 loads the full static context bundle
-- level 3 adds search-injected relevant context, using `--query` or the active session task
+- resolves the task from `--task` or the active session
+- emits the smallest justified packet Brain currently knows how to build: base contract, changed files, touched boundaries, nearby tests, top durable note summaries, verification hints, ambiguities, and provenance
+- keeps boundary-aware context visible by carrying adjacency, responsibilities, and nearby-test relations into the packet
+- ranks verification hints into strong or suggested command guidance with explicit source provenance
+- applies conservative local utility adjustments only after repeated repo-local evidence such as later expansions, successful verification linkage, or durable-update linkage
+- keeps included context in summary form with exact anchors and explicit inclusion reasons
+- records packet metadata into the active session when a session is present, but still works normally without a session
+- is the best first choice when you want one compact startup packet instead of a full static bundle or a broader explain-oriented assembly view
+
+`context explain` and `context stats` are analysis surfaces for the compiler:
+
+- `context explain --last` inspects the latest recorded packet, its included items, later expansions, and downstream outcomes such as verification runs, durable updates, and closeout status
+- `context explain --packet <hash>` lets you inspect an older packet when you need to debug a specific compile result
+- `context stats` summarizes likely signal items, likely noise items, repeated expansion patterns, and common verification links from local compiler telemetry
+- both commands stay grounded in recorded packet metadata and local session telemetry rather than opaque remote analytics
+- use them when tuning context quality or debugging ranking behavior, not as a replacement for normal `context compile` usage
 
 `context structure` is the structural repo inspection surface:
 
@@ -185,6 +200,7 @@ Use `--force` when adopting an existing unmanaged `AGENTS.md` or docs file into 
 - returns an on-demand packet with task, session, changed-file, touched-boundary, nearby-test, verification, policy-hint, and ambiguity sections
 - adds rationale and missing-signal reporting with `--explain`
 - does not persist live state to SQLite or the session file
+- derives repo-observable verification recipes from policy, Makefile targets, package scripts, CI workflows, and bounded recent successful session commands when they exist
 - reports recent recorded session commands plus verification-profile satisfaction when a session is active
 - only emits policy hints for strong-match conditions such as missing verification or missing durable note updates after repo changes
 
@@ -194,6 +210,14 @@ Use `--force` when adopting an existing unmanaged `AGENTS.md` or docs file into 
 - assembles typed context from durable notes, generated context, structural repo context, live-work signals, and workflow/policy sources
 - shows ambiguities and confidence for the current task packet
 - adds rationale, omitted-nearby context, and missing-group reporting with `--explain`
+- remains useful when you want the broader packet shape and explain surfaces during the compiler transition
+
+`context load` is the legacy compatibility path:
+
+- level 0 loads the AGENTS summary plus current state
+- level 1 adds overview and workflows
+- level 2 loads the full static context bundle
+- level 3 adds search-injected relevant context, using `--query` or the active session task
 
 `context install` and `context refresh` manage the root contract plus `.brain/context/*`. They do not create missing agent-specific instruction files.
 
@@ -208,6 +232,8 @@ brain adopt --project . --agent codex
 
 `adopt` scans for existing local agent instruction files such as `.codex/AGENTS.md`, `.claude/CLAUDE.md`, or `.pi/AGENTS.md` and appends or updates a Brain-managed section inside them while preserving the rest of the file. `adopt --agent ...` is the explicit path that may create a missing agent instruction file, and unsupported agent names are rejected instead of creating ad hoc paths.
 
+These same managed refresh and adopt paths are the fallback repair tools behind automatic project upgrades.
+
 ## Sessions
 
 Use sessions when the repo should require explicit verification and durable note updates.
@@ -221,6 +247,7 @@ brain session finish --project . --summary "auth flow tightened"
 ```
 
 If finish blocks because repo changes need durable memory updates, run `brain distill --project . --session`, review the proposal, apply the note updates that matter, and retry `brain session finish`.
+The blocked closeout output also surfaces packet-backed promotion suggestions when Brain can justify them. Review those suggestions first, then use the distill note to decide what should actually become durable memory.
 
 ## Skills
 
@@ -280,4 +307,31 @@ On Windows, `brain update` uses the same release assets and default install targ
 
 By default, `brain update` tracks the latest stable GitHub release published from `main`.
 
-When you run `brain update`, Brain refreshes any already-installed global Brain skills plus any local Brain skills inside the current `--project`. Other project-local installs repair themselves lazily the next time Brain runs in those repos.
+When you run `brain update`, Brain refreshes any already-installed global Brain skills plus any local Brain skills inside the current `--project`.
+
+If the current `--project` already uses Brain, `brain update` also applies any pending soft project migrations for Brain-managed context files and existing Brain agent integrations in that repo.
+
+`brain update --check` stays read-only. It does not refresh skills or apply project migrations.
+
+Other Brain repos repair themselves lazily the next time Brain runs there:
+
+- local Brain skills repair before app-backed project work begins
+- pending project migrations apply before app-backed project work begins
+
+Use `brain doctor --project .` to inspect whether project migrations are `current`, `pending`, or `broken`.
+
+If an automatic project migration fails, run these from the project root:
+
+```bash
+brain doctor --project .
+brain context refresh --project .
+brain adopt --project .
+```
+
+Use `brain adopt --project .` when existing local agent instruction files still need their Brain-managed integration block refreshed or migrated.
+
+When a branch changes Brain's automatic project-upgrade behavior, validate that migration path from the branch-built binary before merge:
+
+```bash
+go run . context migrate --project ../older-brain-repo
+```

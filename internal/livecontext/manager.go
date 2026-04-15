@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -23,12 +22,12 @@ type Manager struct {
 }
 
 type Request struct {
-	ProjectDir         string
-	Task               string
-	TaskSource         string
-	Session            *session.ActiveSession
-	StructuralSnapshot *structure.Snapshot
-	Explain            bool
+	ProjectDir    string
+	Task          string
+	TaskSource    string
+	Session       *session.ActiveSession
+	BoundaryGraph *structure.BoundaryGraph
+	Explain       bool
 }
 
 type Packet struct {
@@ -68,10 +67,12 @@ type ChangedFile struct {
 }
 
 type TouchedBoundary struct {
-	Path  string `json:"path"`
-	Label string `json:"label"`
-	Role  string `json:"role"`
-	Why   string `json:"why"`
+	Path               string   `json:"path"`
+	Label              string   `json:"label"`
+	Role               string   `json:"role"`
+	Why                string   `json:"why"`
+	AdjacentBoundaries []string `json:"adjacent_boundaries,omitempty"`
+	Responsibilities   []string `json:"responsibilities,omitempty"`
 }
 
 type NearbyTest struct {
@@ -83,6 +84,7 @@ type NearbyTest struct {
 type Verification struct {
 	RecentCommands []VerificationCommand `json:"recent_commands"`
 	Profiles       []VerificationProfile `json:"profiles"`
+	Recipes        []VerificationRecipe  `json:"recipes"`
 }
 
 type VerificationCommand struct {
@@ -133,14 +135,15 @@ func (m *Manager) Collect(ctx context.Context, req Request) (*Packet, error) {
 		baselineHead = strings.TrimSpace(req.Session.GitBaseline.Head)
 	}
 	changedFiles := deriveChangedFiles(ctx, req.ProjectDir, req.Session, currentHead, gitAvailable)
-	touchedBoundaries, structureAvailable := deriveTouchedBoundaries(changedFiles, req.StructuralSnapshot)
-	nearbyTests := deriveNearbyTests(req.ProjectDir, changedFiles, touchedBoundaries, req.StructuralSnapshot)
+	touchedBoundaries, structureAvailable := deriveTouchedBoundaries(changedFiles, req.BoundaryGraph)
+	nearbyTests := deriveNearbyTests(changedFiles, touchedBoundaries, req.BoundaryGraph)
 	policy, _, _, err := projectcontext.LoadPolicy(req.ProjectDir)
 	if err != nil {
 		return nil, err
 	}
 	recentCommands := collectRecentCommands(req.Session)
 	verificationProfiles := collectVerificationProfiles(policy, req.Session)
+	verificationRecipes := collectVerificationRecipes(req.ProjectDir, policy, req.Session, verificationProfiles)
 	policyHints, err := m.collectPolicyHints(req.ProjectDir, policy, req.Session, taskSource, changedFiles, verificationProfiles)
 	if err != nil {
 		return nil, err
@@ -163,6 +166,7 @@ func (m *Manager) Collect(ctx context.Context, req Request) (*Packet, error) {
 		Verification: Verification{
 			RecentCommands: recentCommands,
 			Profiles:       verificationProfiles,
+			Recipes:        verificationRecipes,
 		},
 		PolicyHints: policyHints,
 		Ambiguities: buildAmbiguities(req.Session, gitAvailable, structureAvailable, changedFiles, nearbyTests, recentCommands),
@@ -314,7 +318,7 @@ func renderVerification(w io.Writer, verification Verification) error {
 	if _, err := io.WriteString(w, "## Verification\n\n"); err != nil {
 		return err
 	}
-	if len(verification.RecentCommands) == 0 && len(verification.Profiles) == 0 {
+	if len(verification.RecentCommands) == 0 && len(verification.Profiles) == 0 && len(verification.Recipes) == 0 {
 		_, err := io.WriteString(w, "- No recorded verification yet.\n\n")
 		return err
 	}
@@ -336,6 +340,15 @@ func renderVerification(w io.Writer, verification Verification) error {
 			return err
 		}
 	}
+	recipes := verification.Recipes
+	if len(recipes) > 4 {
+		recipes = recipes[:4]
+	}
+	for _, recipe := range recipes {
+		if _, err := fmt.Fprintf(w, "- recipe `%s` [%s, %s]: `%s`\n", recipe.Label, recipe.Strength, recipe.Source, recipe.Command); err != nil {
+			return err
+		}
+	}
 	_, err := io.WriteString(w, "\n")
 	return err
 }
@@ -352,8 +365,8 @@ func explainLines(packet *Packet) []string {
 	if packet.Worktree.GitAvailable {
 		lines = append(lines, "git availability allows live-work signals to compare current repo state")
 	}
-	if len(packet.Verification.RecentCommands) > 0 || len(packet.Verification.Profiles) > 0 {
-		lines = append(lines, "verification signals show which required checks already ran in this session")
+	if len(packet.Verification.RecentCommands) > 0 || len(packet.Verification.Profiles) > 0 || len(packet.Verification.Recipes) > 0 {
+		lines = append(lines, "verification signals combine repo-derived verification recipes with any checks already recorded in this session")
 	}
 	if len(packet.PolicyHints) > 0 {
 		lines = append(lines, "policy hints appear only when live-work conditions strongly suggest them")
@@ -372,7 +385,7 @@ func missingSignals(packet *Packet) []string {
 	if len(packet.NearbyTests) == 0 {
 		out = append(out, "nearby test signals are not populated yet")
 	}
-	if len(packet.Verification.RecentCommands) == 0 && len(packet.Verification.Profiles) == 0 {
+	if len(packet.Verification.RecentCommands) == 0 && len(packet.Verification.Profiles) == 0 && len(packet.Verification.Recipes) == 0 {
 		out = append(out, "verification signals are not populated yet")
 	}
 	if len(packet.PolicyHints) == 0 {
@@ -484,8 +497,8 @@ func gitStatusFiles(ctx context.Context, projectDir string) []ChangedFile {
 	return files
 }
 
-func deriveTouchedBoundaries(changedFiles []ChangedFile, snapshot *structure.Snapshot) ([]TouchedBoundary, bool) {
-	if snapshot == nil {
+func deriveTouchedBoundaries(changedFiles []ChangedFile, graph *structure.BoundaryGraph) ([]TouchedBoundary, bool) {
+	if graph == nil {
 		return []TouchedBoundary{}, false
 	}
 	byPath := map[string]TouchedBoundary{}
@@ -493,35 +506,30 @@ func deriveTouchedBoundaries(changedFiles []ChangedFile, snapshot *structure.Sna
 		if file.Path == "" {
 			continue
 		}
-		var best *structure.Item
-		for i := range snapshot.Boundaries {
-			item := snapshot.Boundaries[i]
-			if strings.HasPrefix(file.Path, item.Path) {
-				if best == nil || len(item.Path) > len(best.Path) {
-					copy := item
-					best = &copy
-				}
-			}
-		}
+		best := graph.BoundaryForFile(file.Path)
 		if best == nil {
 			continue
 		}
-		byPath[best.Path] = TouchedBoundary{
-			Path:  best.Path,
-			Label: best.Label,
-			Role:  best.Role,
-			Why:   "contains changed files",
-		}
+		existing := byPath[best.RootPath]
+		existing.Path = best.RootPath
+		existing.Label = best.Label
+		existing.Role = best.Role
+		existing.Why = "contains changed files"
+		existing.AdjacentBoundaries = append(existing.AdjacentBoundaries, best.AdjacentBoundaries...)
+		existing.Responsibilities = append(existing.Responsibilities, best.Responsibilities...)
+		byPath[best.RootPath] = existing
 	}
 	out := make([]TouchedBoundary, 0, len(byPath))
 	for _, boundary := range byPath {
+		boundary.AdjacentBoundaries = dedupeStrings(boundary.AdjacentBoundaries)
+		boundary.Responsibilities = dedupeStrings(boundary.Responsibilities)
 		out = append(out, boundary)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 	return out, true
 }
 
-func deriveNearbyTests(projectDir string, changedFiles []ChangedFile, boundaries []TouchedBoundary, snapshot *structure.Snapshot) []NearbyTest {
+func deriveNearbyTests(changedFiles []ChangedFile, boundaries []TouchedBoundary, graph *structure.BoundaryGraph) []NearbyTest {
 	testsByPath := map[string]NearbyTest{}
 	for _, file := range changedFiles {
 		if isTestPath(file.Path) {
@@ -530,42 +538,42 @@ func deriveNearbyTests(projectDir string, changedFiles []ChangedFile, boundaries
 				Relation: "direct_test_change",
 				Why:      "test file changed directly",
 			}
+			continue
 		}
-	}
-	if len(testsByPath) == 0 {
-		for _, file := range changedFiles {
-			dir := filepath.Dir(filepath.FromSlash(file.Path))
-			if dir == "." || dir == "" {
-				continue
-			}
-			entries, err := os.ReadDir(filepath.Join(projectDir, dir))
-			if err != nil {
-				continue
-			}
-			for _, entry := range entries {
-				if entry.IsDir() {
-					continue
-				}
-				rel := normalizePath(filepath.Join(dir, entry.Name()))
-				if !isTestPath(rel) {
-					continue
-				}
-				testsByPath[rel] = NearbyTest{
-					Path:     rel,
-					Relation: "same_dir",
-					Why:      "test surface near changed code",
-				}
+		if graph == nil {
+			continue
+		}
+		boundary := graph.BoundaryForFile(file.Path)
+		if boundary == nil {
+			continue
+		}
+		for _, test := range boundary.OwnedTests {
+			testsByPath[test] = NearbyTest{
+				Path:     test,
+				Relation: "same_boundary",
+				Why:      fmt.Sprintf("owned by touched boundary %q", boundary.Label),
 			}
 		}
 	}
-	if len(testsByPath) == 0 && snapshot != nil {
+	if graph != nil {
 		for _, boundary := range boundaries {
-			for _, testSurface := range snapshot.TestSurfaces {
-				if strings.HasPrefix(testSurface.Path, boundary.Path) {
-					testsByPath[testSurface.Path] = NearbyTest{
-						Path:     testSurface.Path,
-						Relation: "same_boundary",
-						Why:      "test surface near changed code",
+			record := graph.BoundaryByID(strings.TrimSuffix(boundary.Path, "/"))
+			if record == nil {
+				continue
+			}
+			for _, adjacent := range record.AdjacentBoundaries {
+				adjacentRecord := graph.BoundaryByID(adjacent)
+				if adjacentRecord == nil {
+					continue
+				}
+				for _, test := range adjacentRecord.OwnedTests {
+					if _, ok := testsByPath[test]; ok {
+						continue
+					}
+					testsByPath[test] = NearbyTest{
+						Path:     test,
+						Relation: "adjacent_boundary",
+						Why:      fmt.Sprintf("owned by adjacent boundary %q", adjacentRecord.Label),
 					}
 				}
 			}
@@ -715,7 +723,7 @@ func buildAmbiguities(active *session.ActiveSession, gitAvailable, structureAvai
 		out = append(out, "no changed files detected yet")
 	}
 	if !structureAvailable {
-		out = append(out, "structural context is unavailable, so touched boundaries could not be computed")
+		out = append(out, "boundary graph is unavailable, so touched boundaries could not be computed")
 	}
 	if len(nearbyTests) == 0 {
 		out = append(out, "no nearby tests detected yet")
@@ -723,6 +731,27 @@ func buildAmbiguities(active *session.ActiveSession, gitAvailable, structureAvai
 	if len(verification) == 0 {
 		out = append(out, "no recorded verification commands yet")
 	}
+	return out
+}
+
+func dedupeStrings(items []string) []string {
+	if len(items) == 0 {
+		return []string{}
+	}
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		if _, ok := seen[item]; ok {
+			continue
+		}
+		seen[item] = struct{}{}
+		out = append(out, item)
+	}
+	sort.Strings(out)
 	return out
 }
 

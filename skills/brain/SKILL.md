@@ -1,6 +1,6 @@
 ---
 name: brain
-description: Use this skill when working with a project-local Brain workspace managed by the `brain` CLI, especially for repo memory, retrieval, planning, brainstorming, agent context, and safe markdown updates.
+description: Use this skill when working with a project-local Brain workspace managed by the `brain` CLI, especially for repo memory, retrieval, compiled task context, session hygiene, and safe markdown updates.
 user-invocable: true
 args:
   - name: task
@@ -30,17 +30,18 @@ If the current repository has Brain context, use the repo-local Brain docs first
 - prefer explicit CLI operations over ad hoc memory files
 - preserve backups, history, and undo for note changes
 - keep retrieval focused on repo-managed docs instead of transient files
-- support planning, brainstorming, context, and session workflows inside the repo
+- support compiled context, durable memory, and session workflows inside the repo
 
 ## First Checks
 
 When starting work in a repo that uses Brain:
 
 1. Run `brain doctor`.
-2. Read `index_freshness` in `brain doctor` when retrieval matters.
-3. Run `brain find <project>` or `brain search "<project> <task>"` when project memory matters.
-4. Use `brain search status` before retrieval debugging so you know whether the local index is `fresh`, `stale`, or `missing`.
-5. Read the repo contract and relevant docs before substantial work.
+2. Read `project_migrations` in `brain doctor` when the repo may be older or was just upgraded.
+3. Read `index_freshness` in `brain doctor` when retrieval matters.
+4. Run `brain find <project>` or `brain search "<project> <task>"` when project memory matters.
+5. Use `brain search status` before retrieval debugging so you know whether the local index is `fresh`, `stale`, or `missing`.
+6. Read the repo contract and relevant docs before substantial work.
 
 ## Command Guide
 
@@ -49,7 +50,9 @@ Use these commands by default:
 - `brain init --project .`
   - Create the local Brain workspace for a project.
 - `brain doctor --project .`
-  - Validate the local workspace, sqlite state, and embedder configuration.
+  - Validate the local workspace, sqlite state, project migration state, and embedder configuration.
+- `brain update --project .`
+  - Update the Brain binary, refresh already-installed Brain skills, and apply pending project migrations for the current Brain repo.
 - `brain read <path>`
   - Read a managed markdown note.
 - `brain edit <path> ...`
@@ -64,22 +67,20 @@ Use these commands by default:
   - Show lexical and semantic score contributions plus the retrieval source classification for each result.
 - `brain search --inject "query"`
   - Return ranked results plus an agent-ready `## Relevant Context` block that can be reused directly.
+- `brain context compile --task "..."`
+  - Compile the smallest summary-first working-set packet Brain can justify for the task, including anchors, provenance, nearby tests, and verification hints.
+- `brain context explain --last`
+  - Inspect the latest recorded compiled packet, including later expansions and downstream session outcomes.
+- `brain context stats`
+  - Summarize likely signal, likely noise, repeated expansions, and verification links from local compiler telemetry.
 - `brain distill --session`
-  - Create a session-scoped distill proposal note with source provenance and suggested durable note updates.
+  - Create a session-scoped promotion-review proposal with source provenance, promotion diagnostics, and suggested durable note updates.
 - `brain distill --brainstorm <path>`
   - Create the same style of proposal note from a brainstorm source.
 - `brain brainstorm ...`
   - Manage project-local brainstorming notes.
 - `brain plan ...`
   - Manage project-local epics, specs, and stories with a spec-driven workflow.
-- `brain context load --level 0`
-  - Load the minimal AGENTS summary plus current state.
-- `brain context load --level 1`
-  - Add overview and workflows to the minimal context bundle.
-- `brain context load --level 2`
-  - Load the full static context bundle.
-- `brain context load --level 3 --query "..."`
-  - Load the full static bundle plus search-injected relevant context. If a session is active, the task can stand in for `--query`.
 - `brain context structure`
   - Inspect the derived structural repo map of boundaries, entrypoints, config surfaces, and test surfaces.
 - `brain context structure --path "..."`
@@ -87,13 +88,21 @@ Use these commands by default:
 - `brain context structure status`
   - Inspect structural cache freshness and counts without rebuilding it.
 - `brain context live --task "..."`
-  - Inspect the current live-work packet for a task using the active session when available.
+  - Inspect the current boundary-aware live-work packet for a task using the active session when available.
 - `brain context live --explain`
   - Add rationale and missing-signal reporting for the live-work packet.
 - `brain context assemble --task "..."`
   - Assemble a task-focused context packet from durable notes, generated context, structural repo context, and workflow/policy sources.
 - `brain context assemble --explain`
   - Add rationale, omitted-nearby context, missing-group reporting, ambiguities, and confidence to the task packet.
+- `brain context load --level 0`
+  - Load the compatibility static bundle when an older level-based workflow is still required.
+- `brain context load --level 1`
+  - Add overview and workflows to the compatibility static bundle.
+- `brain context load --level 2`
+  - Load the full compatibility static context bundle.
+- `brain context load --level 3 --query "..."`
+  - Add search-injected relevant context to the compatibility bundle. If a session is active, the task can stand in for `--query`.
 - `brain context install --project .`
   - Create or adopt the root contract plus `.brain/context`.
 - `brain context refresh --project .`
@@ -117,6 +126,12 @@ Use these commands by default:
 - Prefer updating an existing durable note over creating duplicates.
 - Use human-readable filenames and titles.
 
+## Upgrade Workflow
+
+- `brain update` refreshes already-installed global Brain skills, already-installed local Brain skills inside the current `--project`, and pending project migrations for the current Brain repo.
+- Other Brain repos repair local Brain skills and apply pending project migrations lazily the next time app-backed Brain commands run there.
+- If automatic project migration fails, run `brain doctor --project .`; then `brain context refresh --project .`; run `brain adopt --project .` if existing local agent files still need their Brain-managed integration block refreshed or migrated.
+
 ## Retrieval Workflow
 
 1. `brain find <keyword>` for quick narrowing.
@@ -130,28 +145,29 @@ Use these commands by default:
 
 ## Context Workflow
 
-1. `brain context load --level 0` for minimal startup context.
-2. `brain context load --level 1` when you need summaries and workflows.
-3. `brain context load --level 2` when the task needs the full static context bundle.
-4. `brain context load --level 3 --query "<task or concept>"` when you need search-driven deep context.
-5. `brain context structure` when you need repo boundaries, entrypoints, config surfaces, or test surfaces before deeper retrieval.
-6. `brain context live --task "<task>"` when you need current session, changed-file, nearby-test, verification, or policy signals, not just static repo context.
-7. `brain context assemble --task "<task>"` when you need a task-focused packet instead of a raw static bundle.
-8. `brain context assemble --explain` when you need to inspect why Brain chose its packet and what it left nearby.
-9. Prefer requesting the next level explicitly instead of loading everything up front.
+1. `brain context compile --task "<task>"` for the smallest justified startup packet.
+2. `brain context explain --last` when you need to inspect why the latest packet looked the way it did, which items were expanded later, or which downstream verification and closeout outcomes were recorded.
+3. `brain context stats` when you are tuning compiler behavior and want a compact view of likely signal, likely noise, repeated expansions, and verification-link patterns from local telemetry.
+4. `brain context structure` when you need repo boundaries, entrypoints, config surfaces, or test surfaces before deeper retrieval.
+5. `brain context live --task "<task>"` when you need current session, changed-file, touched-boundary, nearby-test, verification-recipe, or policy signals, not just compiled startup context.
+6. `brain context assemble --task "<task>"` when you need the broader typed packet instead of the compiler-first working set.
+7. `brain context assemble --explain` when you need to inspect why Brain chose its broader packet and what it left nearby.
+8. `brain context load --level ...` only when you need the older static-bundle compatibility view.
 
 ## Distillation Workflow
 
 1. Run `brain distill --session` when a working session surfaced decisions, tradeoffs, bugs, or discoveries that should become durable memory.
 2. Run `brain distill --brainstorm <path>` when a brainstorm should collapse into proposed durable note updates.
-3. Review the proposal note under `.brain/resources/changes/`.
+3. Review the proposal note under `.brain/resources/changes/`, including the promotion review section and the suggested targets that were actually classified as promotable.
 4. Apply the durable note updates with `brain edit` or by updating the target notes directly after review.
 5. Treat distill as a proposal generator, not as an auto-write path.
 
 ## Session Recovery
 
-- If `brain session finish` blocks on missing durable memory updates, run `brain distill --session`.
+- If `brain session finish` blocks, inspect the promotion suggestions in the closeout output first.
+- Run `brain distill --session` when you need the full promotion review note before deciding what to keep.
 - Review the proposal, update the durable notes that matter, then retry `brain session finish`.
+- If the session changed no durable knowledge after review, use `brain session finish --force --reason "<why>"` explicitly instead of pretending there was a durable update.
 - Keep using `brain session run -- <command>` for required verification commands before closeout.
 
 ## When Not To Use This Skill

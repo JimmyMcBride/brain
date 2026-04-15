@@ -37,7 +37,7 @@ Current focus:
 
 - complete the project-local redesign
 - keep search local and deterministic
-- keep docs, context, planning, and sessions aligned
+- keep docs, compiled context, and sessions aligned
 
 Key references:
 

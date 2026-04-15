@@ -6,11 +6,15 @@ import (
 	"io"
 	"strings"
 
+	"brain/internal/config"
 	"brain/internal/contextassembly"
 	"brain/internal/livecontext"
+	"brain/internal/output"
 	"brain/internal/projectcontext"
 	"brain/internal/search"
+	"brain/internal/session"
 	"brain/internal/structure"
+	"brain/internal/taskcontext"
 
 	"github.com/spf13/cobra"
 )
@@ -25,18 +29,22 @@ func addContextCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLo
 	var assembleTask string
 	var assembleLimit int
 	var assembleExplain bool
+	var compileTask string
+	var explainPacket string
+	var explainLast bool
+	var statsLimit int
 	var structurePath string
 	var liveTask string
 	var liveExplain bool
 
 	contextCmd := &cobra.Command{
 		Use:   "context",
-		Short: "Install or refresh project agent context files",
+		Short: "Compile and manage project-local context",
 		Long: strings.TrimSpace(`
-Manage project-local agent context files owned by brain.
+Compile task-sized context packets and manage the project-local context files owned by brain.
 
-This creates a minimal root AGENTS/CLAUDE contract plus a modular
-.brain/context bundle that can be refreshed as the repository evolves.
+Prefer brain context compile when you need context for a task.
+Use the other subcommands to inspect compatibility views or refresh the Brain-managed context bundle on disk.
 `),
 	}
 
@@ -70,7 +78,7 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 
 	loadCmd := &cobra.Command{
 		Use:   "load",
-		Short: "Load a deterministic context bundle by level",
+		Short: "Load a legacy static context bundle by level",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			projectRoot := contextProjectPath(project, flags.projectPath)
 			appCtx, err := loadApp(projectRoot)
@@ -118,9 +126,38 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 		},
 	}
 
+	migrateCmd := &cobra.Command{
+		Use:    "migrate",
+		Short:  "Apply pending Brain project migrations",
+		Hidden: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, _, err := config.LoadOrCreate(flags.configPath)
+			if err != nil {
+				return err
+			}
+			projectRoot := contextProjectPath(project, flags.projectPath)
+			result, err := contextManager().ApplyProjectMigrations(cmd.Context(), projectRoot)
+			if err != nil {
+				return err
+			}
+			printer := output.New(modeFromFlag(flags, cfg.OutputMode), cmd.OutOrStdout())
+			return printer.Print(result, func(w io.Writer) error {
+				if _, err := fmt.Fprintf(w, "migrations: %s\n", result.Status); err != nil {
+					return err
+				}
+				for _, applied := range result.AppliedMigrationIDs {
+					if _, err := fmt.Fprintf(w, "migration: %s\n", applied); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+		},
+	}
+
 	assembleCmd := &cobra.Command{
 		Use:   "assemble",
-		Short: "Assemble a task-focused context packet",
+		Short: "Assemble a broader task-focused context packet",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			projectRoot := contextProjectPath(project, flags.projectPath)
 			appCtx, err := loadApp(projectRoot)
@@ -170,17 +207,21 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 			if err != nil {
 				return err
 			}
+			boundaryGraph, err := appCtx.Structure.BoundaryGraph(cmd.Context())
+			if err != nil {
+				return err
+			}
 			structuralItems := append([]structure.Item{}, structureSnapshot.Boundaries...)
 			structuralItems = append(structuralItems, structureSnapshot.Entrypoints...)
 			structuralItems = append(structuralItems, structureSnapshot.ConfigSurfaces...)
 			structuralItems = append(structuralItems, structureSnapshot.TestSurfaces...)
 			livePacket, err := appCtx.Live.Collect(cmd.Context(), livecontext.Request{
-				ProjectDir:         projectRoot,
-				Task:               resolvedTask,
-				TaskSource:         taskSource,
-				Session:            active,
-				StructuralSnapshot: structureSnapshot,
-				Explain:            assembleExplain,
+				ProjectDir:    projectRoot,
+				Task:          resolvedTask,
+				TaskSource:    taskSource,
+				Session:       active,
+				BoundaryGraph: boundaryGraph,
+				Explain:       assembleExplain,
 			})
 			if err != nil {
 				return err
@@ -203,6 +244,135 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 			}
 			return appCtx.Output.Print(packet, func(w io.Writer) error {
 				return contextassembly.RenderHuman(w, packet, assembleExplain)
+			})
+		},
+	}
+
+	compileCmd := &cobra.Command{
+		Use:   "compile",
+		Short: "Compile a summary-first working-set packet for a task",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			projectRoot := contextProjectPath(project, flags.projectPath)
+			appCtx, err := loadApp(projectRoot)
+			if err != nil {
+				return err
+			}
+			defer appCtx.Close()
+
+			active, err := appCtx.Session.Active(projectRoot)
+			if err != nil {
+				return err
+			}
+
+			resolvedTask := strings.TrimSpace(compileTask)
+			taskSource := "flag"
+			if resolvedTask == "" && active != nil {
+				resolvedTask = strings.TrimSpace(active.Task)
+				taskSource = "session"
+			}
+			if resolvedTask == "" {
+				return errors.New("context compile requires --task or an active session task")
+			}
+
+			activeTask := ""
+			if active != nil {
+				activeTask = strings.TrimSpace(active.Task)
+			}
+			if err := appCtx.SyncIndex(cmd.Context()); err != nil {
+				return err
+			}
+			searchResults, err := appCtx.Search.SearchWithOptions(cmd.Context(), resolvedTask, 12, search.Options{ActiveTask: activeTask})
+			if err != nil {
+				return err
+			}
+			utilitySnapshot, err := appCtx.Session.BuildUtilitySnapshot(projectRoot)
+			if err != nil {
+				return err
+			}
+			boundaryGraph, err := appCtx.Structure.BoundaryGraph(cmd.Context())
+			if err != nil {
+				return err
+			}
+			livePacket, err := appCtx.Live.Collect(cmd.Context(), livecontext.Request{
+				ProjectDir:    projectRoot,
+				Task:          resolvedTask,
+				TaskSource:    taskSource,
+				Session:       active,
+				BoundaryGraph: boundaryGraph,
+			})
+			if err != nil {
+				return err
+			}
+
+			manager := taskcontext.New(appCtx.Context)
+			packet, err := manager.Compile(taskcontext.Request{
+				ProjectDir:     projectRoot,
+				Task:           resolvedTask,
+				TaskSource:     taskSource,
+				SearchResults:  searchResults,
+				LivePacket:     livePacket,
+				BoundaryGraph:  boundaryGraph,
+				UtilitySignals: utilitySignalsFromSnapshot(utilitySnapshot),
+			})
+			if err != nil {
+				return err
+			}
+			if active != nil {
+				if err := appCtx.Session.RecordCompiledPacket(projectRoot, active.ID, packet); err != nil {
+					return err
+				}
+			}
+			return appCtx.Output.Print(packet, func(w io.Writer) error {
+				return taskcontext.RenderHuman(w, packet)
+			})
+		},
+	}
+
+	explainCmd := &cobra.Command{
+		Use:   "explain",
+		Short: "Inspect the latest compiled packet and its recorded outcomes",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			projectRoot := contextProjectPath(project, flags.projectPath)
+			appCtx, err := loadApp(projectRoot)
+			if err != nil {
+				return err
+			}
+			defer appCtx.Close()
+
+			explanation, err := appCtx.Session.ExplainPacket(session.PacketExplainRequest{
+				ProjectDir: projectRoot,
+				PacketHash: explainPacket,
+				Last:       explainLast,
+			})
+			if err != nil {
+				return err
+			}
+			return appCtx.Output.Print(explanation, func(w io.Writer) error {
+				return session.RenderPacketExplanationHuman(w, explanation)
+			})
+		},
+	}
+
+	statsCmd := &cobra.Command{
+		Use:   "stats",
+		Short: "Summarize likely signal, likely noise, and expansion patterns",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			projectRoot := contextProjectPath(project, flags.projectPath)
+			appCtx, err := loadApp(projectRoot)
+			if err != nil {
+				return err
+			}
+			defer appCtx.Close()
+
+			stats, err := appCtx.Session.ContextStats(session.ContextStatsRequest{
+				ProjectDir: projectRoot,
+				Limit:      statsLimit,
+			})
+			if err != nil {
+				return err
+			}
+			return appCtx.Output.Print(stats, func(w io.Writer) error {
+				return session.RenderContextStatsHuman(w, stats)
 			})
 		},
 	}
@@ -282,18 +452,18 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 			if resolvedTask == "" {
 				return errors.New("context live requires --task or an active session task")
 			}
-			structureSnapshot, err := appCtx.Structure.Snapshot(cmd.Context(), "")
+			boundaryGraph, err := appCtx.Structure.BoundaryGraph(cmd.Context())
 			if err != nil {
 				return err
 			}
 
 			packet, err := appCtx.Live.Collect(cmd.Context(), livecontext.Request{
-				ProjectDir:         projectRoot,
-				Task:               resolvedTask,
-				TaskSource:         taskSource,
-				Session:            active,
-				StructuralSnapshot: structureSnapshot,
-				Explain:            liveExplain,
+				ProjectDir:    projectRoot,
+				Task:          resolvedTask,
+				TaskSource:    taskSource,
+				Session:       active,
+				BoundaryGraph: boundaryGraph,
+				Explain:       liveExplain,
 			})
 			if err != nil {
 				return err
@@ -349,12 +519,20 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 		sub.Flags().BoolVar(&force, "force", false, "adopt unmanaged files by preserving existing content under Local Notes")
 	}
 	loadCmd.Flags().StringVar(&project, "project", "", "project root to load context from")
-	loadCmd.Flags().IntVar(&level, "level", 0, "context depth to load: 0, 1, 2, or 3")
+	loadCmd.Flags().IntVar(&level, "level", 0, "compatibility context depth to load: 0, 1, 2, or 3")
 	loadCmd.Flags().StringVar(&query, "query", "", "search query for level 3 context")
+	migrateCmd.Flags().StringVar(&project, "project", "", "project root to migrate")
 	assembleCmd.Flags().StringVar(&project, "project", "", "project root to assemble context from")
 	assembleCmd.Flags().StringVar(&assembleTask, "task", "", "task text to assemble context for")
 	assembleCmd.Flags().IntVar(&assembleLimit, "limit", 8, "maximum selected context items")
 	assembleCmd.Flags().BoolVar(&assembleExplain, "explain", false, "include selection rationale and omitted context")
+	compileCmd.Flags().StringVar(&project, "project", "", "project root to compile context from")
+	compileCmd.Flags().StringVar(&compileTask, "task", "", "task text to compile context for; defaults to the active session task")
+	explainCmd.Flags().StringVar(&project, "project", "", "project root to inspect context telemetry from")
+	explainCmd.Flags().StringVar(&explainPacket, "packet", "", "specific packet hash to inspect; defaults to the latest packet")
+	explainCmd.Flags().BoolVar(&explainLast, "last", false, "inspect the latest packet explicitly")
+	statsCmd.Flags().StringVar(&project, "project", "", "project root to inspect context telemetry from")
+	statsCmd.Flags().IntVar(&statsLimit, "limit", 5, "maximum number of entries to show per stats section")
 	structureCmd.Flags().StringVar(&project, "project", "", "project root to inspect structure from")
 	structureCmd.Flags().StringVar(&structurePath, "path", "", "subtree path filter for structural context")
 	structureStatusCmd.Flags().StringVar(&project, "project", "", "project root to inspect structure from")
@@ -363,7 +541,7 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 	liveCmd.Flags().BoolVar(&liveExplain, "explain", false, "include rationale and missing-signal detail")
 
 	structureCmd.AddCommand(structureStatusCmd)
-	contextCmd.AddCommand(installCmd, refreshCmd, loadCmd, assembleCmd, structureCmd, liveCmd)
+	contextCmd.AddCommand(installCmd, refreshCmd, loadCmd, migrateCmd, assembleCmd, compileCmd, explainCmd, statsCmd, structureCmd, liveCmd)
 	root.AddCommand(contextCmd)
 }
 
@@ -402,4 +580,25 @@ func contextProjectPath(localProject, rootProject string) string {
 		return localProject
 	}
 	return rootProject
+}
+
+func utilitySignalsFromSnapshot(snapshot *session.UtilitySnapshot) map[string]taskcontext.ItemUtilitySignal {
+	if snapshot == nil || len(snapshot.Items) == 0 {
+		return nil
+	}
+	signals := make(map[string]taskcontext.ItemUtilitySignal, len(snapshot.Items))
+	for _, item := range snapshot.Items {
+		signals[item.ItemID] = taskcontext.ItemUtilitySignal{
+			LikelyUtility:               item.LikelyUtility,
+			IncludeCount:                item.IncludeCount,
+			ExpandCount:                 item.ExpandCount,
+			SuccessfulVerificationCount: item.SuccessfulVerificationCount,
+			DurableUpdateCount:          item.DurableUpdateCount,
+			UnusedIncludeCount:          item.UnusedIncludeCount,
+			UtilityScore:                item.UtilityScore,
+			NoiseScore:                  item.NoiseScore,
+			Reasons:                     append([]string(nil), item.Reasons...),
+		}
+	}
+	return signals
 }

@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-14T15:25:08Z"
+updated: "2026-04-15T20:48:55Z"
 ---
 # Current State
 
@@ -12,10 +12,10 @@ This file is a deterministic snapshot of the repository state at the last refres
 - Root: `.`
 - Runtime: `go`
 - Go module: `brain`
-- Current branch: `fix/brain-skill-install`
+- Current branch: `feature/context-substrate-direction`
 - Default branch: `main`
 - Remote: `https://github.com/JimmyMcBride/brain.git`
-- Go test files: `23`
+- Go test files: `27`
 
 ## Docs
 
@@ -32,6 +32,28 @@ This file is a deterministic snapshot of the repository state at the last refres
 ## Local Notes
 
 Add repo-specific notes here. `brain context refresh` preserves content outside managed blocks.
+
+- 2026-04-16: Tightened the automatic project-upgrade UX at bootstrap. Fresh `brain init`, `brain adopt`, and `brain context install` flows now initialize the repo-local project-migration ledger as current, so a brand-new Brain repo does not show `project_migrations: pending` in `brain doctor` before any unrelated preflight command has run. Also closed the release/install planning cleanup by marking the spec approved now that the migration lifecycle work is fully implemented.
+
+- 2026-04-16: Updated the user-facing and maintainer-facing guidance for automatic project upgrades. `docs/usage.md`, `docs/skills.md`, `docs/project-workflows.md`, `.brain/context/workflows.md`, the maintainer refresh reference, and `skills/brain/SKILL.md` now explain that `brain update` refreshes the current repo's pending project migrations, older Brain repos migrate lazily on first later use, `brain doctor` reports project migration health, the explicit fallback is still `brain doctor --project .`, `brain context refresh --project .`, and `brain adopt --project .`, and migration changes should be validated from a branch-built binary with `go run . context migrate --project <repo>` before merge.
+
+- 2026-04-15: Surfaced automatic project-migration health everywhere Brain already reports upgrade state. `brain update` now emits project migration status plus applied migration ids in human and JSON output for Brain repos, lazy preflight migration failures block work with remediation that points to `brain doctor`, `brain context refresh --project .`, and `brain adopt --project .`, and `brain doctor` now reports project migrations as `current`, `pending`, or `broken` using the same repo-local migration planner state.
+
+- 2026-04-15: Wired project soft migrations into the actual Brain command lifecycle. `brain update` now runs project migrations for the current `--project` after binary install and skill refresh by invoking the freshly selected binary through a hidden `brain context migrate` command, `brain update --check` stays read-only, and normal app-backed commands now run one per-process project-repair preflight that repairs local Brain skills and applies pending project migrations lazily for older Brain repos while skipping bootstrap-only or mutation-free top-level commands.
+
+- 2026-04-15: Implemented the first-wave automatic soft project migrations in `internal/projectcontext/`. Brain now has an idempotent project-migration runner that reuses the managed-context refresh path plus existing-agent integration sync, applies named migration ids into the new repo-local ledger, refreshes stale Brain-managed docs, migrates legacy agent wrapper blocks in place, leaves unmanaged agent files alone, and reports clean `unchanged` behavior on reruns once a repo is current.
+
+- 2026-04-15: Added the first project soft-migration state model under `internal/projectcontext/`. Brain now has a repo-local migration ledger path at `.brain/state/project-migrations.json`, a named migration registry for first-wave soft upgrades, planner APIs that compare applied migration ids instead of raw Brain version strings, recoverable handling for missing or invalid migration state, and a guard that refuses to write migration state into repos that do not already use Brain.
+
+- 2026-04-15: Extended the `release-install-and-update-flow` planning track so Brain upgrades will eventually own automatic soft project migrations too, not just binary and skill refresh. The current plan is to add a repo-local project migration ledger, reuse idempotent `context refresh` plus agent-integration sync primitives for first-wave migrations, run them automatically during `brain update` for the current `--project` and lazily on first Brain use in older repos, surface migration health in `brain doctor` and `brain update`, and update the Brain skill/docs alongside the implementation.
+
+- 2026-04-15: Completed the `v4` context-compiler rollout slices for promotion gating, closeout suggestions, and compiler-era UX migration. Brain now classifies first-wave durable-memory candidates through `internal/promotion`, surfaces packet-backed promotion suggestions during blocked closeout, renders `brain distill --session` as a promotion-review note instead of a fixed target list, teaches `brain context compile` as the primary context surface, and refreshes generated repo guidance plus the Brain skill around promotion-aware closeout.
+
+- 2026-04-15: Completed the `v3` context-compiler rollout slices for local packet telemetry, packet inspection surfaces, and conservative utility-aware ranking. Brain now records compile, expansion, verification, durable-update, and closeout events in session telemetry; exposes `brain context explain` and `brain context stats` for packet rationale and local signal/noise inspection; and uses repeated local expansions plus downstream outcomes to apply bounded utility boosts or penalties to future compiler note selection with explicit diagnostics.
+
+- 2026-04-15: Completed the `v2` context-compiler rollout slices for boundary-aware selection and verification surfaces. Brain now derives compiler-facing boundary graphs with adjacency, responsibilities, and owned tests; `context live` and `context compile` use those boundaries for touched-boundary, nearby-test, and durable-note selection; compiled packets keep boundary-aware nearby-test relations plus explicit provenance; and live/compiled context now surface repo-derived verification recipes from policy, Makefile targets, package scripts, CI workflows, and bounded successful session commands with strong-or-suggested guidance.
+
+- 2026-04-15: Added the first `v1` context-compiler surface with compiler-facing context item types, compact base-contract extraction, the new `brain context compile` command, summary-first packet output with anchors and provenance, `internal/taskcontext/` as the first compiler package, and active-session packet recording for compiled working sets.
 
 - 2026-04-14: Bundled the Brain skill into the running binary, removed symlink mode from `brain skills`, added `.brain-skill-manifest.json` freshness tracking, taught `brain update` plus both install scripts to refresh existing Brain skill installs, and added lazy local skill auto-repair before app-backed Brain commands run.
 
