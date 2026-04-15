@@ -272,6 +272,11 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 			if err != nil {
 				return err
 			}
+			if active != nil {
+				if err := appCtx.Session.RecordCompiledPacket(projectRoot, active.ID, packet); err != nil {
+					return err
+				}
+			}
 			return appCtx.Output.Print(packet, func(w io.Writer) error {
 				return taskcontext.RenderHuman(w, packet)
 			})

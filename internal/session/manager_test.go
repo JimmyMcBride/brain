@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -217,6 +218,91 @@ func TestRunCommandAfterAbortDoesNotRecreateActiveSession(t *testing.T) {
 	}
 	if _, statErr := os.Stat(filepath.Join(project, ".brain", "session.json")); !os.IsNotExist(statErr) {
 		t.Fatalf("expected active session to stay removed, stat err=%v", statErr)
+	}
+}
+
+func TestRecordCompiledPacketAppendsPacketMetadata(t *testing.T) {
+	project := makeSessionProject(t, sessionPolicyYAML(t, nil, false))
+	manager := New(nil)
+	started, err := manager.Start(context.Background(), StartRequest{ProjectDir: project, Task: "compile packet"})
+	if err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+
+	packet := &projectcontext.CompiledPacket{
+		Task: projectcontext.CompiledTask{
+			Text:    "compile packet",
+			Summary: "compile packet",
+			Source:  "session",
+		},
+		BaseContract: []projectcontext.CompiledItem{
+			{
+				ContextItem: projectcontext.ContextItem{
+					ID:      "base_boot_summary",
+					Title:   "Boot Summary",
+					Summary: "Use Brain-managed repo context before substantial work.",
+					Anchor:  projectcontext.ContextAnchor{Path: "AGENTS.md", Section: "Project Agent Contract"},
+				},
+				Reason: "always included as part of the base contract",
+			},
+		},
+		WorkingSet: projectcontext.CompiledWorkingSet{
+			Boundaries: []projectcontext.CompiledBoundary{
+				{Path: "internal/taskcontext/", Label: "internal/taskcontext", Role: "library", Reason: "task touches compiler code"},
+			},
+			Files: []projectcontext.CompiledFile{
+				{Path: "cmd/context.go", Status: "modified", Source: "worktree", Reason: "compile command changed"},
+			},
+			Tests: []projectcontext.CompiledTest{
+				{Path: "internal/taskcontext/manager_test.go", Relation: "same_dir", Reason: "adjacent test surface"},
+			},
+			Notes: []projectcontext.CompiledItem{
+				{
+					ContextItem: projectcontext.ContextItem{
+						ID:      "note:abc123",
+						Title:   "Compiler Notes",
+						Summary: "Keep packet output compact.",
+						Anchor:  projectcontext.ContextAnchor{Path: "docs/compiler.md", Section: "Notes"},
+					},
+					Reason: "ranked highly in local durable-note search for the task",
+				},
+			},
+		},
+		Verification: []projectcontext.VerificationHint{
+			{ID: "profile:tests", Label: "tests", Summary: "Verification profile is not satisfied yet.", Source: ".brain/policy.yaml", Reason: "required verification profile is still missing"},
+		},
+	}
+
+	if err := manager.RecordCompiledPacket(project, started.Session.ID, packet); err != nil {
+		t.Fatalf("record compiled packet: %v", err)
+	}
+	if err := manager.RecordCompiledPacket(project, started.Session.ID, packet); err != nil {
+		t.Fatalf("record second compiled packet: %v", err)
+	}
+
+	active, err := loadActiveSession(filepath.Join(project, ".brain", "session.json"))
+	if err != nil {
+		t.Fatalf("load active session: %v", err)
+	}
+	if got := len(active.PacketRecords); got != 2 {
+		t.Fatalf("expected two packet records, got %d", got)
+	}
+	first := active.PacketRecords[0]
+	if first.PacketHash == "" || first.TaskText != "compile packet" || first.TaskSource != "session" {
+		t.Fatalf("unexpected packet record: %#v", first)
+	}
+	if !reflect.DeepEqual(first.IncludedItemIDs, []string{
+		"base_boot_summary",
+		"note:abc123",
+		"boundary:internal/taskcontext/",
+		"file:cmd/context.go",
+		"test:internal/taskcontext/manager_test.go",
+		"profile:tests",
+	}) {
+		t.Fatalf("unexpected included item ids: %#v", first)
+	}
+	if len(first.IncludedAnchors) != 6 || len(first.InclusionReasons) != 6 {
+		t.Fatalf("expected anchor and reason metadata: %#v", first)
 	}
 }
 

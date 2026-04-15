@@ -90,6 +90,8 @@ Use these commands by default:
   - Inspect the current live-work packet for a task using the active session when available.
 - `brain context live --explain`
   - Add rationale and missing-signal reporting for the live-work packet.
+- `brain context compile --task "..."`
+  - Compile the smallest summary-first working-set packet Brain can justify for the task.
 - `brain context assemble --task "..."`
   - Assemble a task-focused context packet from durable notes, generated context, structural repo context, and workflow/policy sources.
 - `brain context assemble --explain`
@@ -136,9 +138,10 @@ Use these commands by default:
 4. `brain context load --level 3 --query "<task or concept>"` when you need search-driven deep context.
 5. `brain context structure` when you need repo boundaries, entrypoints, config surfaces, or test surfaces before deeper retrieval.
 6. `brain context live --task "<task>"` when you need current session, changed-file, nearby-test, verification, or policy signals, not just static repo context.
-7. `brain context assemble --task "<task>"` when you need a task-focused packet instead of a raw static bundle.
-8. `brain context assemble --explain` when you need to inspect why Brain chose its packet and what it left nearby.
-9. Prefer requesting the next level explicitly instead of loading everything up front.
+7. `brain context compile --task "<task>"` when you want the smallest justified startup packet with summaries, anchors, verification hints, and provenance.
+8. `brain context assemble --task "<task>"` when you need the broader typed packet instead of the compiler-first working set.
+9. `brain context assemble --explain` when you need to inspect why Brain chose its packet and what it left nearby.
+10. Prefer requesting the next level explicitly instead of loading everything up front.
 
 ## Distillation Workflow
 

@@ -1167,6 +1167,9 @@ func TestCLIContextCompileWithExplicitTask(t *testing.T) {
 	if _, ok := payload["provenance"]; !ok {
 		t.Fatalf("expected provenance in compile payload: %#v", payload)
 	}
+	if _, err := os.Stat(filepath.Join(env.project, ".brain", "session.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected explicit no-session compile not to create an active session file, err=%v", err)
+	}
 }
 
 func TestCLIContextCompileUsesActiveSessionTask(t *testing.T) {
@@ -1187,6 +1190,19 @@ func TestCLIContextCompileUsesActiveSessionTask(t *testing.T) {
 	task := payload["task"].(map[string]any)
 	if task["text"] != "session-backed context compile" || task["source"] != "session" {
 		t.Fatalf("expected session task resolution in compile payload: %#v", payload)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(env.project, ".brain", "session.json"))
+	if err != nil {
+		t.Fatalf("read active session: %v", err)
+	}
+	var sessionPayload map[string]any
+	if err := json.Unmarshal(raw, &sessionPayload); err != nil {
+		t.Fatalf("parse active session: %v\n%s", err, raw)
+	}
+	packetRecords := sessionPayload["packet_records"].([]any)
+	if len(packetRecords) != 1 {
+		t.Fatalf("expected one packet record after session-backed compile: %#v", sessionPayload)
 	}
 }
 

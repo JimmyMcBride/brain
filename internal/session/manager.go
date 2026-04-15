@@ -50,6 +50,23 @@ type CommandRun struct {
 	ExitCode  int       `json:"exit_code"`
 }
 
+type PacketInclusionReason struct {
+	ItemID  string `json:"item_id"`
+	Section string `json:"section"`
+	Reason  string `json:"reason"`
+}
+
+type PacketRecord struct {
+	PacketHash       string                         `json:"packet_hash"`
+	TaskText         string                         `json:"task_text"`
+	TaskSummary      string                         `json:"task_summary"`
+	TaskSource       string                         `json:"task_source"`
+	CompiledAt       time.Time                      `json:"compiled_at"`
+	IncludedItemIDs  []string                       `json:"included_item_ids"`
+	IncludedAnchors  []projectcontext.ContextAnchor `json:"included_anchors"`
+	InclusionReasons []PacketInclusionReason        `json:"inclusion_reasons"`
+}
+
 type ActiveSession struct {
 	ID                string          `json:"id"`
 	Status            string          `json:"status"`
@@ -65,6 +82,7 @@ type ActiveSession struct {
 	RequiredDocs      []string        `json:"required_docs"`
 	SuggestedCommands []string        `json:"suggested_commands"`
 	CommandRuns       []CommandRun    `json:"command_runs,omitempty"`
+	PacketRecords     []PacketRecord  `json:"packet_records,omitempty"`
 	TerminalSummary   string          `json:"terminal_summary,omitempty"`
 	OverrideReason    string          `json:"override_reason,omitempty"`
 }
@@ -449,6 +467,23 @@ func (m *Manager) RunCommand(ctx context.Context, req RunRequest, stdout, stderr
 	return result, nil
 }
 
+func (m *Manager) RecordCompiledPacket(projectDir, sessionID string, packet *projectcontext.CompiledPacket) error {
+	projectDir, err := filepath.Abs(defaultProjectDir(projectDir))
+	if err != nil {
+		return err
+	}
+	if packet == nil {
+		return errors.New("compiled packet is required")
+	}
+	policy, _, _, err := projectcontext.LoadPolicy(projectDir)
+	if err != nil {
+		return err
+	}
+	activePath := filepath.Join(projectDir, filepath.FromSlash(policy.Session.ActiveFile))
+	record := packetRecordFromCompiledPacket(packet)
+	return appendPacketRecord(activePath, sessionID, record)
+}
+
 func (m *Manager) preflightChecks(ctx context.Context, projectDir, configPath string, policy *projectcontext.Policy) ([]Check, error) {
 	var checks []Check
 	if policy.Preflight.RequireBrainDoctor {
@@ -640,6 +675,96 @@ func appendCommandRun(path, sessionID string, record CommandRun) error {
 		active.CommandRuns = append(active.CommandRuns, record)
 		return saveActiveSession(path, active)
 	})
+}
+
+func appendPacketRecord(path, sessionID string, record PacketRecord) error {
+	return withSessionLock(path, func() error {
+		active, err := loadActiveSession(path)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("session %s ended before packet %q could be recorded", sessionID, record.PacketHash)
+			}
+			return err
+		}
+		if active.ID != sessionID || active.Status != "active" {
+			return fmt.Errorf("session %s is no longer active; packet %q was not recorded", sessionID, record.PacketHash)
+		}
+		active.PacketRecords = append(active.PacketRecords, record)
+		return saveActiveSession(path, active)
+	})
+}
+
+func packetRecordFromCompiledPacket(packet *projectcontext.CompiledPacket) PacketRecord {
+	record := PacketRecord{
+		PacketHash:       packet.Hash(),
+		TaskText:         packet.Task.Text,
+		TaskSummary:      packet.Task.Summary,
+		TaskSource:       packet.Task.Source,
+		CompiledAt:       time.Now().UTC(),
+		IncludedItemIDs:  []string{},
+		IncludedAnchors:  []projectcontext.ContextAnchor{},
+		InclusionReasons: []PacketInclusionReason{},
+	}
+
+	appendItem := func(section string, item projectcontext.CompiledItem) {
+		record.IncludedItemIDs = append(record.IncludedItemIDs, item.ID)
+		record.IncludedAnchors = append(record.IncludedAnchors, item.Anchor)
+		record.InclusionReasons = append(record.InclusionReasons, PacketInclusionReason{
+			ItemID:  item.ID,
+			Section: section,
+			Reason:  item.Reason,
+		})
+	}
+
+	for _, item := range packet.BaseContract {
+		appendItem("base_contract", item)
+	}
+	for _, item := range packet.WorkingSet.Notes {
+		appendItem("working_set.notes", item)
+	}
+	for _, boundary := range packet.WorkingSet.Boundaries {
+		record.IncludedItemIDs = append(record.IncludedItemIDs, "boundary:"+boundary.Path)
+		record.IncludedAnchors = append(record.IncludedAnchors, projectcontext.ContextAnchor{
+			Path:    boundary.Path,
+			Section: boundary.Label,
+		})
+		record.InclusionReasons = append(record.InclusionReasons, PacketInclusionReason{
+			ItemID:  "boundary:" + boundary.Path,
+			Section: "working_set.boundaries",
+			Reason:  boundary.Reason,
+		})
+	}
+	for _, file := range packet.WorkingSet.Files {
+		record.IncludedItemIDs = append(record.IncludedItemIDs, "file:"+file.Path)
+		record.IncludedAnchors = append(record.IncludedAnchors, projectcontext.ContextAnchor{Path: file.Path})
+		record.InclusionReasons = append(record.InclusionReasons, PacketInclusionReason{
+			ItemID:  "file:" + file.Path,
+			Section: "working_set.files",
+			Reason:  file.Reason,
+		})
+	}
+	for _, test := range packet.WorkingSet.Tests {
+		record.IncludedItemIDs = append(record.IncludedItemIDs, "test:"+test.Path)
+		record.IncludedAnchors = append(record.IncludedAnchors, projectcontext.ContextAnchor{Path: test.Path})
+		record.InclusionReasons = append(record.InclusionReasons, PacketInclusionReason{
+			ItemID:  "test:" + test.Path,
+			Section: "working_set.tests",
+			Reason:  test.Reason,
+		})
+	}
+	for _, verification := range packet.Verification {
+		record.IncludedItemIDs = append(record.IncludedItemIDs, verification.ID)
+		record.IncludedAnchors = append(record.IncludedAnchors, projectcontext.ContextAnchor{
+			Path:    verification.Source,
+			Section: verification.Label,
+		})
+		record.InclusionReasons = append(record.InclusionReasons, PacketInclusionReason{
+			ItemID:  verification.ID,
+			Section: "verification",
+			Reason:  verification.Reason,
+		})
+	}
+	return record
 }
 
 func withSessionLock(activePath string, fn func() error) error {

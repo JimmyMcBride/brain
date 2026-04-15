@@ -25,6 +25,7 @@ Use this file for the structural shape of the repository.
 - `internal/session/`
 - `internal/skills/`
 - `internal/structure/`
+- `internal/taskcontext/`
 - `internal/templates/`
 - `internal/update/`
 - `internal/workspace/`

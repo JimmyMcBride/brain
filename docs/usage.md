@@ -159,6 +159,7 @@ brain context structure --project . --path internal/search
 brain context structure status --project .
 brain context live --project . --task "auth flow"
 brain context live --project . --explain
+brain context compile --project . --task "auth flow"
 brain context assemble --project . --task "auth flow"
 brain context assemble --project . --explain
 ```
@@ -188,12 +189,21 @@ Use `--force` when adopting an existing unmanaged `AGENTS.md` or docs file into 
 - reports recent recorded session commands plus verification-profile satisfaction when a session is active
 - only emits policy hints for strong-match conditions such as missing verification or missing durable note updates after repo changes
 
+`context compile` is the summary-first working-set compiler:
+
+- resolves the task from `--task` or the active session
+- emits the smallest justified packet Brain currently knows how to build: base contract, changed files, touched boundaries, nearby tests, top durable note summaries, verification hints, ambiguities, and provenance
+- keeps included context in summary form with exact anchors and explicit inclusion reasons
+- records packet metadata into the active session when a session is present, but still works normally without a session
+- is the best first choice when you want one compact startup packet instead of a full static bundle or a broader explain-oriented assembly view
+
 `context assemble` is the task-focused packet interface:
 
 - resolves the task from `--task` or the active session
 - assembles typed context from durable notes, generated context, structural repo context, live-work signals, and workflow/policy sources
 - shows ambiguities and confidence for the current task packet
 - adds rationale, omitted-nearby context, and missing-group reporting with `--explain`
+- remains useful when you want the broader packet shape and explain surfaces during the compiler transition
 
 `context install` and `context refresh` manage the root contract plus `.brain/context/*`. They do not create missing agent-specific instruction files.
 

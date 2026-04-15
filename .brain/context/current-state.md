@@ -12,10 +12,10 @@ This file is a deterministic snapshot of the repository state at the last refres
 - Root: `.`
 - Runtime: `go`
 - Go module: `brain`
-- Current branch: `fix/brain-skill-install`
+- Current branch: `feature/context-substrate-direction`
 - Default branch: `main`
 - Remote: `https://github.com/JimmyMcBride/brain.git`
-- Go test files: `23`
+- Go test files: `25`
 
 ## Docs
 
@@ -32,6 +32,8 @@ This file is a deterministic snapshot of the repository state at the last refres
 ## Local Notes
 
 Add repo-specific notes here. `brain context refresh` preserves content outside managed blocks.
+
+- 2026-04-15: Added the first `v1` context-compiler surface with compiler-facing context item types, compact base-contract extraction, the new `brain context compile` command, summary-first packet output with anchors and provenance, `internal/taskcontext/` as the first compiler package, and active-session packet recording for compiled working sets.
 
 - 2026-04-14: Bundled the Brain skill into the running binary, removed symlink mode from `brain skills`, added `.brain-skill-manifest.json` freshness tracking, taught `brain update` plus both install scripts to refresh existing Brain skill installs, and added lazy local skill auto-repair before app-backed Brain commands run.
 
