@@ -418,6 +418,92 @@ func TestPacketTelemetryRetentionIsBounded(t *testing.T) {
 	}
 }
 
+func TestExplainPacketUsesLatestMatchingPacketRecord(t *testing.T) {
+	project := makeSessionProject(t, sessionPolicyYAML(t, nil, false))
+	manager := New(nil)
+	started, err := manager.Start(context.Background(), StartRequest{ProjectDir: project, Task: "explain latest packet"})
+	if err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+
+	packet := makeCompiledPacket("explain latest packet", "session")
+	if err := manager.RecordCompiledPacket(project, started.Session.ID, packet); err != nil {
+		t.Fatalf("record first compiled packet: %v", err)
+	}
+	active, err := loadActiveSession(filepath.Join(project, ".brain", "session.json"))
+	if err != nil {
+		t.Fatalf("load active session after first packet: %v", err)
+	}
+	firstCompiledAt := active.PacketRecords[len(active.PacketRecords)-1].CompiledAt
+	time.Sleep(10 * time.Millisecond)
+
+	if err := manager.RecordCompiledPacket(project, started.Session.ID, packet); err != nil {
+		t.Fatalf("record second compiled packet: %v", err)
+	}
+	if err := manager.RecordPacketExpansion(project, "docs/compiler.md"); err != nil {
+		t.Fatalf("record packet expansion: %v", err)
+	}
+
+	explanation, err := manager.ExplainPacket(PacketExplainRequest{ProjectDir: project, PacketHash: packet.Hash()})
+	if err != nil {
+		t.Fatalf("explain packet: %v", err)
+	}
+	if !explanation.Packet.CompiledAt.After(firstCompiledAt) {
+		t.Fatalf("expected explain to pick the latest matching packet, got %#v", explanation.Packet)
+	}
+	foundExpanded := false
+	for _, item := range explanation.IncludedItems {
+		if item.ItemID == "note:abc123" && item.Expanded == 1 {
+			foundExpanded = true
+			break
+		}
+	}
+	if !foundExpanded {
+		t.Fatalf("expected latest packet explanation to include the recorded expansion: %#v", explanation)
+	}
+}
+
+func TestContextStatsSurfaceConservativeUtilitySignals(t *testing.T) {
+	project := makeSessionProject(t, sessionPolicyYAML(t, nil, false))
+	manager := New(nil)
+	started, err := manager.Start(context.Background(), StartRequest{ProjectDir: project, Task: "stats utility"})
+	if err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+
+	packet := makeCompiledPacket("stats utility", "session")
+	if err := manager.RecordCompiledPacket(project, started.Session.ID, packet); err != nil {
+		t.Fatalf("record first compiled packet: %v", err)
+	}
+	if err := manager.RecordPacketExpansion(project, "docs/compiler.md"); err != nil {
+		t.Fatalf("record first expansion: %v", err)
+	}
+	time.Sleep(10 * time.Millisecond)
+	if err := manager.RecordCompiledPacket(project, started.Session.ID, packet); err != nil {
+		t.Fatalf("record second compiled packet: %v", err)
+	}
+	if err := manager.RecordPacketExpansion(project, "docs/compiler.md"); err != nil {
+		t.Fatalf("record second expansion: %v", err)
+	}
+
+	stats, err := manager.ContextStats(ContextStatsRequest{ProjectDir: project, Limit: 3})
+	if err != nil {
+		t.Fatalf("context stats: %v", err)
+	}
+	if len(stats.TopSignal) == 0 {
+		t.Fatalf("expected at least one likely signal item: %#v", stats)
+	}
+	if stats.TopSignal[0].ItemID != "note:abc123" || stats.TopSignal[0].LikelyUtility != "likely_signal" {
+		t.Fatalf("expected note:abc123 to rank as likely signal: %#v", stats.TopSignal)
+	}
+	if len(stats.FrequentlyExpanded) == 0 || stats.FrequentlyExpanded[0].ItemID != "note:abc123" {
+		t.Fatalf("expected note:abc123 in frequently expanded stats: %#v", stats.FrequentlyExpanded)
+	}
+	if len(stats.TopNoise) != 0 {
+		t.Fatalf("did not expect likely-noise items in this scenario: %#v", stats.TopNoise)
+	}
+}
+
 func TestValidateFinishUsesCommittedDurableNotesFromSessionCommitRange(t *testing.T) {
 	verifyCmd := helperCommand("sleep-ms", "10", "verify")
 	project := makeSessionProject(t, sessionPolicyYAML(t, []string{strings.Join(verifyCmd, " ")}, true))

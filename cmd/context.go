@@ -10,6 +10,7 @@ import (
 	"brain/internal/livecontext"
 	"brain/internal/projectcontext"
 	"brain/internal/search"
+	"brain/internal/session"
 	"brain/internal/structure"
 	"brain/internal/taskcontext"
 
@@ -27,6 +28,9 @@ func addContextCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLo
 	var assembleLimit int
 	var assembleExplain bool
 	var compileTask string
+	var explainPacket string
+	var explainLast bool
+	var statsLimit int
 	var structurePath string
 	var liveTask string
 	var liveExplain bool
@@ -288,6 +292,55 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 		},
 	}
 
+	explainCmd := &cobra.Command{
+		Use:   "explain",
+		Short: "Inspect the latest compiled packet and its recorded outcomes",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			projectRoot := contextProjectPath(project, flags.projectPath)
+			appCtx, err := loadApp(projectRoot)
+			if err != nil {
+				return err
+			}
+			defer appCtx.Close()
+
+			explanation, err := appCtx.Session.ExplainPacket(session.PacketExplainRequest{
+				ProjectDir: projectRoot,
+				PacketHash: explainPacket,
+				Last:       explainLast,
+			})
+			if err != nil {
+				return err
+			}
+			return appCtx.Output.Print(explanation, func(w io.Writer) error {
+				return session.RenderPacketExplanationHuman(w, explanation)
+			})
+		},
+	}
+
+	statsCmd := &cobra.Command{
+		Use:   "stats",
+		Short: "Summarize likely signal, likely noise, and expansion patterns",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			projectRoot := contextProjectPath(project, flags.projectPath)
+			appCtx, err := loadApp(projectRoot)
+			if err != nil {
+				return err
+			}
+			defer appCtx.Close()
+
+			stats, err := appCtx.Session.ContextStats(session.ContextStatsRequest{
+				ProjectDir: projectRoot,
+				Limit:      statsLimit,
+			})
+			if err != nil {
+				return err
+			}
+			return appCtx.Output.Print(stats, func(w io.Writer) error {
+				return session.RenderContextStatsHuman(w, stats)
+			})
+		},
+	}
+
 	structureCmd := &cobra.Command{
 		Use:   "structure",
 		Short: "Inspect structural repo context",
@@ -438,6 +491,11 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 	assembleCmd.Flags().BoolVar(&assembleExplain, "explain", false, "include selection rationale and omitted context")
 	compileCmd.Flags().StringVar(&project, "project", "", "project root to compile context from")
 	compileCmd.Flags().StringVar(&compileTask, "task", "", "task text to compile context for; defaults to the active session task")
+	explainCmd.Flags().StringVar(&project, "project", "", "project root to inspect context telemetry from")
+	explainCmd.Flags().StringVar(&explainPacket, "packet", "", "specific packet hash to inspect; defaults to the latest packet")
+	explainCmd.Flags().BoolVar(&explainLast, "last", false, "inspect the latest packet explicitly")
+	statsCmd.Flags().StringVar(&project, "project", "", "project root to inspect context telemetry from")
+	statsCmd.Flags().IntVar(&statsLimit, "limit", 5, "maximum number of entries to show per stats section")
 	structureCmd.Flags().StringVar(&project, "project", "", "project root to inspect structure from")
 	structureCmd.Flags().StringVar(&structurePath, "path", "", "subtree path filter for structural context")
 	structureStatusCmd.Flags().StringVar(&project, "project", "", "project root to inspect structure from")
@@ -446,7 +504,7 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 	liveCmd.Flags().BoolVar(&liveExplain, "explain", false, "include rationale and missing-signal detail")
 
 	structureCmd.AddCommand(structureStatusCmd)
-	contextCmd.AddCommand(installCmd, refreshCmd, loadCmd, assembleCmd, compileCmd, structureCmd, liveCmd)
+	contextCmd.AddCommand(installCmd, refreshCmd, loadCmd, assembleCmd, compileCmd, explainCmd, statsCmd, structureCmd, liveCmd)
 	root.AddCommand(contextCmd)
 }
 

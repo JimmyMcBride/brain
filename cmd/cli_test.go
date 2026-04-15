@@ -1255,6 +1255,110 @@ func TestCLIContextCompileUsesActiveSessionTask(t *testing.T) {
 	}
 }
 
+func TestCLIContextExplainShowsRecordedPacketOutcomes(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "brainstorm", "start", "Compiler Telemetry Signal"))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "brainstorm", "idea", ".brain/brainstorms/compiler-telemetry-signal.md", "-b", "Compiler telemetry signal note for explain output."))
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "compiler telemetry signal"))
+
+	compiledJSON := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "compile"))
+	var compiled map[string]any
+	if err := json.Unmarshal([]byte(compiledJSON), &compiled); err != nil {
+		t.Fatalf("parse compile payload: %v\n%s", err, compiledJSON)
+	}
+	workingSet := compiled["working_set"].(map[string]any)
+	notes := workingSet["notes"].([]any)
+	if len(notes) == 0 {
+		t.Fatalf("expected compile packet to include at least one note: %#v", compiled)
+	}
+	firstNote := notes[0].(map[string]any)
+	anchor := firstNote["anchor"].(map[string]any)
+	notePath := anchor["path"].(string)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "read", notePath))
+
+	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "explain", "--last"))
+	for _, section := range []string{"## Packet", "## Included Items", "## Expanded Later", "## Downstream Outcomes"} {
+		if !strings.Contains(human, section) {
+			t.Fatalf("expected section %q in explain output:\n%s", section, human)
+		}
+	}
+	if !strings.Contains(human, notePath) {
+		t.Fatalf("expected explain output to reference expanded note path %q:\n%s", notePath, human)
+	}
+
+	explainJSON := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "explain", "--last"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(explainJSON), &payload); err != nil {
+		t.Fatalf("parse explain payload: %v\n%s", err, explainJSON)
+	}
+	packet := payload["packet"].(map[string]any)
+	if packet["packet_hash"] == "" {
+		t.Fatalf("expected packet hash in explain payload: %#v", payload)
+	}
+	if len(payload["included_items"].([]any)) == 0 {
+		t.Fatalf("expected included items in explain payload: %#v", payload)
+	}
+	if len(payload["expanded_later"].([]any)) == 0 {
+		t.Fatalf("expected expanded item telemetry in explain payload: %#v", payload)
+	}
+}
+
+func TestCLIContextStatsSummarizesSignalAndVerificationLinks(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "brainstorm", "start", "Compiler Telemetry Signal"))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "brainstorm", "idea", ".brain/brainstorms/compiler-telemetry-signal.md", "-b", "Compiler telemetry signal note for stats output."))
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "compiler telemetry signal"))
+
+	compiledJSON := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "compile"))
+	var compiled map[string]any
+	if err := json.Unmarshal([]byte(compiledJSON), &compiled); err != nil {
+		t.Fatalf("parse first compile payload: %v\n%s", err, compiledJSON)
+	}
+	workingSet := compiled["working_set"].(map[string]any)
+	notes := workingSet["notes"].([]any)
+	if len(notes) == 0 {
+		t.Fatalf("expected compile packet to include at least one note: %#v", compiled)
+	}
+	firstNote := notes[0].(map[string]any)
+	anchor := firstNote["anchor"].(map[string]any)
+	notePath := anchor["path"].(string)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "read", notePath))
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "run", "--project", env.project, "--", "go", "version"))
+
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "compile"))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "read", notePath))
+
+	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "stats", "--limit", "3"))
+	for _, section := range []string{"## Context Stats", "## Top Signal", "## Frequently Expanded", "## Common Verification Links"} {
+		if !strings.Contains(human, section) {
+			t.Fatalf("expected section %q in stats output:\n%s", section, human)
+		}
+	}
+	if !strings.Contains(human, "likely_utility=likely_signal") {
+		t.Fatalf("expected likely signal wording in stats output:\n%s", human)
+	}
+	if !strings.Contains(human, "go version") {
+		t.Fatalf("expected recorded verification command in stats output:\n%s", human)
+	}
+
+	statsJSON := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "stats", "--limit", "3"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(statsJSON), &payload); err != nil {
+		t.Fatalf("parse stats payload: %v\n%s", err, statsJSON)
+	}
+	if len(payload["top_signal"].([]any)) == 0 {
+		t.Fatalf("expected top signal items in stats payload: %#v", payload)
+	}
+	if len(payload["frequently_expanded"].([]any)) == 0 {
+		t.Fatalf("expected frequently expanded items in stats payload: %#v", payload)
+	}
+	if len(payload["common_verification_links"].([]any)) == 0 {
+		t.Fatalf("expected verification links in stats payload: %#v", payload)
+	}
+}
+
 func TestCLISessionWorkflow(t *testing.T) {
 	env := newCLIEnv(t)
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
