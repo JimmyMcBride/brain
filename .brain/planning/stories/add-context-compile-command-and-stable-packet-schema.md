@@ -3,10 +3,10 @@ created: "2026-04-15T05:32:39Z"
 epic: v1-context-packet-compiler
 project: brain
 spec: v1-context-packet-compiler
-status: todo
+status: done
 title: Add Context Compile Command And Stable Packet Schema
 type: story
-updated: "2026-04-15T05:32:39Z"
+updated: "2026-04-15T14:10:41Z"
 ---
 # Add Context Compile Command And Stable Packet Schema
 

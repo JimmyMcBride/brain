@@ -3,10 +3,10 @@ created: "2026-04-15T05:32:39Z"
 epic: v1-base-contract-and-summary-anchors
 project: brain
 spec: v1-base-contract-and-summary-anchors
-status: todo
+status: done
 title: Build Tiny Base Contract Extraction
 type: story
-updated: "2026-04-15T05:32:39Z"
+updated: "2026-04-15T14:10:41Z"
 ---
 # Build Tiny Base Contract Extraction
 

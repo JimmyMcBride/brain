@@ -3,10 +3,10 @@ created: "2026-04-15T05:32:39Z"
 epic: v1-packet-provenance-and-session-recording
 project: brain
 spec: v1-packet-provenance-and-session-recording
-status: todo
+status: done
 title: Extend Session State For Packet Records
 type: story
-updated: "2026-04-15T05:32:39Z"
+updated: "2026-04-15T14:10:41Z"
 ---
 # Extend Session State For Packet Records
 
