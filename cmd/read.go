@@ -25,6 +25,9 @@ func addReadCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoade
 			if err != nil {
 				return err
 			}
+			if err := appCtx.Session.RecordPacketExpansion(appCtx.Paths.ProjectDir, note.Path); err != nil {
+				return err
+			}
 			return appCtx.Output.Print(note, func(w io.Writer) error {
 				if _, err := fmt.Fprintf(w, "Path: %s\nType: %s\n\n", note.Path, note.Type); err != nil {
 					return err
