@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-15T12:00:00Z"
+updated: "2026-04-15T20:36:21Z"
 ---
 # Current State
 
@@ -32,6 +32,10 @@ This file is a deterministic snapshot of the repository state at the last refres
 ## Local Notes
 
 Add repo-specific notes here. `brain context refresh` preserves content outside managed blocks.
+
+- 2026-04-15: Added the first project soft-migration state model under `internal/projectcontext/`. Brain now has a repo-local migration ledger path at `.brain/state/project-migrations.json`, a named migration registry for first-wave soft upgrades, planner APIs that compare applied migration ids instead of raw Brain version strings, recoverable handling for missing or invalid migration state, and a guard that refuses to write migration state into repos that do not already use Brain.
+
+- 2026-04-15: Extended the `release-install-and-update-flow` planning track so Brain upgrades will eventually own automatic soft project migrations too, not just binary and skill refresh. The current plan is to add a repo-local project migration ledger, reuse idempotent `context refresh` plus agent-integration sync primitives for first-wave migrations, run them automatically during `brain update` for the current `--project` and lazily on first Brain use in older repos, surface migration health in `brain doctor` and `brain update`, and update the Brain skill/docs alongside the implementation.
 
 - 2026-04-15: Completed the `v4` context-compiler rollout slices for promotion gating, closeout suggestions, and compiler-era UX migration. Brain now classifies first-wave durable-memory candidates through `internal/promotion`, surfaces packet-backed promotion suggestions during blocked closeout, renders `brain distill --session` as a promotion-review note instead of a fixed target list, teaches `brain context compile` as the primary context surface, and refreshes generated repo guidance plus the Brain skill around promotion-aware closeout.
 
