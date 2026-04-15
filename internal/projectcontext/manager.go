@@ -285,49 +285,16 @@ func (m *Manager) apply(ctx context.Context, req Request) ([]Result, error) {
 		return nil, fmt.Errorf("project dir is not a directory: %s", projectDir)
 	}
 
-	snapshot := scanRepo(ctx, projectDir)
-	policyBody, err := RenderPolicy(snapshot)
+	specResults, err := m.syncManagedContext(ctx, projectDir, req.DryRun, req.Force, req.Adopt)
 	if err != nil {
 		return nil, err
 	}
-
-	resolvedAgents, err := m.resolveAgents(req.Agents)
+	agentResults, err := m.syncAgentIntegrations(projectDir, req.Agents, req.DryRun, req.Adopt)
 	if err != nil {
 		return nil, err
 	}
-	specs := bundleSpecs(snapshot, policyBody)
-	targets, err := discoverAgentIntegrationTargets(projectDir, resolvedAgents)
-	if err != nil {
-		return nil, err
-	}
-
-	results := make([]Result, 0, len(specs)+len(targets))
-	for _, spec := range specs {
-		result, err := syncSpec(spec, req.DryRun, req.Force, req.Adopt)
-		if err != nil {
-			return nil, err
-		}
-		if rel, relErr := filepath.Rel(projectDir, spec.Path); relErr == nil {
-			result.Path = filepath.ToSlash(rel)
-		}
-		results = append(results, result)
-	}
-	for _, target := range targets {
-		result, ok, err := syncAgentIntegration(target, req.DryRun, req.Adopt, len(resolvedAgents) != 0)
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
-			continue
-		}
-		if rel, relErr := filepath.Rel(projectDir, target.Path); relErr == nil {
-			result.Path = filepath.ToSlash(rel)
-		}
-		results = append(results, result)
-	}
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].Path < results[j].Path
-	})
+	results := append(specResults, agentResults...)
+	sortResultsByPath(results)
 	return results, nil
 }
 
@@ -454,6 +421,61 @@ func bundleSpecs(snapshot Snapshot, policyBody string) []fileSpec {
 		},
 	}
 	return specs
+}
+
+func (m *Manager) syncManagedContext(ctx context.Context, projectDir string, dryRun, force, adopt bool) ([]Result, error) {
+	snapshot := scanRepo(ctx, projectDir)
+	policyBody, err := RenderPolicy(snapshot)
+	if err != nil {
+		return nil, err
+	}
+	specs := bundleSpecs(snapshot, policyBody)
+	results := make([]Result, 0, len(specs))
+	for _, spec := range specs {
+		result, err := syncSpec(spec, dryRun, force, adopt)
+		if err != nil {
+			return nil, err
+		}
+		if rel, relErr := filepath.Rel(projectDir, spec.Path); relErr == nil {
+			result.Path = filepath.ToSlash(rel)
+		}
+		results = append(results, result)
+	}
+	sortResultsByPath(results)
+	return results, nil
+}
+
+func (m *Manager) syncAgentIntegrations(projectDir string, agents []string, dryRun, adopt bool) ([]Result, error) {
+	resolvedAgents, err := m.resolveAgents(agents)
+	if err != nil {
+		return nil, err
+	}
+	targets, err := discoverAgentIntegrationTargets(projectDir, resolvedAgents)
+	if err != nil {
+		return nil, err
+	}
+	results := make([]Result, 0, len(targets))
+	for _, target := range targets {
+		result, ok, err := syncAgentIntegration(target, dryRun, adopt, len(resolvedAgents) != 0)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			continue
+		}
+		if rel, relErr := filepath.Rel(projectDir, target.Path); relErr == nil {
+			result.Path = filepath.ToSlash(rel)
+		}
+		results = append(results, result)
+	}
+	sortResultsByPath(results)
+	return results, nil
+}
+
+func sortResultsByPath(results []Result) {
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Path < results[j].Path
+	})
 }
 
 func discoverAgentIntegrationTargets(projectDir string, agents []string) ([]agentIntegrationTarget, error) {

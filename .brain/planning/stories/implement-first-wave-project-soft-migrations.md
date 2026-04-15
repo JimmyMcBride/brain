@@ -3,10 +3,10 @@ created: "2026-04-15T23:31:00Z"
 epic: release-install-and-update-flow
 project: brain
 spec: release-install-and-update-flow
-status: todo
+status: done
 title: Implement First-Wave Project Soft Migrations
 type: story
-updated: "2026-04-15T23:31:00Z"
+updated: "2026-04-15T20:40:53Z"
 ---
 # Implement First-Wave Project Soft Migrations
 
@@ -19,10 +19,10 @@ Implement the initial set of automatic soft migrations for existing Brain repos 
 
 ## Acceptance Criteria
 
-- [ ] First-wave migrations refresh Brain-managed generated context surfaces such as `AGENTS.md`, `.brain/context/*`, and generated project docs without clobbering local notes outside managed blocks
-- [ ] Existing agent files with Brain-managed integration blocks or legacy Brain wrapper blocks are updated or migrated in place without creating missing agent files
-- [ ] Automatic migrations do not create a Brain workspace in non-Brain repos and do not mutate unmanaged agent files that have no Brain-managed content yet
-- [ ] Re-running the same project migrations is idempotent and reports `unchanged` or equivalent no-op behavior once the repo is current
+- [x] First-wave migrations refresh Brain-managed generated context surfaces such as `AGENTS.md`, `.brain/context/*`, and generated project docs without clobbering local notes outside managed blocks
+- [x] Existing agent files with Brain-managed integration blocks or legacy Brain wrapper blocks are updated or migrated in place without creating missing agent files
+- [x] Automatic migrations do not create a Brain workspace in non-Brain repos and do not mutate unmanaged agent files that have no Brain-managed content yet
+- [x] Re-running the same project migrations is idempotent and reports `unchanged` or equivalent no-op behavior once the repo is current
 
 
 ## Resources
@@ -35,3 +35,4 @@ Implement the initial set of automatic soft migrations for existing Brain repos 
 ## Notes
 
 - Prefer calling existing `context refresh` and agent-integration sync primitives under the hood instead of maintaining a parallel set of migration-specific markdown writers.
+- Implemented by refactoring reusable sync helpers out of `internal/projectcontext/manager.go` and adding the migration runner plus idempotence coverage in `internal/projectcontext/migrations.go` and `internal/projectcontext/migrations_test.go`.

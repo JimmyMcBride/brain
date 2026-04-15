@@ -1,8 +1,10 @@
 package projectcontext
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -164,6 +166,114 @@ func TestSaveProjectMigrationStateRejectsNonBrainRepos(t *testing.T) {
 	}
 }
 
+func TestApplyProjectMigrationsRefreshesManagedDocsAndLegacyAgentFiles(t *testing.T) {
+	project := newInstalledBrainProject(t)
+	manager := New(t.TempDir())
+
+	staleAgents := "# Project Agent Contract\n\n<!-- brain:begin agents-contract -->\nstale\n<!-- brain:end agents-contract -->\n\n## Local Notes\n\nkeep me\n"
+	if err := os.WriteFile(filepath.Join(project, "AGENTS.md"), []byte(staleAgents), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	legacyCodex := "# Codex Wrapper\n\n<!-- brain:begin agent-wrapper-codex -->\nstale wrapper\n<!-- brain:end agent-wrapper-codex -->\n\nCustom codex note.\n"
+	if err := os.MkdirAll(filepath.Join(project, ".codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, ".codex", "AGENTS.md"), []byte(legacyCodex), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := manager.ApplyProjectMigrations(context.Background(), project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != "applied" {
+		t.Fatalf("unexpected result status: %s", result.Status)
+	}
+	if strings.Join(result.AppliedMigrationIDs, ",") != "refresh-brain-managed-context-v1,refresh-existing-agent-integrations-v1" {
+		t.Fatalf("unexpected applied ids: %+v", result.AppliedMigrationIDs)
+	}
+
+	agentsBody, err := os.ReadFile(filepath.Join(project, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(agentsBody), "brain context compile") || !strings.Contains(string(agentsBody), "keep me") {
+		t.Fatalf("managed context was not refreshed correctly:\n%s", string(agentsBody))
+	}
+
+	codexBody, err := os.ReadFile(filepath.Join(project, ".codex", "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(codexBody), "agent-integration-codex") {
+		t.Fatalf("expected migrated agent integration block:\n%s", string(codexBody))
+	}
+	if strings.Contains(string(codexBody), "agent-wrapper-codex") {
+		t.Fatalf("expected legacy wrapper block to be removed:\n%s", string(codexBody))
+	}
+	if !strings.Contains(string(codexBody), "Custom codex note.") {
+		t.Fatalf("expected legacy wrapper user content to be preserved:\n%s", string(codexBody))
+	}
+
+	plan, err := manager.PlanProjectMigrations(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Status != projectMigrationPlanCurrent {
+		t.Fatalf("expected project to be current after apply, got=%s", plan.Status)
+	}
+}
+
+func TestApplyProjectMigrationsLeavesUnmanagedAgentFilesAloneAndBecomesNoop(t *testing.T) {
+	project := newInstalledBrainProject(t)
+	manager := New(t.TempDir())
+	manualClaude := "# Team Claude Notes\n\nKeep this exactly.\n"
+	if err := os.MkdirAll(filepath.Join(project, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	claudePath := filepath.Join(project, ".claude", "CLAUDE.md")
+	if err := os.WriteFile(claudePath, []byte(manualClaude), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	first, err := manager.ApplyProjectMigrations(context.Background(), project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Status != "applied" {
+		t.Fatalf("unexpected first result status: %s", first.Status)
+	}
+	body, err := os.ReadFile(claudePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != manualClaude {
+		t.Fatalf("expected unmanaged agent file to stay unchanged:\n%s", string(body))
+	}
+
+	second, err := manager.ApplyProjectMigrations(context.Background(), project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Status != "unchanged" {
+		t.Fatalf("expected second apply to be a no-op, got=%s", second.Status)
+	}
+	if len(second.AppliedMigrationIDs) != 0 {
+		t.Fatalf("expected no applied ids on noop rerun, got=%+v", second.AppliedMigrationIDs)
+	}
+}
+
+func TestApplyProjectMigrationsSkipsNonBrainRepos(t *testing.T) {
+	manager := New(t.TempDir())
+	result, err := manager.ApplyProjectMigrations(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != "not_brain_project" {
+		t.Fatalf("unexpected status: %s", result.Status)
+	}
+}
+
 func newBrainProjectForMigrations(t *testing.T) string {
 	t.Helper()
 	project := t.TempDir()
@@ -171,6 +281,19 @@ func newBrainProjectForMigrations(t *testing.T) string {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(project, ".brain", "policy.yaml"), []byte("version: 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return project
+}
+
+func newInstalledBrainProject(t *testing.T) string {
+	t.Helper()
+	project := newBrainProjectForMigrations(t)
+	if err := os.WriteFile(filepath.Join(project, "go.mod"), []byte("module example.com/demo\n\ngo 1.26\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	manager := New(t.TempDir())
+	if _, err := manager.Install(context.Background(), Request{ProjectDir: project}); err != nil {
 		t.Fatal(err)
 	}
 	return project

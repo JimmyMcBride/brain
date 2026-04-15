@@ -1,6 +1,7 @@
 package projectcontext
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -68,6 +69,22 @@ type ProjectMigrationPlan struct {
 	AppliedMigrations []AppliedProjectMigration    `json:"applied_migrations,omitempty"`
 }
 
+type ProjectMigrationResult struct {
+	ID          string   `json:"id"`
+	Description string   `json:"description"`
+	Action      string   `json:"action"`
+	Results     []Result `json:"results,omitempty"`
+}
+
+type ApplyProjectMigrationsResult struct {
+	ProjectDir          string                   `json:"project_dir"`
+	LedgerPath          string                   `json:"ledger_path"`
+	UsesBrain           bool                     `json:"uses_brain"`
+	Status              string                   `json:"status"`
+	AppliedMigrationIDs []string                 `json:"applied_migration_ids,omitempty"`
+	Migrations          []ProjectMigrationResult `json:"migrations,omitempty"`
+}
+
 var knownProjectMigrationDefinitions = []ProjectMigrationDefinition{
 	{
 		ID:          "refresh-brain-managed-context-v1",
@@ -83,6 +100,68 @@ func KnownProjectMigrations() []ProjectMigrationDefinition {
 	out := make([]ProjectMigrationDefinition, len(knownProjectMigrationDefinitions))
 	copy(out, knownProjectMigrationDefinitions)
 	return out
+}
+
+func (m *Manager) ApplyProjectMigrations(ctx context.Context, projectDir string) (*ApplyProjectMigrationsResult, error) {
+	plan, err := m.PlanProjectMigrations(projectDir)
+	if err != nil {
+		return nil, err
+	}
+	result := &ApplyProjectMigrationsResult{
+		ProjectDir: plan.ProjectDir,
+		LedgerPath: plan.LedgerPath,
+		UsesBrain:  plan.UsesBrain,
+		Status:     "not_brain_project",
+	}
+	if !plan.UsesBrain {
+		return result, nil
+	}
+	if len(plan.PendingMigrations) == 0 {
+		result.Status = "unchanged"
+		return result, nil
+	}
+
+	state, _, err := loadProjectMigrationState(plan.ProjectDir)
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now().UTC()
+	plannedIDs := make([]string, 0, len(plan.PendingMigrations))
+	appliedIDs := make([]string, 0, len(plan.PendingMigrations))
+	appliedSet := make(map[string]struct{}, len(state.Applied))
+	for _, applied := range state.Applied {
+		if id := strings.TrimSpace(applied.ID); id != "" {
+			appliedSet[id] = struct{}{}
+		}
+	}
+
+	for _, migration := range plan.PendingMigrations {
+		plannedIDs = append(plannedIDs, migration.ID)
+		migrationResult, err := m.applyProjectMigration(ctx, plan.ProjectDir, migration)
+		if err != nil {
+			state.LastRun = NewProjectMigrationRun("failed", plannedIDs, appliedIDs, now, err)
+			if saveErr := m.SaveProjectMigrationState(plan.ProjectDir, state); saveErr != nil {
+				return nil, fmt.Errorf("%w; additionally failed to write migration state: %v", err, saveErr)
+			}
+			return nil, err
+		}
+		result.Migrations = append(result.Migrations, migrationResult)
+		if _, ok := appliedSet[migration.ID]; !ok {
+			state.Applied = append(state.Applied, NewAppliedProjectMigration(migration.ID, now))
+			appliedSet[migration.ID] = struct{}{}
+		}
+		appliedIDs = append(appliedIDs, migration.ID)
+	}
+
+	state.LastRun = NewProjectMigrationRun("applied", plannedIDs, appliedIDs, now, nil)
+	if err := m.SaveProjectMigrationState(plan.ProjectDir, state); err != nil {
+		return nil, err
+	}
+
+	result.Status = "applied"
+	result.AppliedMigrationIDs = appliedIDs
+	return result, nil
 }
 
 func (m *Manager) PlanProjectMigrations(projectDir string) (*ProjectMigrationPlan, error) {
@@ -187,6 +266,34 @@ func NewProjectMigrationRun(status string, plannedIDs, appliedIDs []string, runA
 	return run
 }
 
+func (m *Manager) applyProjectMigration(ctx context.Context, projectDir string, migration ProjectMigrationDefinition) (ProjectMigrationResult, error) {
+	result := ProjectMigrationResult{
+		ID:          migration.ID,
+		Description: migration.Description,
+		Action:      "unchanged",
+	}
+	var (
+		results []Result
+		err     error
+	)
+	switch migration.ID {
+	case "refresh-brain-managed-context-v1":
+		results, err = m.syncManagedContext(ctx, projectDir, false, false, false)
+	case "refresh-existing-agent-integrations-v1":
+		results, err = m.syncAgentIntegrations(projectDir, nil, false, false)
+	default:
+		return result, fmt.Errorf("unknown project migration %q", migration.ID)
+	}
+	if err != nil {
+		return result, fmt.Errorf("apply project migration %s: %w", migration.ID, err)
+	}
+	result.Results = results
+	if migrationChanged(results) {
+		result.Action = "updated"
+	}
+	return result, nil
+}
+
 func projectMigrationLedgerPath(projectDir string) string {
 	return filepath.Join(projectDir, ".brain", "state", projectMigrationStateFile)
 }
@@ -261,6 +368,15 @@ func compactStrings(values []string) []string {
 		return nil
 	}
 	return out
+}
+
+func migrationChanged(results []Result) bool {
+	for _, result := range results {
+		if result.Action != "unchanged" {
+			return true
+		}
+	}
+	return false
 }
 
 func writeProjectMigrationFile(path string, raw []byte, mode os.FileMode) error {

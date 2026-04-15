@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-15T20:36:21Z"
+updated: "2026-04-15T20:40:53Z"
 ---
 # Current State
 
@@ -32,6 +32,8 @@ This file is a deterministic snapshot of the repository state at the last refres
 ## Local Notes
 
 Add repo-specific notes here. `brain context refresh` preserves content outside managed blocks.
+
+- 2026-04-15: Implemented the first-wave automatic soft project migrations in `internal/projectcontext/`. Brain now has an idempotent project-migration runner that reuses the managed-context refresh path plus existing-agent integration sync, applies named migration ids into the new repo-local ledger, refreshes stale Brain-managed docs, migrates legacy agent wrapper blocks in place, leaves unmanaged agent files alone, and reports clean `unchanged` behavior on reruns once a repo is current.
 
 - 2026-04-15: Added the first project soft-migration state model under `internal/projectcontext/`. Brain now has a repo-local migration ledger path at `.brain/state/project-migrations.json`, a named migration registry for first-wave soft upgrades, planner APIs that compare applied migration ids instead of raw Brain version strings, recoverable handling for missing or invalid migration state, and a guard that refuses to write migration state into repos that do not already use Brain.
 
