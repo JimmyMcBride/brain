@@ -580,6 +580,52 @@ func TestValidateFinishStillBlocksCommittedCodeOnlyPublishSession(t *testing.T) 
 	if !containsString(result.Remediation, "run `brain distill --session` to generate a session-scoped memory proposal") {
 		t.Fatalf("expected distill remediation, got %v", result.Remediation)
 	}
+	if len(result.PromotionSuggestions) != 0 {
+		t.Fatalf("expected no closeout suggestions without packet-backed evidence, got %#v", result.PromotionSuggestions)
+	}
+}
+
+func TestValidateFinishSuggestsPacketBackedPromotions(t *testing.T) {
+	verifyCmd := helperCommand("sleep-ms", "10", "verify")
+	project := makeSessionProject(t, sessionPolicyYAML(t, []string{strings.Join(verifyCmd, " ")}, true))
+	mustInitGitRepo(t, project)
+	manager := New(nil)
+	started, err := manager.Start(context.Background(), StartRequest{ProjectDir: project, Task: "replace context loading flow"})
+	if err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(project, "internal.go"), []byte("package main\n"), 0o644); err != nil {
+		t.Fatalf("write code change: %v", err)
+	}
+	packet := makeCompiledPacket("replace context loading flow", "session")
+	if err := manager.RecordCompiledPacket(project, started.Session.ID, packet); err != nil {
+		t.Fatalf("record compiled packet: %v", err)
+	}
+	if _, err := manager.RunCommand(context.Background(), RunRequest{
+		ProjectDir:    project,
+		Argv:          verifyCmd,
+		CaptureOutput: true,
+	}, nil, nil); err != nil {
+		t.Fatalf("run verification: %v", err)
+	}
+
+	result, err := manager.Validate(context.Background(), ValidateRequest{ProjectDir: project, Stage: "finish"})
+	if err != nil {
+		t.Fatalf("validate finish: %v", err)
+	}
+	if result.OK {
+		t.Fatalf("expected finish validation to fail without durable memory, got %+v", result)
+	}
+	if len(result.PromotionSuggestions) == 0 {
+		t.Fatalf("expected packet-backed promotion suggestions, got %+v", result)
+	}
+	if result.PromotionSuggestions[0].SuggestedTarget == "" || len(result.PromotionSuggestions[0].SupportingPacketHashes) == 0 {
+		t.Fatalf("expected packet-backed suggestion metadata, got %#v", result.PromotionSuggestions)
+	}
+	if !containsPromotionCategory(result.PromotionSuggestions, "boundary_fact") {
+		t.Fatalf("expected boundary_fact suggestion, got %#v", result.PromotionSuggestions)
+	}
 }
 
 func TestValidateFinishDoesNotUseCommittedDurableNotesWhenWorktreeDirty(t *testing.T) {
@@ -628,6 +674,15 @@ func TestValidateFinishDoesNotUseCommittedDurableNotesWhenWorktreeDirty(t *testi
 func containsString(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func containsPromotionCategory(values []PromotionSuggestion, want string) bool {
+	for _, value := range values {
+		if value.Category == want {
 			return true
 		}
 	}

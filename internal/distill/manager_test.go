@@ -74,8 +74,8 @@ func TestFromSessionCreatesProposalWithoutEditingTargets(t *testing.T) {
 	if !strings.Contains(note.Content, "go version") || !strings.Contains(note.Content, "main.go") || !strings.Contains(note.Content, ".brain/context/current-state.md") {
 		t.Fatalf("expected session-derived material in proposal:\n%s", note.Content)
 	}
-	if !strings.Contains(note.Content, "### AGENTS.md") || !strings.Contains(note.Content, "### .brain/context/current-state.md") {
-		t.Fatalf("expected target sections in proposal:\n%s", note.Content)
+	if !strings.Contains(note.Content, "## Promotion Review") || !strings.Contains(note.Content, "verification_recipe [promotable]") || !strings.Contains(note.Content, "### .brain/resources/changes/tighten-session-distill.md") {
+		t.Fatalf("expected promotion review and promotable target sections in proposal:\n%s", note.Content)
 	}
 
 	agentsAfter, err := os.ReadFile(filepath.Join(harness.root, "AGENTS.md"))

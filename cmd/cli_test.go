@@ -431,8 +431,8 @@ func TestCLIDistillSessionCreatesProposal(t *testing.T) {
 	if !strings.Contains(note, "## Source Provenance") || !strings.Contains(note, "go version") || !strings.Contains(note, "main.go") {
 		t.Fatalf("expected session-derived provenance in proposal:\n%s", note)
 	}
-	if !strings.Contains(note, "## Proposed Updates") || !strings.Contains(note, "### AGENTS.md") || !strings.Contains(note, "### .brain/context/current-state.md") {
-		t.Fatalf("expected target sections in proposal:\n%s", note)
+	if !strings.Contains(note, "## Promotion Review") || !strings.Contains(note, "verification_recipe [promotable]") || !strings.Contains(note, "### .brain/resources/changes/tighten-session-distill.md") {
+		t.Fatalf("expected promotion review and promotable target sections in proposal:\n%s", note)
 	}
 
 	agentsAfter, err := os.ReadFile(filepath.Join(env.project, "AGENTS.md"))
@@ -1391,6 +1391,29 @@ func TestCLISessionWorkflow(t *testing.T) {
 	finishOutput := requireOK(t, env.run(t, "", "--config", env.config, "session", "finish", "--project", env.project, "--summary", "session complete"))
 	if !strings.Contains(finishOutput, "finished") || !strings.Contains(finishOutput, ".brain/sessions/") {
 		t.Fatalf("unexpected finish output:\n%s", finishOutput)
+	}
+}
+
+func TestCLISessionFinishSurfacesPromotionSuggestions(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	initGitProject(t, env.project)
+
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "replace context loading flow"))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "compile"))
+	if err := os.WriteFile(filepath.Join(env.project, "main.go"), []byte("package main\nfunc main() { println(\"x\") }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "run", "--project", env.project, "--", "go", "version"))
+
+	finishBlocked := env.run(t, "", "--config", env.config, "session", "finish", "--project", env.project, "--summary", "premature closeout")
+	if finishBlocked.err == nil {
+		t.Fatalf("expected finish to block, got stdout=%s stderr=%s", finishBlocked.stdout, finishBlocked.stderr)
+	}
+	for _, needle := range []string{"Promote: boundary_fact", "Support: packets", "Support: verification"} {
+		if !strings.Contains(finishBlocked.stdout, needle) {
+			t.Fatalf("expected %q in blocked finish output:\nstdout=%s\nstderr=%s", needle, finishBlocked.stdout, finishBlocked.stderr)
+		}
 	}
 }
 

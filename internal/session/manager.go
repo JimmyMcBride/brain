@@ -162,17 +162,18 @@ type RunResult struct {
 }
 
 type ValidationResult struct {
-	OK                bool     `json:"ok"`
-	Stage             string   `json:"stage"`
-	SessionID         string   `json:"session_id,omitempty"`
-	Task              string   `json:"task,omitempty"`
-	RepoChanged       bool     `json:"repo_changed"`
-	NotesChanged      bool     `json:"notes_changed"`
-	MemorySatisfiedBy string   `json:"memory_satisfied_by,omitempty"`
-	MissingCommands   []string `json:"missing_commands,omitempty"`
-	Obligations       []string `json:"obligations,omitempty"`
-	Remediation       []string `json:"remediation,omitempty"`
-	Checks            []Check  `json:"checks,omitempty"`
+	OK                   bool                  `json:"ok"`
+	Stage                string                `json:"stage"`
+	SessionID            string                `json:"session_id,omitempty"`
+	Task                 string                `json:"task,omitempty"`
+	RepoChanged          bool                  `json:"repo_changed"`
+	NotesChanged         bool                  `json:"notes_changed"`
+	MemorySatisfiedBy    string                `json:"memory_satisfied_by,omitempty"`
+	MissingCommands      []string              `json:"missing_commands,omitempty"`
+	Obligations          []string              `json:"obligations,omitempty"`
+	Remediation          []string              `json:"remediation,omitempty"`
+	PromotionSuggestions []PromotionSuggestion `json:"promotion_suggestions,omitempty"`
+	Checks               []Check               `json:"checks,omitempty"`
 }
 
 type FinishResult struct {
@@ -608,6 +609,14 @@ func (m *Manager) evaluateFinish(ctx context.Context, policy *projectcontext.Pol
 				}
 			}
 		}
+	}
+	review, err := m.buildPromotionReview(ctx, policy, active, result.MissingCommands, 6)
+	if err != nil {
+		return nil, err
+	}
+	result.PromotionSuggestions = filterPromotionSuggestionsForValidation(result, promotionSuggestionsFromReview(review))
+	if !result.OK && len(result.PromotionSuggestions) == 0 && result.RepoChanged && result.MemorySatisfiedBy == "" {
+		result.Remediation = append(result.Remediation, "if the session changed no durable knowledge, finish only with `brain session finish --force --reason \"no durable knowledge changed\"` after review")
 	}
 	return result, nil
 }
