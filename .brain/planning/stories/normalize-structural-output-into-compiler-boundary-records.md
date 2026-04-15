@@ -3,10 +3,10 @@ created: "2026-04-15T05:33:26Z"
 epic: v2-repo-boundary-graph
 project: brain
 spec: v2-repo-boundary-graph
-status: todo
+status: done
 title: Normalize Structural Output Into Compiler Boundary Records
 type: story
-updated: "2026-04-15T05:33:26Z"
+updated: "2026-04-15T12:00:00Z"
 ---
 # Normalize Structural Output Into Compiler Boundary Records
 

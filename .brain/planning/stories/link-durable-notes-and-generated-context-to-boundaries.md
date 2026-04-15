@@ -3,10 +3,10 @@ created: "2026-04-15T05:33:26Z"
 epic: v2-boundary-aware-context-selection
 project: brain
 spec: v2-boundary-aware-context-selection
-status: todo
+status: done
 title: Link Durable Notes And Generated Context To Boundaries
 type: story
-updated: "2026-04-15T05:33:26Z"
+updated: "2026-04-15T12:00:00Z"
 ---
 # Link Durable Notes And Generated Context To Boundaries
 

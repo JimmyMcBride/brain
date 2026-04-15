@@ -186,6 +186,7 @@ Use `--force` when adopting an existing unmanaged `AGENTS.md` or docs file into 
 - returns an on-demand packet with task, session, changed-file, touched-boundary, nearby-test, verification, policy-hint, and ambiguity sections
 - adds rationale and missing-signal reporting with `--explain`
 - does not persist live state to SQLite or the session file
+- derives repo-observable verification recipes from policy, Makefile targets, package scripts, CI workflows, and bounded recent successful session commands when they exist
 - reports recent recorded session commands plus verification-profile satisfaction when a session is active
 - only emits policy hints for strong-match conditions such as missing verification or missing durable note updates after repo changes
 
@@ -193,6 +194,8 @@ Use `--force` when adopting an existing unmanaged `AGENTS.md` or docs file into 
 
 - resolves the task from `--task` or the active session
 - emits the smallest justified packet Brain currently knows how to build: base contract, changed files, touched boundaries, nearby tests, top durable note summaries, verification hints, ambiguities, and provenance
+- keeps boundary-aware context visible by carrying adjacency, responsibilities, and nearby-test relations into the packet
+- ranks verification hints into strong or suggested command guidance with explicit source provenance
 - keeps included context in summary form with exact anchors and explicit inclusion reasons
 - records packet metadata into the active session when a session is present, but still works normally without a session
 - is the best first choice when you want one compact startup packet instead of a full static bundle or a broader explain-oriented assembly view

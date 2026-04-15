@@ -3,10 +3,10 @@ created: "2026-04-15T05:33:26Z"
 epic: v2-verification-and-test-surface-derivation
 project: brain
 spec: v2-verification-and-test-surface-derivation
-status: todo
+status: done
 title: Integrate Verification And Test Surfaces Into Compiled Packets
 type: story
-updated: "2026-04-15T05:33:26Z"
+updated: "2026-04-15T12:00:00Z"
 ---
 # Integrate Verification And Test Surfaces Into Compiled Packets
 

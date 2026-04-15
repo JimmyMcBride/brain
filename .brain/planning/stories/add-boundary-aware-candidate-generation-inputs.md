@@ -3,10 +3,10 @@ created: "2026-04-15T05:33:26Z"
 epic: v2-boundary-aware-context-selection
 project: brain
 spec: v2-boundary-aware-context-selection
-status: todo
+status: done
 title: Add Boundary-Aware Candidate Generation Inputs
 type: story
-updated: "2026-04-15T05:33:26Z"
+updated: "2026-04-15T12:00:00Z"
 ---
 # Add Boundary-Aware Candidate Generation Inputs
 

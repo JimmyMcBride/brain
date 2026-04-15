@@ -5,7 +5,7 @@ project: brain
 status: approved
 title: V2 Boundary-Aware Context Selection Spec
 type: spec
-updated: "2026-04-15T05:31:27Z"
+updated: "2026-04-15T12:00:00Z"
 ---
 # V2 Boundary-Aware Context Selection Spec
 
@@ -83,9 +83,9 @@ Per-item diagnostics should support reasons such as:
 
 ## Story Breakdown
 
-- [ ] Add Boundary-Aware Candidate Generation Inputs
-- [ ] Link Durable Notes And Generated Context To Boundaries
-- [ ] Balance Multi-Boundary Packets And Surface Boundary Diagnostics
+- [x] Add Boundary-Aware Candidate Generation Inputs
+- [x] Link Durable Notes And Generated Context To Boundaries
+- [x] Balance Multi-Boundary Packets And Surface Boundary Diagnostics
 
 ## Resources
 

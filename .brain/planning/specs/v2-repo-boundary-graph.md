@@ -5,7 +5,7 @@ project: brain
 status: approved
 title: V2 Repo Boundary Graph Spec
 type: spec
-updated: "2026-04-15T05:31:27Z"
+updated: "2026-04-15T12:00:00Z"
 ---
 # V2 Repo Boundary Graph Spec
 
@@ -87,9 +87,9 @@ First-wave relation sources:
 
 ## Story Breakdown
 
-- [ ] Normalize Structural Output Into Compiler Boundary Records
-- [ ] Build File To Boundary And Boundary To Test Relations
-- [ ] Expose Boundary Adjacency And Responsibilities To Compiler Consumers
+- [x] Normalize Structural Output Into Compiler Boundary Records
+- [x] Build File To Boundary And Boundary To Test Relations
+- [x] Expose Boundary Adjacency And Responsibilities To Compiler Consumers
 
 ## Resources
 

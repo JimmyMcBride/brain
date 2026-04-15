@@ -5,7 +5,7 @@ project: brain
 status: approved
 title: V2 Verification And Test Surface Derivation Spec
 type: spec
-updated: "2026-04-15T05:31:27Z"
+updated: "2026-04-15T12:00:00Z"
 ---
 # V2 Verification And Test Surface Derivation Spec
 
@@ -90,9 +90,9 @@ Recipe sources should remain visible so users can tell whether a hint came from 
 
 ## Story Breakdown
 
-- [ ] Derive Nearby Tests From Changed Files And Boundaries
-- [ ] Extract Verification Recipes From Repo And Successful Command Sources
-- [ ] Integrate Verification And Test Surfaces Into Compiled Packets
+- [x] Derive Nearby Tests From Changed Files And Boundaries
+- [x] Extract Verification Recipes From Repo And Successful Command Sources
+- [x] Integrate Verification And Test Surfaces Into Compiled Packets
 
 ## Resources
 

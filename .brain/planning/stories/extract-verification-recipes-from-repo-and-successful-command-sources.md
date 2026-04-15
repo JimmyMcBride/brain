@@ -3,10 +3,10 @@ created: "2026-04-15T05:33:26Z"
 epic: v2-verification-and-test-surface-derivation
 project: brain
 spec: v2-verification-and-test-surface-derivation
-status: todo
+status: done
 title: Extract Verification Recipes From Repo And Successful Command Sources
 type: story
-updated: "2026-04-15T05:33:26Z"
+updated: "2026-04-15T12:00:00Z"
 ---
 # Extract Verification Recipes From Repo And Successful Command Sources
 
