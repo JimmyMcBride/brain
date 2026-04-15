@@ -18,10 +18,12 @@ type CompiledItem struct {
 }
 
 type CompiledBoundary struct {
-	Path   string `json:"path"`
-	Label  string `json:"label"`
-	Role   string `json:"role"`
-	Reason string `json:"reason"`
+	Path               string   `json:"path"`
+	Label              string   `json:"label"`
+	Role               string   `json:"role"`
+	Reason             string   `json:"reason"`
+	AdjacentBoundaries []string `json:"adjacent_boundaries,omitempty"`
+	Responsibilities   []string `json:"responsibilities,omitempty"`
 }
 
 type CompiledFile struct {

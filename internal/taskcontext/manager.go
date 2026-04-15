@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"brain/internal/livecontext"
 	"brain/internal/projectcontext"
 	"brain/internal/search"
+	"brain/internal/structure"
 )
 
 type Manager struct {
@@ -25,6 +27,15 @@ type Request struct {
 	TaskSource    string
 	SearchResults []search.Result
 	LivePacket    *livecontext.Packet
+	BoundaryGraph *structure.BoundaryGraph
+}
+
+type noteCandidate struct {
+	item              projectcontext.CompiledItem
+	score             int
+	primaryBoundary   string
+	matchedBoundaries []string
+	matchedFiles      []string
 }
 
 func New(contextManager *projectcontext.Manager) *Manager {
@@ -45,7 +56,12 @@ func (m *Manager) Compile(req Request) (*projectcontext.CompiledPacket, error) {
 	if err != nil {
 		return nil, err
 	}
+	sourceSummaries, err := m.Context.BuildSourceSummaryItems(req.ProjectDir)
+	if err != nil {
+		return nil, err
+	}
 
+	workingSetNotes := selectWorkingSetNotes(req.ProjectDir, req.SearchResults, sourceSummaries, req.LivePacket, req.BoundaryGraph, 5)
 	packet := &projectcontext.CompiledPacket{
 		Task: projectcontext.CompiledTask{
 			Text:    task,
@@ -57,10 +73,10 @@ func (m *Manager) Compile(req Request) (*projectcontext.CompiledPacket, error) {
 			Boundaries: selectBoundaries(req.LivePacket, 4),
 			Files:      selectFiles(req.LivePacket, 6),
 			Tests:      selectTests(req.LivePacket, 4),
-			Notes:      selectDurableNotes(req.SearchResults, 4),
+			Notes:      workingSetNotes,
 		},
 		Verification: selectVerificationHints(req.LivePacket),
-		Ambiguities:  buildAmbiguities(req.LivePacket, req.SearchResults),
+		Ambiguities:  buildAmbiguities(req.LivePacket, req.SearchResults, req.BoundaryGraph, workingSetNotes),
 	}
 	packet.Provenance = buildProvenance(packet)
 	return packet, nil
@@ -165,10 +181,12 @@ func selectBoundaries(packet *livecontext.Packet, limit int) []projectcontext.Co
 	boundaries := make([]projectcontext.CompiledBoundary, 0, min(limit, len(packet.Worktree.TouchedBoundaries)))
 	for _, boundary := range trimBoundaries(packet.Worktree.TouchedBoundaries, limit) {
 		boundaries = append(boundaries, projectcontext.CompiledBoundary{
-			Path:   boundary.Path,
-			Label:  boundary.Label,
-			Role:   boundary.Role,
-			Reason: boundary.Why,
+			Path:               boundary.Path,
+			Label:              boundary.Label,
+			Role:               boundary.Role,
+			Reason:             boundary.Why,
+			AdjacentBoundaries: append([]string(nil), boundary.AdjacentBoundaries...),
+			Responsibilities:   append([]string(nil), boundary.Responsibilities...),
 		})
 	}
 	return boundaries
@@ -189,7 +207,82 @@ func selectTests(packet *livecontext.Packet, limit int) []projectcontext.Compile
 	return tests
 }
 
-func selectDurableNotes(results []search.Result, limit int) []projectcontext.CompiledItem {
+func selectWorkingSetNotes(projectDir string, results []search.Result, generated []projectcontext.ContextItem, packet *livecontext.Packet, graph *structure.BoundaryGraph, limit int) []projectcontext.CompiledItem {
+	if limit <= 0 {
+		return []projectcontext.CompiledItem{}
+	}
+	if graph == nil || packet == nil || len(packet.Worktree.TouchedBoundaries) == 0 {
+		return lexicalDurableNotes(results, limit)
+	}
+
+	touchedOrder := orderedTouchedBoundaries(packet, graph)
+	candidates := buildNoteCandidates(projectDir, results, generated, packet, graph)
+	if len(candidates) == 0 {
+		return lexicalDurableNotes(results, limit)
+	}
+
+	grouped := map[string][]noteCandidate{}
+	unscoped := []noteCandidate{}
+	for _, candidate := range candidates {
+		if candidate.primaryBoundary == "" {
+			unscoped = append(unscoped, candidate)
+			continue
+		}
+		grouped[candidate.primaryBoundary] = append(grouped[candidate.primaryBoundary], candidate)
+	}
+	for key := range grouped {
+		sort.Slice(grouped[key], func(i, j int) bool { return noteCandidateLess(grouped[key][i], grouped[key][j]) })
+	}
+	sort.Slice(unscoped, func(i, j int) bool { return noteCandidateLess(unscoped[i], unscoped[j]) })
+
+	selected := []projectcontext.CompiledItem{}
+	seen := map[string]struct{}{}
+	for _, boundaryID := range touchedOrder {
+		group := grouped[boundaryID]
+		if len(group) == 0 {
+			continue
+		}
+		candidate := group[0]
+		if _, ok := seen[candidate.item.ID]; ok {
+			continue
+		}
+		selected = append(selected, candidate.item)
+		seen[candidate.item.ID] = struct{}{}
+		if len(selected) == limit {
+			return selected
+		}
+	}
+
+	remaining := []noteCandidate{}
+	for _, candidate := range candidates {
+		if _, ok := seen[candidate.item.ID]; ok {
+			continue
+		}
+		remaining = append(remaining, candidate)
+	}
+	sort.Slice(remaining, func(i, j int) bool { return noteCandidateLess(remaining[i], remaining[j]) })
+	for _, candidate := range remaining {
+		selected = append(selected, candidate.item)
+		if len(selected) == limit {
+			break
+		}
+	}
+	if len(selected) < limit {
+		for _, item := range lexicalDurableNotes(results, limit-len(selected)) {
+			if _, ok := seen[item.ID]; ok {
+				continue
+			}
+			selected = append(selected, item)
+			seen[item.ID] = struct{}{}
+			if len(selected) == limit {
+				break
+			}
+		}
+	}
+	return selected
+}
+
+func lexicalDurableNotes(results []search.Result, limit int) []projectcontext.CompiledItem {
 	selected := make([]projectcontext.CompiledItem, 0, limit)
 	seen := map[string]struct{}{}
 	for _, result := range results {
@@ -201,22 +294,7 @@ func selectDurableNotes(results []search.Result, limit int) []projectcontext.Com
 			continue
 		}
 		seen[key] = struct{}{}
-		item := projectcontext.ContextItem{
-			ID:    "note:" + shortHash(key),
-			Kind:  projectcontext.ContextItemKindDurableNote,
-			Title: durableNoteTitle(result),
-			Summary: clampSummary(
-				strings.TrimSpace(result.Snippet),
-				34,
-			),
-			Anchor: projectcontext.ContextAnchor{
-				Path:    filepath.ToSlash(result.NotePath),
-				Section: noteAnchorSection(result),
-			},
-			Files:         []string{filepath.ToSlash(result.NotePath)},
-			SourceHash:    shortHash(result.NotePath + result.Heading + result.Snippet),
-			ExpansionCost: len(strings.Fields(strings.TrimSpace(result.Snippet))),
-		}
+		item := baseDurableNoteItem(result)
 		selected = append(selected, projectcontext.CompiledItem{
 			ContextItem: item,
 			Reason:      noteReason(result),
@@ -226,6 +304,84 @@ func selectDurableNotes(results []search.Result, limit int) []projectcontext.Com
 		}
 	}
 	return selected
+}
+
+func buildNoteCandidates(projectDir string, results []search.Result, generated []projectcontext.ContextItem, packet *livecontext.Packet, graph *structure.BoundaryGraph) []noteCandidate {
+	touched := touchedBoundarySet(packet)
+	adjacent := adjacentBoundarySet(packet)
+	pressure := changedBoundaryPressure(packet, graph)
+	changedFiles := changedFileSet(packet)
+	candidates := []noteCandidate{}
+	seen := map[string]struct{}{}
+
+	for _, result := range results {
+		if !isDurableNotePath(result.NotePath) {
+			continue
+		}
+		item := baseDurableNoteItem(result)
+		text := strings.Join([]string{result.NotePath, result.NoteTitle, result.Heading, result.Snippet}, "\n")
+		linked, matchedFiles := linkedBoundariesForText(projectDir, text, graph, changedFiles)
+		direct := intersectBoundaryIDs(linked, touched)
+		adj := diffBoundaryIDs(intersectBoundaryIDs(linked, adjacent), direct)
+		allMatched := dedupeStrings(append(append([]string{}, direct...), adj...))
+		score, primary := scoreBoundaryCandidate(int(result.Score*100), direct, adj, pressure)
+		if score == 0 {
+			continue
+		}
+		item.Boundaries = append([]string(nil), allMatched...)
+		item.Files = dedupeStrings(append(item.Files, matchedFiles...))
+		candidate := noteCandidate{
+			item: projectcontext.CompiledItem{
+				ContextItem: item,
+				Reason:      boundaryCandidateReason("durable note", direct, adj, matchedFiles, pressure, primary),
+			},
+			score:             score,
+			primaryBoundary:   primary,
+			matchedBoundaries: append([]string(nil), allMatched...),
+			matchedFiles:      matchedFiles,
+		}
+		if _, ok := seen[candidate.item.ID]; ok {
+			continue
+		}
+		seen[candidate.item.ID] = struct{}{}
+		candidates = append(candidates, candidate)
+	}
+
+	for _, item := range generated {
+		if item.Kind != projectcontext.ContextItemKindGeneratedContext && item.Kind != projectcontext.ContextItemKindWorkflowRule {
+			continue
+		}
+		text := strings.Join([]string{item.Title, item.Summary, readAnchorContent(projectDir, item.Anchor.Path)}, "\n")
+		linked, matchedFiles := linkedBoundariesForText(projectDir, text, graph, changedFiles)
+		direct := intersectBoundaryIDs(linked, touched)
+		adj := diffBoundaryIDs(intersectBoundaryIDs(linked, adjacent), direct)
+		allMatched := dedupeStrings(append(append([]string{}, direct...), adj...))
+		score, primary := scoreBoundaryCandidate(35, direct, adj, pressure)
+		if score == 0 {
+			continue
+		}
+		copyItem := item
+		copyItem.Boundaries = append([]string(nil), allMatched...)
+		copyItem.Files = dedupeStrings(append(copyItem.Files, matchedFiles...))
+		candidate := noteCandidate{
+			item: projectcontext.CompiledItem{
+				ContextItem: copyItem,
+				Reason:      boundaryCandidateReason("generated context", direct, adj, matchedFiles, pressure, primary),
+			},
+			score:             score,
+			primaryBoundary:   primary,
+			matchedBoundaries: append([]string(nil), allMatched...),
+			matchedFiles:      matchedFiles,
+		}
+		if _, ok := seen[candidate.item.ID]; ok {
+			continue
+		}
+		seen[candidate.item.ID] = struct{}{}
+		candidates = append(candidates, candidate)
+	}
+
+	sort.Slice(candidates, func(i, j int) bool { return noteCandidateLess(candidates[i], candidates[j]) })
+	return candidates
 }
 
 func selectVerificationHints(packet *livecontext.Packet) []projectcontext.VerificationHint {
@@ -266,20 +422,35 @@ func selectVerificationHints(packet *livecontext.Packet) []projectcontext.Verifi
 	return hints
 }
 
-func buildAmbiguities(packet *livecontext.Packet, results []search.Result) []string {
+func buildAmbiguities(packet *livecontext.Packet, results []search.Result, graph *structure.BoundaryGraph, selectedNotes []projectcontext.CompiledItem) []string {
 	ambiguities := []string{}
 	if packet == nil {
 		return []string{"live work context was unavailable during compilation"}
 	}
 	ambiguities = append(ambiguities, packet.Ambiguities...)
+	if graph == nil {
+		ambiguities = append(ambiguities, "boundary graph was unavailable, so note selection fell back to lexical ranking only")
+	}
 	if len(packet.Worktree.ChangedFiles) == 0 {
 		ambiguities = append(ambiguities, "no changed files were detected, so file and boundary selection relied on current repo state rather than an active diff")
 	}
 	if len(packet.NearbyTests) == 0 {
 		ambiguities = append(ambiguities, "no nearby tests were detected for the current task")
 	}
-	if len(selectDurableNotes(results, 1)) == 0 {
+	if len(selectedNotes) == 0 && len(lexicalDurableNotes(results, 1)) == 0 {
 		ambiguities = append(ambiguities, "no durable note summaries ranked highly enough to enter the first working set")
+	}
+	if len(selectedNotes) > 0 {
+		boundaryLinked := false
+		for _, item := range selectedNotes {
+			if len(item.Boundaries) > 0 {
+				boundaryLinked = true
+				break
+			}
+		}
+		if !boundaryLinked && graph != nil && len(packet.Worktree.TouchedBoundaries) > 0 {
+			ambiguities = append(ambiguities, "selected notes did not map cleanly onto the touched boundaries, so lexical note ranking filled the remaining slots")
+		}
 	}
 	sort.Strings(ambiguities)
 	return dedupeStrings(ambiguities)
@@ -323,6 +494,16 @@ func renderBoundaries(w io.Writer, items []projectcontext.CompiledBoundary) erro
 	for _, item := range items {
 		if _, err := fmt.Fprintf(w, "- `%s` [%s]: %s\n", item.Path, item.Role, item.Reason); err != nil {
 			return err
+		}
+		if len(item.Responsibilities) > 0 {
+			if _, err := fmt.Fprintf(w, "  Responsibilities: %s\n", strings.Join(item.Responsibilities, "; ")); err != nil {
+				return err
+			}
+		}
+		if len(item.AdjacentBoundaries) > 0 {
+			if _, err := fmt.Fprintf(w, "  Adjacent: %s\n", strings.Join(item.AdjacentBoundaries, ", ")); err != nil {
+				return err
+			}
 		}
 	}
 	_, err := io.WriteString(w, "\n")
@@ -402,6 +583,25 @@ func noteReason(result search.Result) string {
 	return reason
 }
 
+func baseDurableNoteItem(result search.Result) projectcontext.ContextItem {
+	raw := strings.TrimSpace(strings.Join([]string{result.NoteTitle, result.Heading, result.Snippet}, "\n"))
+	if raw == "" {
+		raw = strings.TrimSpace(result.NotePath)
+	}
+	return projectcontext.ContextItem{
+		ID:      "durable_note:" + shortHash(result.NotePath+"#"+noteAnchorSection(result)),
+		Kind:    projectcontext.ContextItemKindDurableNote,
+		Title:   durableNoteTitle(result),
+		Summary: clampSummary(result.Snippet, 30),
+		Anchor: projectcontext.ContextAnchor{
+			Path:    filepath.ToSlash(strings.TrimSpace(result.NotePath)),
+			Section: noteAnchorSection(result),
+		},
+		SourceHash:    shortHash(raw),
+		ExpansionCost: len(strings.Fields(raw)),
+	}
+}
+
 func durableNoteTitle(result search.Result) string {
 	if strings.TrimSpace(result.NoteTitle) != "" {
 		return result.NoteTitle
@@ -418,6 +618,245 @@ func noteAnchorSection(result search.Result) string {
 		return strings.TrimSpace(result.NoteTitle)
 	}
 	return ""
+}
+
+func orderedTouchedBoundaries(packet *livecontext.Packet, graph *structure.BoundaryGraph) []string {
+	if packet == nil {
+		return []string{}
+	}
+	out := make([]string, 0, len(packet.Worktree.TouchedBoundaries))
+	seen := map[string]struct{}{}
+	for _, boundary := range packet.Worktree.TouchedBoundaries {
+		id := strings.TrimSuffix(strings.TrimSpace(boundary.Path), "/")
+		if graph != nil {
+			if record := graph.BoundaryByID(id); record != nil {
+				id = record.ID
+			}
+		}
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
+}
+
+func touchedBoundarySet(packet *livecontext.Packet) []string {
+	return orderedTouchedBoundaries(packet, nil)
+}
+
+func adjacentBoundarySet(packet *livecontext.Packet) []string {
+	if packet == nil {
+		return []string{}
+	}
+	seen := map[string]struct{}{}
+	out := []string{}
+	for _, boundary := range packet.Worktree.TouchedBoundaries {
+		for _, adjacent := range boundary.AdjacentBoundaries {
+			adjacent = strings.TrimSpace(adjacent)
+			if adjacent == "" {
+				continue
+			}
+			if _, ok := seen[adjacent]; ok {
+				continue
+			}
+			seen[adjacent] = struct{}{}
+			out = append(out, adjacent)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func changedBoundaryPressure(packet *livecontext.Packet, graph *structure.BoundaryGraph) map[string]int {
+	pressure := map[string]int{}
+	if packet == nil {
+		return pressure
+	}
+	for _, file := range packet.Worktree.ChangedFiles {
+		if graph == nil {
+			continue
+		}
+		record := graph.BoundaryForFile(file.Path)
+		if record == nil {
+			continue
+		}
+		pressure[record.ID]++
+	}
+	if len(pressure) == 0 {
+		for _, boundary := range packet.Worktree.TouchedBoundaries {
+			id := strings.TrimSuffix(strings.TrimSpace(boundary.Path), "/")
+			if id != "" {
+				pressure[id]++
+			}
+		}
+	}
+	return pressure
+}
+
+func changedFileSet(packet *livecontext.Packet) []string {
+	if packet == nil {
+		return []string{}
+	}
+	out := make([]string, 0, len(packet.Worktree.ChangedFiles))
+	for _, file := range packet.Worktree.ChangedFiles {
+		if trimmed := filepath.ToSlash(strings.TrimSpace(file.Path)); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	sort.Strings(out)
+	return dedupeStrings(out)
+}
+
+func linkedBoundariesForText(projectDir, text string, graph *structure.BoundaryGraph, changedFiles []string) ([]string, []string) {
+	_ = projectDir
+	if graph == nil {
+		return []string{}, []string{}
+	}
+	lower := strings.ToLower(filepath.ToSlash(strings.TrimSpace(text)))
+	if lower == "" {
+		return []string{}, []string{}
+	}
+	boundaries := []string{}
+	matchedFiles := []string{}
+	for _, file := range changedFiles {
+		if strings.Contains(lower, strings.ToLower(file)) {
+			matchedFiles = append(matchedFiles, file)
+			if record := graph.BoundaryForFile(file); record != nil {
+				boundaries = append(boundaries, record.ID)
+			}
+		}
+	}
+	for _, boundary := range graph.Boundaries {
+		terms := []string{
+			strings.ToLower(boundary.ID),
+			strings.ToLower(strings.TrimSuffix(boundary.RootPath, "/")),
+			strings.ToLower(boundary.Label),
+		}
+		for _, responsibility := range boundary.Responsibilities {
+			terms = append(terms, strings.ToLower(strings.TrimSpace(responsibility)))
+		}
+		for _, term := range terms {
+			if term == "" {
+				continue
+			}
+			if strings.Contains(lower, term) {
+				boundaries = append(boundaries, boundary.ID)
+				break
+			}
+		}
+	}
+	return dedupeStrings(boundaries), dedupeStrings(matchedFiles)
+}
+
+func intersectBoundaryIDs(a, b []string) []string {
+	if len(a) == 0 || len(b) == 0 {
+		return []string{}
+	}
+	seen := map[string]struct{}{}
+	for _, item := range b {
+		seen[item] = struct{}{}
+	}
+	out := []string{}
+	for _, item := range a {
+		if _, ok := seen[item]; ok {
+			out = append(out, item)
+		}
+	}
+	return dedupeStrings(out)
+}
+
+func diffBoundaryIDs(a, b []string) []string {
+	if len(a) == 0 {
+		return []string{}
+	}
+	seen := map[string]struct{}{}
+	for _, item := range b {
+		seen[item] = struct{}{}
+	}
+	out := []string{}
+	for _, item := range a {
+		if _, ok := seen[item]; ok {
+			continue
+		}
+		out = append(out, item)
+	}
+	return dedupeStrings(out)
+}
+
+func scoreBoundaryCandidate(base int, direct, adjacent []string, pressure map[string]int) (int, string) {
+	if len(direct) == 0 && len(adjacent) == 0 {
+		return 0, ""
+	}
+	score := base
+	primary := ""
+	bestPressure := -1
+	for _, item := range direct {
+		score += 45 + pressure[item]*10
+		if pressure[item] > bestPressure {
+			primary = item
+			bestPressure = pressure[item]
+		}
+	}
+	for _, item := range adjacent {
+		score += 20 + pressure[item]*5
+		if pressure[item] > bestPressure {
+			primary = item
+			bestPressure = pressure[item]
+		}
+	}
+	if primary == "" {
+		if len(direct) > 0 {
+			primary = direct[0]
+		} else if len(adjacent) > 0 {
+			primary = adjacent[0]
+		}
+	}
+	return score, primary
+}
+
+func boundaryCandidateReason(kind string, direct, adjacent, matchedFiles []string, pressure map[string]int, primary string) string {
+	parts := []string{kind + " matched task-relevant repo context"}
+	if len(direct) > 0 {
+		parts = append(parts, "touched boundaries "+strings.Join(direct, ", "))
+	}
+	if len(adjacent) > 0 {
+		parts = append(parts, "adjacent boundaries "+strings.Join(adjacent, ", "))
+	}
+	if len(matchedFiles) > 0 {
+		parts = append(parts, "changed files "+strings.Join(matchedFiles, ", "))
+	}
+	if primary != "" && pressure[primary] > 1 {
+		parts = append(parts, fmt.Sprintf("multiple changed files cluster under %s", primary))
+	}
+	return strings.Join(parts, "; ")
+}
+
+func noteCandidateLess(a, b noteCandidate) bool {
+	if a.score == b.score {
+		if a.item.Title == b.item.Title {
+			return a.item.ID < b.item.ID
+		}
+		return a.item.Title < b.item.Title
+	}
+	return a.score > b.score
+}
+
+func readAnchorContent(projectDir, anchorPath string) string {
+	projectDir = strings.TrimSpace(projectDir)
+	anchorPath = filepath.FromSlash(strings.TrimSpace(anchorPath))
+	if projectDir == "" || anchorPath == "" {
+		return ""
+	}
+	body, err := os.ReadFile(filepath.Join(projectDir, anchorPath))
+	if err != nil {
+		return ""
+	}
+	return strings.ReplaceAll(string(body), "\r\n", "\n")
 }
 
 func isDurableNotePath(path string) bool {

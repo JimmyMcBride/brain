@@ -121,13 +121,26 @@ func TestCollectDerivesChangedFilesTouchedBoundariesAndNearbyTests(t *testing.T)
 				Head:      baseline,
 			},
 		},
-		StructuralSnapshot: &structure.Snapshot{
-			Boundaries: []structure.Item{
-				{Kind: "boundary", Path: "internal/search/", Label: "internal/search", Role: "library"},
-				{Kind: "boundary", Path: "config/", Label: "config", Role: "config"},
-			},
-			TestSurfaces: []structure.Item{
-				{Kind: "test_surface", Path: "internal/search/search_test.go", Label: "search tests", Role: "tests"},
+		BoundaryGraph: &structure.BoundaryGraph{
+			Boundaries: []structure.BoundaryRecord{
+				{
+					ID:                 "internal/search",
+					Label:              "internal/search",
+					Role:               "library",
+					RootPath:           "internal/search/",
+					Files:              []string{"internal/search/search.go", "internal/search/search_test.go"},
+					OwnedTests:         []string{"internal/search/search_test.go"},
+					AdjacentBoundaries: []string{"config"},
+					Responsibilities:   []string{"Search implementation"},
+				},
+				{
+					ID:               "config",
+					Label:            "config",
+					Role:             "config",
+					RootPath:         "config/",
+					Files:            []string{"config/search.yaml"},
+					Responsibilities: []string{"Search configuration"},
+				},
 			},
 		},
 	})
@@ -149,6 +162,9 @@ func TestCollectDerivesChangedFilesTouchedBoundariesAndNearbyTests(t *testing.T)
 	}
 	if len(packet.Worktree.TouchedBoundaries) < 2 {
 		t.Fatalf("expected touched boundary: %#v", packet.Worktree.TouchedBoundaries)
+	}
+	if packet.Worktree.TouchedBoundaries[0].Responsibilities == nil {
+		t.Fatalf("expected responsibilities on touched boundaries: %#v", packet.Worktree.TouchedBoundaries)
 	}
 	if len(packet.NearbyTests) == 0 || packet.NearbyTests[0].Path != "internal/search/search_test.go" {
 		t.Fatalf("expected nearby test: %#v", packet.NearbyTests)
@@ -214,12 +230,17 @@ func TestCollectAddsVerificationProfilesAndStrongMatchPolicyHints(t *testing.T) 
 				},
 			},
 		},
-		StructuralSnapshot: &structure.Snapshot{
-			Boundaries: []structure.Item{
-				{Kind: "boundary", Path: "internal/search/", Label: "internal/search", Role: "library"},
-			},
-			TestSurfaces: []structure.Item{
-				{Kind: "test_surface", Path: "internal/search/search_test.go", Label: "search tests", Role: "tests"},
+		BoundaryGraph: &structure.BoundaryGraph{
+			Boundaries: []structure.BoundaryRecord{
+				{
+					ID:               "internal/search",
+					Label:            "internal/search",
+					Role:             "library",
+					RootPath:         "internal/search/",
+					Files:            []string{"internal/search/search.go", "internal/search/search_test.go"},
+					OwnedTests:       []string{"internal/search/search_test.go"},
+					Responsibilities: []string{"Search implementation"},
+				},
 			},
 		},
 	})

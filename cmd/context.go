@@ -172,17 +172,21 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 			if err != nil {
 				return err
 			}
+			boundaryGraph, err := appCtx.Structure.BoundaryGraph(cmd.Context())
+			if err != nil {
+				return err
+			}
 			structuralItems := append([]structure.Item{}, structureSnapshot.Boundaries...)
 			structuralItems = append(structuralItems, structureSnapshot.Entrypoints...)
 			structuralItems = append(structuralItems, structureSnapshot.ConfigSurfaces...)
 			structuralItems = append(structuralItems, structureSnapshot.TestSurfaces...)
 			livePacket, err := appCtx.Live.Collect(cmd.Context(), livecontext.Request{
-				ProjectDir:         projectRoot,
-				Task:               resolvedTask,
-				TaskSource:         taskSource,
-				Session:            active,
-				StructuralSnapshot: structureSnapshot,
-				Explain:            assembleExplain,
+				ProjectDir:    projectRoot,
+				Task:          resolvedTask,
+				TaskSource:    taskSource,
+				Session:       active,
+				BoundaryGraph: boundaryGraph,
+				Explain:       assembleExplain,
 			})
 			if err != nil {
 				return err
@@ -246,16 +250,16 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 			if err != nil {
 				return err
 			}
-			structureSnapshot, err := appCtx.Structure.Snapshot(cmd.Context(), "")
+			boundaryGraph, err := appCtx.Structure.BoundaryGraph(cmd.Context())
 			if err != nil {
 				return err
 			}
 			livePacket, err := appCtx.Live.Collect(cmd.Context(), livecontext.Request{
-				ProjectDir:         projectRoot,
-				Task:               resolvedTask,
-				TaskSource:         taskSource,
-				Session:            active,
-				StructuralSnapshot: structureSnapshot,
+				ProjectDir:    projectRoot,
+				Task:          resolvedTask,
+				TaskSource:    taskSource,
+				Session:       active,
+				BoundaryGraph: boundaryGraph,
 			})
 			if err != nil {
 				return err
@@ -268,6 +272,7 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 				TaskSource:    taskSource,
 				SearchResults: searchResults,
 				LivePacket:    livePacket,
+				BoundaryGraph: boundaryGraph,
 			})
 			if err != nil {
 				return err
@@ -358,18 +363,18 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 			if resolvedTask == "" {
 				return errors.New("context live requires --task or an active session task")
 			}
-			structureSnapshot, err := appCtx.Structure.Snapshot(cmd.Context(), "")
+			boundaryGraph, err := appCtx.Structure.BoundaryGraph(cmd.Context())
 			if err != nil {
 				return err
 			}
 
 			packet, err := appCtx.Live.Collect(cmd.Context(), livecontext.Request{
-				ProjectDir:         projectRoot,
-				Task:               resolvedTask,
-				TaskSource:         taskSource,
-				Session:            active,
-				StructuralSnapshot: structureSnapshot,
-				Explain:            liveExplain,
+				ProjectDir:    projectRoot,
+				Task:          resolvedTask,
+				TaskSource:    taskSource,
+				Session:       active,
+				BoundaryGraph: boundaryGraph,
+				Explain:       liveExplain,
 			})
 			if err != nil {
 				return err

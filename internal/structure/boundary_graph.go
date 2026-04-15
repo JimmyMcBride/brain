@@ -39,6 +39,7 @@ func (g *BoundaryGraph) BoundaryByID(id string) *BoundaryRecord {
 	if g == nil {
 		return nil
 	}
+	g.ensureIndexes()
 	return g.byID[strings.TrimSpace(id)]
 }
 
@@ -46,11 +47,12 @@ func (g *BoundaryGraph) BoundaryForFile(path string) *BoundaryRecord {
 	if g == nil {
 		return nil
 	}
-	id, ok := g.fileToBoundary[filepath.ToSlash(strings.TrimSpace(path))]
-	if !ok {
-		return nil
+	g.ensureIndexes()
+	path = filepath.ToSlash(strings.TrimSpace(path))
+	if id, ok := g.fileToBoundary[path]; ok {
+		return g.byID[id]
 	}
-	return g.byID[id]
+	return g.boundaryForPath(path)
 }
 
 func buildBoundaryGraph(root string, snapshot *Snapshot) (*BoundaryGraph, error) {
@@ -124,6 +126,25 @@ func buildBoundaryGraph(root string, snapshot *Snapshot) (*BoundaryGraph, error)
 		record.Responsibilities = dedupeSortedStrings(record.Responsibilities)
 	}
 	return graph, nil
+}
+
+func (g *BoundaryGraph) ensureIndexes() {
+	if g.byID == nil {
+		g.byID = map[string]*BoundaryRecord{}
+		for i := range g.Boundaries {
+			record := &g.Boundaries[i]
+			g.byID[record.ID] = record
+		}
+	}
+	if g.fileToBoundary == nil {
+		g.fileToBoundary = map[string]string{}
+		for i := range g.Boundaries {
+			record := &g.Boundaries[i]
+			for _, file := range record.Files {
+				g.fileToBoundary[filepath.ToSlash(strings.TrimSpace(file))] = record.ID
+			}
+		}
+	}
 }
 
 func (g *BoundaryGraph) boundaryForPath(path string) *BoundaryRecord {

@@ -10,6 +10,7 @@ import (
 	"brain/internal/livecontext"
 	"brain/internal/projectcontext"
 	"brain/internal/search"
+	"brain/internal/structure"
 )
 
 func TestCompileRequiresTask(t *testing.T) {
@@ -32,8 +33,8 @@ func TestCompileBuildsDeterministicPacket(t *testing.T) {
 		Task:       "tighten context compile output",
 		TaskSource: "flag",
 		SearchResults: []search.Result{
-			{NotePath: "docs/context-compiler.md", NoteTitle: "Context Compiler", Heading: "Packet", Snippet: "Compiler packet output should stay small and deterministic.", NoteType: "doc", Score: 0.91},
-			{NotePath: ".brain/resources/changes/packet-notes.md", NoteTitle: "Packet Notes", Heading: "Observations", Snippet: "Keep provenance visible for packet items.", NoteType: "brain", Score: 0.87},
+			{NotePath: "docs/context-compiler.md", NoteTitle: "Context Compiler", Heading: "Packet", Snippet: "Compiler packet output for internal/taskcontext should stay small and deterministic around cmd/context.go.", NoteType: "doc", Score: 0.91},
+			{NotePath: ".brain/resources/changes/packet-notes.md", NoteTitle: "Packet Notes", Heading: "Observations", Snippet: "Keep provenance visible for packet items touching internal/taskcontext and internal/livecontext.", NoteType: "brain", Score: 0.87},
 			{NotePath: ".brain/context/overview.md", NoteTitle: "Overview", Heading: "", Snippet: "Generated overview that should stay out of durable note selection.", NoteType: "generated", Score: 0.89},
 			{NotePath: "AGENTS.md", NoteTitle: "Project Agent Contract", Heading: "Required Workflow", Snippet: "Workflow contract.", NoteType: "contract", Score: 0.99},
 		},
@@ -41,9 +42,17 @@ func TestCompileBuildsDeterministicPacket(t *testing.T) {
 			Worktree: livecontext.WorktreeInfo{
 				ChangedFiles: []livecontext.ChangedFile{
 					{Path: "cmd/context.go", Status: "modified", Source: "worktree", Why: "current worktree change for the compile command"},
+					{Path: "internal/taskcontext/manager.go", Status: "modified", Source: "worktree", Why: "boundary-aware compiler selection is under active edit"},
 				},
 				TouchedBoundaries: []livecontext.TouchedBoundary{
-					{Path: "internal/taskcontext/", Label: "internal/taskcontext", Role: "library", Why: "changed files map to the compiler package"},
+					{
+						Path:               "internal/taskcontext/",
+						Label:              "internal/taskcontext",
+						Role:               "library",
+						Why:                "changed files map to the compiler package",
+						AdjacentBoundaries: []string{"internal/livecontext"},
+						Responsibilities:   []string{"Compile summary-first context packets"},
+					},
 				},
 			},
 			NearbyTests: []livecontext.NearbyTest{
@@ -60,6 +69,37 @@ func TestCompileBuildsDeterministicPacket(t *testing.T) {
 			},
 			Ambiguities: []string{"task spans more than one context surface"},
 		},
+		BoundaryGraph: &structure.BoundaryGraph{
+			Boundaries: []structure.BoundaryRecord{
+				{
+					ID:                 "internal/taskcontext",
+					Label:              "internal/taskcontext",
+					Role:               "library",
+					RootPath:           "internal/taskcontext/",
+					Files:              []string{"internal/taskcontext/manager.go", "internal/taskcontext/manager_test.go"},
+					OwnedTests:         []string{"internal/taskcontext/manager_test.go"},
+					AdjacentBoundaries: []string{"internal/livecontext"},
+					Responsibilities:   []string{"Compile summary-first context packets"},
+				},
+				{
+					ID:               "internal/livecontext",
+					Label:            "internal/livecontext",
+					Role:             "library",
+					RootPath:         "internal/livecontext/",
+					Files:            []string{"internal/livecontext/manager.go", "internal/livecontext/manager_test.go"},
+					OwnedTests:       []string{"internal/livecontext/manager_test.go"},
+					Responsibilities: []string{"Collect live work signals"},
+				},
+				{
+					ID:               "cmd",
+					Label:            "cmd",
+					Role:             "application",
+					RootPath:         "cmd/",
+					Files:            []string{"cmd/context.go"},
+					Responsibilities: []string{"CLI entrypoints"},
+				},
+			},
+		},
 	}
 
 	packet, err := manager.Compile(req)
@@ -72,11 +112,21 @@ func TestCompileBuildsDeterministicPacket(t *testing.T) {
 	if got, want := len(packet.BaseContract), 5; got != want {
 		t.Fatalf("unexpected base contract count: got=%d want=%d", got, want)
 	}
-	if len(packet.WorkingSet.Files) != 1 || len(packet.WorkingSet.Boundaries) != 1 || len(packet.WorkingSet.Tests) != 1 {
+	if len(packet.WorkingSet.Files) < 1 || len(packet.WorkingSet.Boundaries) != 1 || len(packet.WorkingSet.Tests) != 1 {
 		t.Fatalf("expected first-wave live-work groups to be populated: %#v", packet.WorkingSet)
 	}
-	if got, want := len(packet.WorkingSet.Notes), 2; got != want {
-		t.Fatalf("expected durable note selection to exclude AGENTS.md and keep two notes: got=%d want=%d", got, want)
+	if got := len(packet.WorkingSet.Notes); got < 2 {
+		t.Fatalf("expected boundary-aware note selection plus lexical fallback to keep at least two notes: got=%d packet=%#v", got, packet.WorkingSet.Notes)
+	}
+	hasBoundaryLinkedNote := false
+	for _, item := range packet.WorkingSet.Notes {
+		if len(item.Boundaries) > 0 {
+			hasBoundaryLinkedNote = true
+			break
+		}
+	}
+	if !hasBoundaryLinkedNote {
+		t.Fatalf("expected boundary-linked note selection: %#v", packet.WorkingSet.Notes)
 	}
 	if len(packet.Verification) != 3 {
 		t.Fatalf("expected verification hints from profiles and policy hints: %#v", packet.Verification)
@@ -120,7 +170,14 @@ func TestRenderHumanIncludesCompilerSections(t *testing.T) {
 				{Path: "cmd/context.go", Status: "modified", Source: "worktree", Reason: "current worktree change"},
 			},
 			Boundaries: []projectcontext.CompiledBoundary{
-				{Path: "internal/taskcontext/", Label: "internal/taskcontext", Role: "library", Reason: "changed files map to the compiler package"},
+				{
+					Path:               "internal/taskcontext/",
+					Label:              "internal/taskcontext",
+					Role:               "library",
+					Reason:             "changed files map to the compiler package",
+					AdjacentBoundaries: []string{"internal/livecontext"},
+					Responsibilities:   []string{"Compile summary-first context packets"},
+				},
 			},
 			Tests: []projectcontext.CompiledTest{
 				{Path: "internal/taskcontext/manager_test.go", Relation: "same_dir", Reason: "test surface adjacent to compiler code"},
