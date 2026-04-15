@@ -37,10 +37,11 @@ If the current repository has Brain context, use the repo-local Brain docs first
 When starting work in a repo that uses Brain:
 
 1. Run `brain doctor`.
-2. Read `index_freshness` in `brain doctor` when retrieval matters.
-3. Run `brain find <project>` or `brain search "<project> <task>"` when project memory matters.
-4. Use `brain search status` before retrieval debugging so you know whether the local index is `fresh`, `stale`, or `missing`.
-5. Read the repo contract and relevant docs before substantial work.
+2. Read `project_migrations` in `brain doctor` when the repo may be older or was just upgraded.
+3. Read `index_freshness` in `brain doctor` when retrieval matters.
+4. Run `brain find <project>` or `brain search "<project> <task>"` when project memory matters.
+5. Use `brain search status` before retrieval debugging so you know whether the local index is `fresh`, `stale`, or `missing`.
+6. Read the repo contract and relevant docs before substantial work.
 
 ## Command Guide
 
@@ -49,7 +50,9 @@ Use these commands by default:
 - `brain init --project .`
   - Create the local Brain workspace for a project.
 - `brain doctor --project .`
-  - Validate the local workspace, sqlite state, and embedder configuration.
+  - Validate the local workspace, sqlite state, project migration state, and embedder configuration.
+- `brain update --project .`
+  - Update the Brain binary, refresh already-installed Brain skills, and apply pending project migrations for the current Brain repo.
 - `brain read <path>`
   - Read a managed markdown note.
 - `brain edit <path> ...`
@@ -122,6 +125,12 @@ Use these commands by default:
 - Do not create sidecar memory systems when Brain already owns the workflow.
 - Prefer updating an existing durable note over creating duplicates.
 - Use human-readable filenames and titles.
+
+## Upgrade Workflow
+
+- `brain update` refreshes already-installed global Brain skills, already-installed local Brain skills inside the current `--project`, and pending project migrations for the current Brain repo.
+- Other Brain repos repair local Brain skills and apply pending project migrations lazily the next time app-backed Brain commands run there.
+- If automatic project migration fails, run `brain doctor --project .`; then `brain context refresh --project .`; run `brain adopt --project .` if existing local agent files still need their Brain-managed integration block refreshed or migrated.
 
 ## Retrieval Workflow
 

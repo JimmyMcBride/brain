@@ -58,10 +58,25 @@ Default roots:
 
 Installed skills include a generated `.brain-skill-manifest.json` file beside `SKILL.md`. Brain uses that manifest to detect stale or legacy installs and repair local project skills before work begins.
 
-When a repo change updates Brain's command surface or agent-facing workflow guidance, update `skills/brain/SKILL.md` in the same branch, validate the bundled skill with the current branch binary, and reinstall the local Brain skill for Codex and OpenClaw before closing the work:
+`brain update` also applies pending project soft migrations for the current `--project` when that repo already uses Brain. Other Brain repos repair local skills and apply pending project migrations lazily the next time Brain runs there.
+
+Use `brain doctor --project .` to inspect whether project migrations are `current`, `pending`, or `broken`.
+
+If an automatic project migration fails, run these from the project root:
+
+```bash
+brain doctor --project .
+brain context refresh --project .
+brain adopt --project .
+```
+
+Use `brain adopt --project .` when existing local agent instruction files still need their Brain-managed integration block refreshed or migrated.
+
+When a repo change updates Brain's command surface, agent-facing workflow guidance, or automatic project-upgrade behavior, update `skills/brain/SKILL.md` in the same branch, validate the bundled skill and migration path with the current branch binary, and reinstall the local Brain skill for Codex and OpenClaw before closing the work:
 
 ```bash
 go run . skills install --scope local --agent codex --agent openclaw --project .
+go run . context migrate --project ../older-brain-repo
 ```
 
 Then reinstall or refresh with the installed binary:

@@ -5,7 +5,7 @@ project: brain
 status: draft
 title: Release, Install, And Update Flow Spec
 type: spec
-updated: "2026-04-15T23:40:00Z"
+updated: "2026-04-16T00:16:00Z"
 ---
 # Release, Install, And Update Flow Spec
 
@@ -17,7 +17,7 @@ Brain skills, Brain binaries, and Brain-managed project context must stay versio
 
 ## Problem
 
-The old `brain skills` flow resolved `skills/brain` from the current working directory, did not refresh installed skills during `brain update`, and allowed symlinked installs that could drift away from the installed binary. Existing Brain repos also rely on generated context and agent integration surfaces that evolve over time, but there is no automatic project soft-migration path today.
+Binary updates, installed skills, and Brain-managed project context all evolve together. If any one of those surfaces drifts, agents keep stale workflow guidance and older Brain repos silently lag the current command surface. Brain now needs one explicit lifecycle that owns binary install, skill refresh, automatic project soft migrations, observability, and maintainer validation from a branch-built binary.
 
 ## Goals
 
@@ -134,3 +134,4 @@ The old `brain skills` flow resolved `skills/brain` from the current working dir
 
 - Use the running binary as the source of truth for installed Brain skill content. Unreleased skill changes should be validated with `go run .` or another branch-built binary instead of relying on the repo checkout path.
 - Use the project migration ledger as the source of truth for soft repo upgrades. Do not overload the skill manifest for project migration state, because skill freshness and project migration state have different lifecycles.
+- When a branch changes automatic project-upgrade behavior, validate that migration path from the branch-built binary against a representative older Brain repo before merge, just like unreleased Brain skill changes are validated from the current branch binary.

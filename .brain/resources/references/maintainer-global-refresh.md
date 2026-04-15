@@ -16,13 +16,25 @@ Default maintainer flow: work on a feature branch, open a PR, merge to `main`, w
 2. Finish the feature, bug fix, or doc change on that branch.
 3. Record any durable note updates in repo memory.
 4. Run required verification through `brain session run -- <command>`.
-5. Commit the branch changes.
-6. Open a PR into `main`.
+5. If the branch changed automatic project-upgrade behavior, validate it from the branch-built binary against a representative older Brain repo before you commit or merge:
+
+```bash
+go run . context migrate --project ../older-brain-repo
+```
+
+6. If the branch changed `skills/brain/` or other agent-facing workflow guidance, validate the bundled skill from the branch-built binary too:
+
+```bash
+go run . skills install --scope local --agent codex --agent openclaw --project .
+```
+
+7. Commit the branch changes.
+8. Open a PR into `main`.
    - Write the PR title and body in release-note language because GitHub release notes are generated from merged PR metadata.
    - Summarize shipped behavior in human-readable bullets, not just implementation steps or internal refactors.
-7. Review and merge the PR.
-8. Wait for the automatic stable release workflow to tag and publish the new version from that merge commit on `main`.
-9. Refresh the installed binary and global Codex skill:
+9. Review and merge the PR.
+10. Wait for the automatic stable release workflow to tag and publish the new version from that merge commit on `main`.
+11. Refresh the installed binary and global Codex skill:
 
 Unix shell:
 
@@ -36,7 +48,7 @@ Windows PowerShell:
 .\scripts\refresh-global-brain.ps1
 ```
 
-10. Verify:
+12. Verify:
    - Unix: `~/.local/bin/brain version` shows the pushed commit
    - Windows: `%LocalAppData%\Programs\brain\brain.exe version` shows the pushed commit
    - the installed global Codex `brain` skill matches `skills/brain/`

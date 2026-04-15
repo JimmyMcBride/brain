@@ -3,10 +3,10 @@ created: "2026-04-15T23:34:00Z"
 epic: release-install-and-update-flow
 project: brain
 spec: release-install-and-update-flow
-status: todo
+status: done
 title: Teach Docs And The Brain Skill About Automatic Project Upgrades
 type: story
-updated: "2026-04-15T23:34:00Z"
+updated: "2026-04-16T00:24:00Z"
 ---
 # Teach Docs And The Brain Skill About Automatic Project Upgrades
 
@@ -19,10 +19,10 @@ Update the user-facing guidance so Brain explains that project soft migrations h
 
 ## Acceptance Criteria
 
-- [ ] `docs/usage.md`, `docs/skills.md`, and any affected workflow docs explain automatic project migration for the current `--project` during `brain update` and lazy migration in other repos
-- [ ] `skills/brain/SKILL.md` teaches the new upgrade behavior and the remediation path when an automatic project migration fails
-- [ ] Maintainer workflow notes cover validating project migrations from a branch-built binary in the same way local skill bundle changes are validated
-- [ ] The release/install/update planning notes are refreshed in the same branch so the documented lifecycle matches the implementation
+- [x] `docs/usage.md`, `docs/skills.md`, and any affected workflow docs explain automatic project migration for the current `--project` during `brain update` and lazy migration in other repos
+- [x] `skills/brain/SKILL.md` teaches the new upgrade behavior and the remediation path when an automatic project migration fails
+- [x] Maintainer workflow notes cover validating project migrations from a branch-built binary in the same way local skill bundle changes are validated
+- [x] The release/install/update planning notes are refreshed in the same branch so the documented lifecycle matches the implementation
 
 
 ## Resources

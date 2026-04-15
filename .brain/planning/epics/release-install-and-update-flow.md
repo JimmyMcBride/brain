@@ -4,7 +4,7 @@ project: brain
 spec: release-install-and-update-flow
 title: Release, Install, And Update Flow
 type: epic
-updated: "2026-04-15T23:40:00Z"
+updated: "2026-04-16T00:16:00Z"
 ---
 # Release, Install, And Update Flow
 
@@ -35,6 +35,7 @@ Own the entire Brain binary, Brain skill, and Brain project soft-migration lifec
 - Existing Brain repos in other directories should not require a machine-wide registry either; pending soft migrations should apply lazily the next time Brain runs there.
 - Installed skills should never be symlinked because the binary and skill content must move together across updates.
 - Automatic project migration should stay constrained to Brain-managed surfaces and existing agent integration files. It should not create missing agent files or mutate unrelated docs.
+- Maintainers should validate automatic project-upgrade changes from a branch-built binary against a representative older Brain repo before merge, just like unreleased Brain skill changes are validated from the current branch binary.
 
 ## Spec
 

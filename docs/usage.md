@@ -232,6 +232,8 @@ brain adopt --project . --agent codex
 
 `adopt` scans for existing local agent instruction files such as `.codex/AGENTS.md`, `.claude/CLAUDE.md`, or `.pi/AGENTS.md` and appends or updates a Brain-managed section inside them while preserving the rest of the file. `adopt --agent ...` is the explicit path that may create a missing agent instruction file, and unsupported agent names are rejected instead of creating ad hoc paths.
 
+These same managed refresh and adopt paths are the fallback repair tools behind automatic project upgrades.
+
 ## Sessions
 
 Use sessions when the repo should require explicit verification and durable note updates.
@@ -305,4 +307,31 @@ On Windows, `brain update` uses the same release assets and default install targ
 
 By default, `brain update` tracks the latest stable GitHub release published from `main`.
 
-When you run `brain update`, Brain refreshes any already-installed global Brain skills plus any local Brain skills inside the current `--project`. Other project-local installs repair themselves lazily the next time Brain runs in those repos.
+When you run `brain update`, Brain refreshes any already-installed global Brain skills plus any local Brain skills inside the current `--project`.
+
+If the current `--project` already uses Brain, `brain update` also applies any pending soft project migrations for Brain-managed context files and existing Brain agent integrations in that repo.
+
+`brain update --check` stays read-only. It does not refresh skills or apply project migrations.
+
+Other Brain repos repair themselves lazily the next time Brain runs there:
+
+- local Brain skills repair before app-backed project work begins
+- pending project migrations apply before app-backed project work begins
+
+Use `brain doctor --project .` to inspect whether project migrations are `current`, `pending`, or `broken`.
+
+If an automatic project migration fails, run these from the project root:
+
+```bash
+brain doctor --project .
+brain context refresh --project .
+brain adopt --project .
+```
+
+Use `brain adopt --project .` when existing local agent instruction files still need their Brain-managed integration block refreshed or migrated.
+
+When a branch changes Brain's automatic project-upgrade behavior, validate that migration path from the branch-built binary before merge:
+
+```bash
+go run . context migrate --project ../older-brain-repo
+```
