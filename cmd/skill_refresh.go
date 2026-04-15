@@ -17,6 +17,11 @@ type skillRefreshResult struct {
 	RefreshedSkills    []skills.InstallResult `json:"refreshed_skills,omitempty"`
 }
 
+type projectMigrationStatusResult struct {
+	ProjectMigrationStatus   string   `json:"project_migration_status,omitempty"`
+	AppliedProjectMigrations []string `json:"applied_project_migrations,omitempty"`
+}
+
 var skillInstallRunner = runSkillInstall
 var projectMigrationRunner = runProjectMigration
 
@@ -102,9 +107,26 @@ func applyProjectMigrationsIfNeeded(projectPath string) error {
 		return nil
 	}
 	if _, err := manager.ApplyProjectMigrations(context.Background(), projectPath); err != nil {
-		return fmt.Errorf("apply project migrations for %s: %w", projectPath, err)
+		return fmt.Errorf("project migrations blocked for %s: %w. Remediation: from the project root run `brain doctor --project .`; then `brain context refresh --project .`; run `brain adopt --project .` if local agent files still need Brain integration", projectPath, err)
 	}
 	return nil
+}
+
+func summarizeProjectMigrationResult(result *projectcontext.ApplyProjectMigrationsResult) projectMigrationStatusResult {
+	if result == nil || !result.UsesBrain {
+		return projectMigrationStatusResult{}
+	}
+	status := "not_needed"
+	switch result.Status {
+	case "applied":
+		status = "applied"
+	case "failed":
+		status = "failed"
+	}
+	return projectMigrationStatusResult{
+		ProjectMigrationStatus:   status,
+		AppliedProjectMigrations: append([]string(nil), result.AppliedMigrationIDs...),
+	}
 }
 
 func runSkillInstall(binaryPath, configPath, projectPath string, scope skills.Scope, agents []string) ([]skills.InstallResult, error) {

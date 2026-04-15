@@ -27,6 +27,7 @@ const (
 	projectMigrationPlanNotBrainProject = "not_brain_project"
 	projectMigrationPlanPending         = "pending"
 	projectMigrationPlanCurrent         = "current"
+	projectMigrationPlanBroken          = "broken"
 )
 
 type ProjectMigrationDefinition struct {
@@ -63,10 +64,12 @@ type ProjectMigrationPlan struct {
 	UsesBrain         bool                         `json:"uses_brain"`
 	Status            string                       `json:"status"`
 	StateStatus       string                       `json:"state_status,omitempty"`
+	BrokenReason      string                       `json:"broken_reason,omitempty"`
 	NeedsStateWrite   bool                         `json:"needs_state_write,omitempty"`
 	KnownMigrations   []ProjectMigrationDefinition `json:"known_migrations"`
 	PendingMigrations []ProjectMigrationDefinition `json:"pending_migrations,omitempty"`
 	AppliedMigrations []AppliedProjectMigration    `json:"applied_migrations,omitempty"`
+	LastRun           *ProjectMigrationRun         `json:"last_run,omitempty"`
 }
 
 type ProjectMigrationResult struct {
@@ -193,6 +196,7 @@ func (m *Manager) PlanProjectMigrations(projectDir string) (*ProjectMigrationPla
 	}
 	plan.StateStatus = stateStatus
 	plan.AppliedMigrations = append([]AppliedProjectMigration(nil), state.Applied...)
+	plan.LastRun = cloneProjectMigrationRun(state.LastRun)
 	plan.NeedsStateWrite = stateStatus == projectMigrationStateMissing || stateStatus == projectMigrationStateInvalid
 
 	applied := make(map[string]struct{}, len(state.Applied))
@@ -210,9 +214,20 @@ func (m *Manager) PlanProjectMigrations(projectDir string) (*ProjectMigrationPla
 		plan.PendingMigrations = append(plan.PendingMigrations, migration)
 	}
 
-	plan.Status = projectMigrationPlanCurrent
-	if len(plan.PendingMigrations) != 0 {
+	switch {
+	case stateStatus == projectMigrationStateInvalid:
+		plan.Status = projectMigrationPlanBroken
+		plan.BrokenReason = "invalid project migration ledger"
+	case state.LastRun != nil && strings.EqualFold(strings.TrimSpace(state.LastRun.Status), "failed"):
+		plan.Status = projectMigrationPlanBroken
+		plan.BrokenReason = "last migration run failed"
+		if msg := strings.TrimSpace(state.LastRun.Error); msg != "" {
+			plan.BrokenReason += ": " + msg
+		}
+	case len(plan.PendingMigrations) != 0:
 		plan.Status = projectMigrationPlanPending
+	default:
+		plan.Status = projectMigrationPlanCurrent
 	}
 	return plan, nil
 }
@@ -368,6 +383,16 @@ func compactStrings(values []string) []string {
 		return nil
 	}
 	return out
+}
+
+func cloneProjectMigrationRun(run *ProjectMigrationRun) *ProjectMigrationRun {
+	if run == nil {
+		return nil
+	}
+	cloned := *run
+	cloned.PlannedIDs = append([]string(nil), run.PlannedIDs...)
+	cloned.AppliedIDs = append([]string(nil), run.AppliedIDs...)
+	return &cloned
 }
 
 func migrationChanged(results []Result) bool {

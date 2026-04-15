@@ -33,6 +33,8 @@ This file is a deterministic snapshot of the repository state at the last refres
 
 Add repo-specific notes here. `brain context refresh` preserves content outside managed blocks.
 
+- 2026-04-15: Surfaced automatic project-migration health everywhere Brain already reports upgrade state. `brain update` now emits project migration status plus applied migration ids in human and JSON output for Brain repos, lazy preflight migration failures block work with remediation that points to `brain doctor`, `brain context refresh --project .`, and `brain adopt --project .`, and `brain doctor` now reports project migrations as `current`, `pending`, or `broken` using the same repo-local migration planner state.
+
 - 2026-04-15: Wired project soft migrations into the actual Brain command lifecycle. `brain update` now runs project migrations for the current `--project` after binary install and skill refresh by invoking the freshly selected binary through a hidden `brain context migrate` command, `brain update --check` stays read-only, and normal app-backed commands now run one per-process project-repair preflight that repairs local Brain skills and applies pending project migrations lazily for older Brain repos while skipping bootstrap-only or mutation-free top-level commands.
 
 - 2026-04-15: Implemented the first-wave automatic soft project migrations in `internal/projectcontext/`. Brain now has an idempotent project-migration runner that reuses the managed-context refresh path plus existing-agent integration sync, applies named migration ids into the new repo-local ledger, refreshes stale Brain-managed docs, migrates legacy agent wrapper blocks in place, leaves unmanaged agent files alone, and reports clean `unchanged` behavior on reruns once a repo is current.

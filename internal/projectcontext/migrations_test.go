@@ -74,11 +74,45 @@ func TestPlanProjectMigrationsTreatsInvalidLedgerAsRecoverable(t *testing.T) {
 	if !plan.NeedsStateWrite {
 		t.Fatal("expected invalid ledger to need rewrite")
 	}
-	if plan.Status != projectMigrationPlanPending {
+	if plan.Status != projectMigrationPlanBroken {
 		t.Fatalf("unexpected plan status: %s", plan.Status)
+	}
+	if !strings.Contains(plan.BrokenReason, "invalid project migration ledger") {
+		t.Fatalf("unexpected broken reason: %s", plan.BrokenReason)
 	}
 	if len(plan.PendingMigrations) != len(KnownProjectMigrations()) {
 		t.Fatalf("expected all migrations pending after invalid ledger, got=%d", len(plan.PendingMigrations))
+	}
+}
+
+func TestPlanProjectMigrationsReportsBrokenAfterFailedRun(t *testing.T) {
+	project := newBrainProjectForMigrations(t)
+	manager := New(t.TempDir())
+	state := ProjectMigrationState{
+		LastRun: NewProjectMigrationRun(
+			"failed",
+			[]string{"refresh-brain-managed-context-v1"},
+			nil,
+			time.Unix(0, 0),
+			context.DeadlineExceeded,
+		),
+	}
+	if err := manager.SaveProjectMigrationState(project, state); err != nil {
+		t.Fatal(err)
+	}
+
+	plan, err := manager.PlanProjectMigrations(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Status != projectMigrationPlanBroken {
+		t.Fatalf("unexpected plan status: %s", plan.Status)
+	}
+	if !strings.Contains(plan.BrokenReason, "last migration run failed") {
+		t.Fatalf("unexpected broken reason: %s", plan.BrokenReason)
+	}
+	if plan.LastRun == nil || plan.LastRun.Status != "failed" {
+		t.Fatalf("expected failed last run to be preserved: %+v", plan.LastRun)
 	}
 }
 

@@ -1567,8 +1567,10 @@ func TestCLIUpdateRefreshesInstalledSkills(t *testing.T) {
 	projectMigrationRunner = func(binaryPath, configPath, projectPath string) (*projectcontext.ApplyProjectMigrationsResult, error) {
 		migrationCalls = append(migrationCalls, binaryPath+":"+projectPath)
 		return &projectcontext.ApplyProjectMigrationsResult{
-			ProjectDir: projectPath,
-			Status:     "applied",
+			UsesBrain:           true,
+			ProjectDir:          projectPath,
+			Status:              "applied",
+			AppliedMigrationIDs: []string{"refresh-brain-managed-context-v1", "refresh-existing-agent-integrations-v1"},
 		}, nil
 	}
 
@@ -1576,11 +1578,54 @@ func TestCLIUpdateRefreshesInstalledSkills(t *testing.T) {
 	if !strings.Contains(output, "skills:  refreshed") {
 		t.Fatalf("expected skill refresh output:\n%s", output)
 	}
+	if !strings.Contains(output, "project migrations: applied") || !strings.Contains(output, "migration: refresh-brain-managed-context-v1") {
+		t.Fatalf("expected project migration output:\n%s", output)
+	}
 	if len(calls) != 2 || calls[0] != "global:codex" || calls[1] != "local:copilot" {
 		t.Fatalf("unexpected refresh calls: %v", calls)
 	}
 	if len(migrationCalls) != 1 || migrationCalls[0] != filepath.Join(env.root, "bin", "brain")+":"+env.project {
 		t.Fatalf("unexpected migration calls: %v", migrationCalls)
+	}
+}
+
+func TestCLIUpdateJSONIncludesProjectMigrationStatus(t *testing.T) {
+	env := newCLIEnv(t)
+	restoreUpdater := newUpdater
+	restoreSkillRunner := skillInstallRunner
+	restoreMigrationRunner := projectMigrationRunner
+	restoreBuild := setCLICommandBuildInfo("v0.1.0", "abc123", "2026-04-10T00:00:00Z")
+	defer func() {
+		newUpdater = restoreUpdater
+		skillInstallRunner = restoreSkillRunner
+		projectMigrationRunner = restoreMigrationRunner
+		restoreBuild()
+	}()
+
+	newUpdater = func(cfg *config.Config, paths config.Paths) updater {
+		return stubUpdater{result: update.Result{
+			CurrentVersion: "v0.1.0",
+			LatestVersion:  "v0.1.0",
+			Status:         "up_to_date",
+			Message:        "already up to date (v0.1.0)",
+			CurrentPath:    filepath.Join(env.root, "bin", "brain"),
+		}}
+	}
+	skillInstallRunner = func(binaryPath, configPath, projectPath string, scope skills.Scope, agents []string) ([]skills.InstallResult, error) {
+		return nil, nil
+	}
+	projectMigrationRunner = func(binaryPath, configPath, projectPath string) (*projectcontext.ApplyProjectMigrationsResult, error) {
+		return &projectcontext.ApplyProjectMigrationsResult{
+			UsesBrain:           true,
+			ProjectDir:          projectPath,
+			Status:              "applied",
+			AppliedMigrationIDs: []string{"refresh-brain-managed-context-v1"},
+		}, nil
+	}
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "update"))
+	if !strings.Contains(jsonOut, "\"project_migration_status\": \"applied\"") || !strings.Contains(jsonOut, "\"applied_project_migrations\": [") {
+		t.Fatalf("expected project migration fields in json output:\n%s", jsonOut)
 	}
 }
 
@@ -1676,6 +1721,37 @@ func TestCLILocalProjectPreflightAppliesPendingMigrations(t *testing.T) {
 	}
 }
 
+func TestCLILocalProjectPreflightReportsMigrationRemediation(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+
+	agentsPath := filepath.Join(env.project, "AGENTS.md")
+	if err := os.Remove(agentsPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(agentsPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ledgerPath := filepath.Join(env.project, ".brain", "state", "project-migrations.json")
+	if err := os.Remove(ledgerPath); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+
+	result := env.run(t, "", "--config", env.config, "--project", env.project, "find", "overview")
+	if result.err == nil || !strings.Contains(result.err.Error(), "project migrations blocked") {
+		t.Fatalf("expected project migration failure with remediation, got err=%v stdout=%s", result.err, result.stdout)
+	}
+	for _, snippet := range []string{
+		"brain doctor --project .",
+		"brain context refresh --project .",
+		"brain adopt --project .",
+	} {
+		if !strings.Contains(result.err.Error(), snippet) {
+			t.Fatalf("expected remediation snippet %q in error: %v", snippet, result.err)
+		}
+	}
+}
+
 func TestCLISkipCommandsDoNotRunMigrationPreflight(t *testing.T) {
 	env := newCLIEnv(t)
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
@@ -1688,6 +1764,31 @@ func TestCLISkipCommandsDoNotRunMigrationPreflight(t *testing.T) {
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "doctor"))
 	if _, err := os.Stat(ledgerPath); !os.IsNotExist(err) {
 		t.Fatalf("expected doctor to skip migration preflight, got err=%v", err)
+	}
+}
+
+func TestCLIDoctorReportsProjectMigrationStatus(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+
+	pending := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "doctor"))
+	if !strings.Contains(pending, "project_migrations: fail (pending") {
+		t.Fatalf("expected pending project migrations in doctor output:\n%s", pending)
+	}
+
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "find", "overview"))
+	current := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "doctor"))
+	if !strings.Contains(current, "project_migrations: ok (current)") {
+		t.Fatalf("expected current project migrations in doctor output:\n%s", current)
+	}
+
+	ledgerPath := filepath.Join(env.project, ".brain", "state", "project-migrations.json")
+	if err := os.WriteFile(ledgerPath, []byte("{not-json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	broken := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "doctor"))
+	if !strings.Contains(broken, "project_migrations: fail (broken") {
+		t.Fatalf("expected broken project migrations in doctor output:\n%s", broken)
 	}
 }
 

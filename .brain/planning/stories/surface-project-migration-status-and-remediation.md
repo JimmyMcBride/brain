@@ -3,10 +3,10 @@ created: "2026-04-15T23:33:00Z"
 epic: release-install-and-update-flow
 project: brain
 spec: release-install-and-update-flow
-status: todo
+status: done
 title: Surface Project Migration Status And Remediation
 type: story
-updated: "2026-04-15T23:33:00Z"
+updated: "2026-04-15T23:58:00Z"
 ---
 # Surface Project Migration Status And Remediation
 
@@ -19,10 +19,10 @@ Expose project migration health in the same places users already inspect Brain u
 
 ## Acceptance Criteria
 
-- [ ] `brain update` human and JSON output include project migration status and the applied migration ids when a current project uses Brain
-- [ ] If the binary update succeeds but project migration fails, Brain returns an explicit partial-success error such as `binary updated, project migration incomplete`
-- [ ] Lazy migration failures block project commands with clear remediation that points users to `brain doctor`, `brain context refresh --project .`, and `brain adopt --project .` as appropriate
-- [ ] `brain doctor` reports whether project migrations are current, pending, or broken for the current repo
+- [x] `brain update` human and JSON output include project migration status and the applied migration ids when a current project uses Brain
+- [x] If the binary update succeeds but project migration fails, Brain returns an explicit partial-success error such as `binary updated, project migration incomplete`
+- [x] Lazy migration failures block project commands with clear remediation that points users to `brain doctor`, `brain context refresh --project .`, and `brain adopt --project .` as appropriate
+- [x] `brain doctor` reports whether project migrations are current, pending, or broken for the current repo
 
 
 ## Resources

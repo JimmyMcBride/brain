@@ -26,6 +26,7 @@ var newUpdater = func(cfg *config.Config, paths config.Paths) updater {
 type updateCommandOutput struct {
 	update.Result
 	skillRefreshResult
+	projectMigrationStatusResult
 }
 
 func addUpdateCommand(root *cobra.Command, flags *rootFlagsState, _ appLoader) {
@@ -71,7 +72,9 @@ func addUpdateCommand(root *cobra.Command, flags *rootFlagsState, _ appLoader) {
 				}
 				out.skillRefreshResult, refreshErr = refreshInstalledSkills(refreshBinary, flags.configPath, projectRoot, globalTargets, localTargets)
 				if refreshErr == nil {
-					_, migrationErr = projectMigrationRunner(refreshBinary, flags.configPath, projectRoot)
+					migrationResult, err := projectMigrationRunner(refreshBinary, flags.configPath, projectRoot)
+					out.projectMigrationStatusResult = summarizeProjectMigrationResult(migrationResult)
+					migrationErr = err
 				}
 			}
 
@@ -130,6 +133,16 @@ func addUpdateCommand(root *cobra.Command, flags *rootFlagsState, _ appLoader) {
 					for _, refreshed := range out.RefreshedSkills {
 						if _, err := fmt.Fprintf(w, "skill:   %s [%s] -> %s\n", refreshed.Agent, refreshed.Scope, refreshed.Path); err != nil {
 							return err
+						}
+					}
+					if out.ProjectMigrationStatus != "" {
+						if _, err := fmt.Fprintf(w, "project migrations: %s\n", out.ProjectMigrationStatus); err != nil {
+							return err
+						}
+						for _, applied := range out.AppliedProjectMigrations {
+							if _, err := fmt.Fprintf(w, "migration: %s\n", applied); err != nil {
+								return err
+							}
 						}
 					}
 				}
