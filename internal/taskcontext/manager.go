@@ -22,20 +22,35 @@ type Manager struct {
 }
 
 type Request struct {
-	ProjectDir    string
-	Task          string
-	TaskSource    string
-	SearchResults []search.Result
-	LivePacket    *livecontext.Packet
-	BoundaryGraph *structure.BoundaryGraph
+	ProjectDir     string
+	Task           string
+	TaskSource     string
+	SearchResults  []search.Result
+	LivePacket     *livecontext.Packet
+	BoundaryGraph  *structure.BoundaryGraph
+	UtilitySignals map[string]ItemUtilitySignal
+}
+
+type ItemUtilitySignal struct {
+	LikelyUtility               string
+	IncludeCount                int
+	ExpandCount                 int
+	SuccessfulVerificationCount int
+	DurableUpdateCount          int
+	UnusedIncludeCount          int
+	UtilityScore                int
+	NoiseScore                  int
+	Reasons                     []string
 }
 
 type noteCandidate struct {
 	item              projectcontext.CompiledItem
 	score             int
+	baseScore         int
 	primaryBoundary   string
 	matchedBoundaries []string
 	matchedFiles      []string
+	utilityReason     string
 }
 
 func New(contextManager *projectcontext.Manager) *Manager {
@@ -61,7 +76,7 @@ func (m *Manager) Compile(req Request) (*projectcontext.CompiledPacket, error) {
 		return nil, err
 	}
 
-	workingSetNotes := selectWorkingSetNotes(req.ProjectDir, req.SearchResults, sourceSummaries, req.LivePacket, req.BoundaryGraph, 5)
+	workingSetNotes := selectWorkingSetNotes(req.ProjectDir, req.SearchResults, sourceSummaries, req.LivePacket, req.BoundaryGraph, req.UtilitySignals, 5)
 	packet := &projectcontext.CompiledPacket{
 		Task: projectcontext.CompiledTask{
 			Text:    task,
@@ -213,18 +228,18 @@ func selectTests(packet *livecontext.Packet, limit int) []projectcontext.Compile
 	return tests
 }
 
-func selectWorkingSetNotes(projectDir string, results []search.Result, generated []projectcontext.ContextItem, packet *livecontext.Packet, graph *structure.BoundaryGraph, limit int) []projectcontext.CompiledItem {
+func selectWorkingSetNotes(projectDir string, results []search.Result, generated []projectcontext.ContextItem, packet *livecontext.Packet, graph *structure.BoundaryGraph, utility map[string]ItemUtilitySignal, limit int) []projectcontext.CompiledItem {
 	if limit <= 0 {
 		return []projectcontext.CompiledItem{}
 	}
 	if graph == nil || packet == nil || len(packet.Worktree.TouchedBoundaries) == 0 {
-		return lexicalDurableNotes(results, limit)
+		return lexicalDurableNotes(results, utility, limit)
 	}
 
 	touchedOrder := orderedTouchedBoundaries(packet, graph)
-	candidates := buildNoteCandidates(projectDir, results, generated, packet, graph)
+	candidates := buildNoteCandidates(projectDir, results, generated, packet, graph, utility)
 	if len(candidates) == 0 {
-		return lexicalDurableNotes(results, limit)
+		return lexicalDurableNotes(results, utility, limit)
 	}
 
 	grouped := map[string][]noteCandidate{}
@@ -274,7 +289,7 @@ func selectWorkingSetNotes(projectDir string, results []search.Result, generated
 		}
 	}
 	if len(selected) < limit {
-		for _, item := range lexicalDurableNotes(results, limit-len(selected)) {
+		for _, item := range lexicalDurableNotes(results, utility, limit-len(selected)) {
 			if _, ok := seen[item.ID]; ok {
 				continue
 			}
@@ -288,23 +303,38 @@ func selectWorkingSetNotes(projectDir string, results []search.Result, generated
 	return selected
 }
 
-func lexicalDurableNotes(results []search.Result, limit int) []projectcontext.CompiledItem {
-	selected := make([]projectcontext.CompiledItem, 0, limit)
+func lexicalDurableNotes(results []search.Result, utility map[string]ItemUtilitySignal, limit int) []projectcontext.CompiledItem {
+	candidates := make([]noteCandidate, 0, len(results))
 	seen := map[string]struct{}{}
 	for _, result := range results {
 		if !isDurableNotePath(result.NotePath) {
 			continue
 		}
-		key := result.NotePath + "#" + result.Heading
-		if _, ok := seen[key]; ok {
+		item := baseDurableNoteItem(result)
+		if _, ok := seen[item.ID]; ok {
 			continue
 		}
-		seen[key] = struct{}{}
-		item := baseDurableNoteItem(result)
-		selected = append(selected, projectcontext.CompiledItem{
-			ContextItem: item,
-			Reason:      noteReason(result),
+		seen[item.ID] = struct{}{}
+		baseScore := int(result.Score * 100)
+		scored, utilityReason := applyUtilityAdjustment(baseScore, item.ID, utility)
+		reason := noteReason(result)
+		if utilityReason != "" {
+			reason += "; " + utilityReason
+		}
+		candidates = append(candidates, noteCandidate{
+			item: projectcontext.CompiledItem{
+				ContextItem: item,
+				Reason:      reason,
+			},
+			score:         scored,
+			baseScore:     baseScore,
+			utilityReason: utilityReason,
 		})
+	}
+	sort.Slice(candidates, func(i, j int) bool { return noteCandidateLess(candidates[i], candidates[j]) })
+	selected := make([]projectcontext.CompiledItem, 0, min(limit, len(candidates)))
+	for _, candidate := range candidates {
+		selected = append(selected, candidate.item)
 		if len(selected) == limit {
 			break
 		}
@@ -312,7 +342,7 @@ func lexicalDurableNotes(results []search.Result, limit int) []projectcontext.Co
 	return selected
 }
 
-func buildNoteCandidates(projectDir string, results []search.Result, generated []projectcontext.ContextItem, packet *livecontext.Packet, graph *structure.BoundaryGraph) []noteCandidate {
+func buildNoteCandidates(projectDir string, results []search.Result, generated []projectcontext.ContextItem, packet *livecontext.Packet, graph *structure.BoundaryGraph, utility map[string]ItemUtilitySignal) []noteCandidate {
 	touched := touchedBoundarySet(packet)
 	adjacent := adjacentBoundarySet(packet)
 	pressure := changedBoundaryPressure(packet, graph)
@@ -330,21 +360,29 @@ func buildNoteCandidates(projectDir string, results []search.Result, generated [
 		direct := intersectBoundaryIDs(linked, touched)
 		adj := diffBoundaryIDs(intersectBoundaryIDs(linked, adjacent), direct)
 		allMatched := dedupeStrings(append(append([]string{}, direct...), adj...))
-		score, primary := scoreBoundaryCandidate(int(result.Score*100), direct, adj, pressure)
+		baseScore := int(result.Score * 100)
+		score, primary := scoreBoundaryCandidate(baseScore, direct, adj, pressure)
 		if score == 0 {
 			continue
 		}
+		scored, utilityReason := applyUtilityAdjustment(score, item.ID, utility)
 		item.Boundaries = append([]string(nil), allMatched...)
 		item.Files = dedupeStrings(append(item.Files, matchedFiles...))
+		reason := boundaryCandidateReason("durable note", direct, adj, matchedFiles, pressure, primary)
+		if utilityReason != "" {
+			reason += "; " + utilityReason
+		}
 		candidate := noteCandidate{
 			item: projectcontext.CompiledItem{
 				ContextItem: item,
-				Reason:      boundaryCandidateReason("durable note", direct, adj, matchedFiles, pressure, primary),
+				Reason:      reason,
 			},
-			score:             score,
+			score:             scored,
+			baseScore:         score,
 			primaryBoundary:   primary,
 			matchedBoundaries: append([]string(nil), allMatched...),
 			matchedFiles:      matchedFiles,
+			utilityReason:     utilityReason,
 		}
 		if _, ok := seen[candidate.item.ID]; ok {
 			continue
@@ -369,15 +407,22 @@ func buildNoteCandidates(projectDir string, results []search.Result, generated [
 		copyItem := item
 		copyItem.Boundaries = append([]string(nil), allMatched...)
 		copyItem.Files = dedupeStrings(append(copyItem.Files, matchedFiles...))
+		scored, utilityReason := applyUtilityAdjustment(score, copyItem.ID, utility)
+		reason := boundaryCandidateReason("generated context", direct, adj, matchedFiles, pressure, primary)
+		if utilityReason != "" {
+			reason += "; " + utilityReason
+		}
 		candidate := noteCandidate{
 			item: projectcontext.CompiledItem{
 				ContextItem: copyItem,
-				Reason:      boundaryCandidateReason("generated context", direct, adj, matchedFiles, pressure, primary),
+				Reason:      reason,
 			},
-			score:             score,
+			score:             scored,
+			baseScore:         score,
 			primaryBoundary:   primary,
 			matchedBoundaries: append([]string(nil), allMatched...),
 			matchedFiles:      matchedFiles,
+			utilityReason:     utilityReason,
 		}
 		if _, ok := seen[candidate.item.ID]; ok {
 			continue
@@ -499,7 +544,7 @@ func buildAmbiguities(packet *livecontext.Packet, results []search.Result, graph
 	if len(packet.NearbyTests) == 0 && !containsAmbiguityFragment(ambiguities, "no nearby tests") {
 		ambiguities = append(ambiguities, "no nearby tests were detected for the current task")
 	}
-	if len(selectedNotes) == 0 && len(lexicalDurableNotes(results, 1)) == 0 {
+	if len(selectedNotes) == 0 && len(lexicalDurableNotes(results, nil, 1)) == 0 {
 		ambiguities = append(ambiguities, "no durable note summaries ranked highly enough to enter the first working set")
 	}
 	if len(selectedNotes) > 0 {
@@ -908,12 +953,61 @@ func boundaryCandidateReason(kind string, direct, adjacent, matchedFiles []strin
 	return strings.Join(parts, "; ")
 }
 
+func applyUtilityAdjustment(score int, itemID string, utility map[string]ItemUtilitySignal) (int, string) {
+	if len(utility) == 0 {
+		return score, ""
+	}
+	signal, ok := utility[itemID]
+	if !ok {
+		return score, ""
+	}
+	switch signal.LikelyUtility {
+	case "likely_signal":
+		bonus := 18
+		if signal.ExpandCount >= 3 || signal.DurableUpdateCount >= 2 {
+			bonus = 24
+		}
+		return score + bonus, utilityAdjustmentReason("boosted", signal)
+	case "likely_noise":
+		penalty := 14
+		if signal.IncludeCount >= 5 && signal.UnusedIncludeCount >= 4 {
+			penalty = 20
+		}
+		return score - penalty, utilityAdjustmentReason("suppressed", signal)
+	default:
+		return score, ""
+	}
+}
+
+func utilityAdjustmentReason(action string, signal ItemUtilitySignal) string {
+	evidence := []string{}
+	if signal.ExpandCount > 0 {
+		evidence = append(evidence, fmt.Sprintf("%d recorded expansion(s)", signal.ExpandCount))
+	}
+	if signal.SuccessfulVerificationCount > 0 {
+		evidence = append(evidence, fmt.Sprintf("%d successful verification link(s)", signal.SuccessfulVerificationCount))
+	}
+	if signal.DurableUpdateCount > 0 {
+		evidence = append(evidence, fmt.Sprintf("%d durable update link(s)", signal.DurableUpdateCount))
+	}
+	if signal.LikelyUtility == "likely_noise" && signal.UnusedIncludeCount > 0 {
+		evidence = append(evidence, fmt.Sprintf("%d low-impact include(s)", signal.UnusedIncludeCount))
+	}
+	if len(evidence) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%s by local utility signal after %s", action, strings.Join(evidence, ", "))
+}
+
 func noteCandidateLess(a, b noteCandidate) bool {
 	if a.score == b.score {
-		if a.item.Title == b.item.Title {
-			return a.item.ID < b.item.ID
+		if a.baseScore == b.baseScore {
+			if a.item.Title == b.item.Title {
+				return a.item.ID < b.item.ID
+			}
+			return a.item.Title < b.item.Title
 		}
-		return a.item.Title < b.item.Title
+		return a.baseScore > b.baseScore
 	}
 	return a.score > b.score
 }

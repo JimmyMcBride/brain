@@ -254,6 +254,10 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 			if err != nil {
 				return err
 			}
+			utilitySnapshot, err := appCtx.Session.BuildUtilitySnapshot(projectRoot)
+			if err != nil {
+				return err
+			}
 			boundaryGraph, err := appCtx.Structure.BoundaryGraph(cmd.Context())
 			if err != nil {
 				return err
@@ -271,12 +275,13 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 
 			manager := taskcontext.New(appCtx.Context)
 			packet, err := manager.Compile(taskcontext.Request{
-				ProjectDir:    projectRoot,
-				Task:          resolvedTask,
-				TaskSource:    taskSource,
-				SearchResults: searchResults,
-				LivePacket:    livePacket,
-				BoundaryGraph: boundaryGraph,
+				ProjectDir:     projectRoot,
+				Task:           resolvedTask,
+				TaskSource:     taskSource,
+				SearchResults:  searchResults,
+				LivePacket:     livePacket,
+				BoundaryGraph:  boundaryGraph,
+				UtilitySignals: utilitySignalsFromSnapshot(utilitySnapshot),
 			})
 			if err != nil {
 				return err
@@ -543,4 +548,25 @@ func contextProjectPath(localProject, rootProject string) string {
 		return localProject
 	}
 	return rootProject
+}
+
+func utilitySignalsFromSnapshot(snapshot *session.UtilitySnapshot) map[string]taskcontext.ItemUtilitySignal {
+	if snapshot == nil || len(snapshot.Items) == 0 {
+		return nil
+	}
+	signals := make(map[string]taskcontext.ItemUtilitySignal, len(snapshot.Items))
+	for _, item := range snapshot.Items {
+		signals[item.ItemID] = taskcontext.ItemUtilitySignal{
+			LikelyUtility:               item.LikelyUtility,
+			IncludeCount:                item.IncludeCount,
+			ExpandCount:                 item.ExpandCount,
+			SuccessfulVerificationCount: item.SuccessfulVerificationCount,
+			DurableUpdateCount:          item.DurableUpdateCount,
+			UnusedIncludeCount:          item.UnusedIncludeCount,
+			UtilityScore:                item.UtilityScore,
+			NoiseScore:                  item.NoiseScore,
+			Reasons:                     append([]string(nil), item.Reasons...),
+		}
+	}
+	return signals
 }

@@ -1329,6 +1329,7 @@ func TestCLIContextStatsSummarizesSignalAndVerificationLinks(t *testing.T) {
 
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "compile"))
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "read", notePath))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "compile"))
 
 	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "stats", "--limit", "3"))
 	for _, section := range []string{"## Context Stats", "## Top Signal", "## Frequently Expanded", "## Common Verification Links"} {
@@ -1341,6 +1342,10 @@ func TestCLIContextStatsSummarizesSignalAndVerificationLinks(t *testing.T) {
 	}
 	if !strings.Contains(human, "go version") {
 		t.Fatalf("expected recorded verification command in stats output:\n%s", human)
+	}
+	explainHuman := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "explain", "--last"))
+	if !strings.Contains(explainHuman, "boosted by local utility signal") {
+		t.Fatalf("expected explain output to surface utility-aware selection reasons:\n%s", explainHuman)
 	}
 
 	statsJSON := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "stats", "--limit", "3"))

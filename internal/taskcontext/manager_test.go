@@ -207,3 +207,91 @@ func TestRenderHumanIncludesCompilerSections(t *testing.T) {
 		}
 	}
 }
+
+func TestCompileBlendsUtilitySignalsConservatively(t *testing.T) {
+	project := t.TempDir()
+	contextManager := projectcontext.New(t.TempDir())
+	if _, err := contextManager.Install(context.Background(), projectcontext.Request{ProjectDir: project}); err != nil {
+		t.Fatal(err)
+	}
+
+	manager := New(contextManager)
+	req := Request{
+		ProjectDir: project,
+		Task:       "compiler telemetry signal",
+		TaskSource: "flag",
+		SearchResults: []search.Result{
+			{NotePath: ".brain/brainstorms/compiler-telemetry-signal.md", NoteTitle: "Compiler Telemetry Signal", Heading: "Notes", Snippet: "Compiler telemetry signal details for cmd/context.go and internal/taskcontext/manager.go.", NoteType: "brainstorm", Score: 0.82},
+			{NotePath: "docs/compiler-boundaries.md", NoteTitle: "Compiler Boundaries", Heading: "Boundaries", Snippet: "Compiler boundary notes for internal/taskcontext/manager.go and cmd/context.go.", NoteType: "doc", Score: 0.93},
+			{NotePath: ".brain/resources/references/irrelevant.md", NoteTitle: "Irrelevant", Heading: "Elsewhere", Snippet: "Historical note about packaging only.", NoteType: "resource", Score: 0.99},
+		},
+		LivePacket: &livecontext.Packet{
+			Worktree: livecontext.WorktreeInfo{
+				ChangedFiles: []livecontext.ChangedFile{
+					{Path: "cmd/context.go", Status: "modified", Source: "worktree", Why: "compile command changed"},
+					{Path: "internal/taskcontext/manager.go", Status: "modified", Source: "worktree", Why: "compiler selection changed"},
+				},
+				TouchedBoundaries: []livecontext.TouchedBoundary{
+					{
+						Path:               "internal/taskcontext/",
+						Label:              "internal/taskcontext",
+						Role:               "library",
+						Why:                "changed files map to the compiler package",
+						AdjacentBoundaries: []string{"cmd"},
+						Responsibilities:   []string{"Compile summary-first context packets"},
+					},
+				},
+			},
+		},
+		BoundaryGraph: &structure.BoundaryGraph{
+			Boundaries: []structure.BoundaryRecord{
+				{
+					ID:                 "internal/taskcontext",
+					Label:              "internal/taskcontext",
+					Role:               "library",
+					RootPath:           "internal/taskcontext/",
+					Files:              []string{"internal/taskcontext/manager.go"},
+					AdjacentBoundaries: []string{"cmd"},
+					Responsibilities:   []string{"Compile summary-first context packets"},
+				},
+				{
+					ID:               "cmd",
+					Label:            "cmd",
+					Role:             "application",
+					RootPath:         "cmd/",
+					Files:            []string{"cmd/context.go"},
+					Responsibilities: []string{"CLI entrypoints"},
+				},
+			},
+		},
+		UtilitySignals: map[string]ItemUtilitySignal{
+			"durable_note:" + shortHash(".brain/brainstorms/compiler-telemetry-signal.md#Notes"): {
+				LikelyUtility:               "likely_signal",
+				IncludeCount:                3,
+				ExpandCount:                 2,
+				SuccessfulVerificationCount: 1,
+				DurableUpdateCount:          1,
+			},
+			"durable_note:" + shortHash(".brain/resources/references/irrelevant.md#Elsewhere"): {
+				LikelyUtility:      "likely_signal",
+				IncludeCount:       5,
+				ExpandCount:        3,
+				DurableUpdateCount: 1,
+			},
+		},
+	}
+
+	packet, err := manager.Compile(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(packet.WorkingSet.Notes) < 2 {
+		t.Fatalf("expected multiple working-set notes: %#v", packet.WorkingSet.Notes)
+	}
+	if packet.WorkingSet.Notes[0].Anchor.Path != ".brain/brainstorms/compiler-telemetry-signal.md" {
+		t.Fatalf("expected utility-supported boundary note to rank first: %#v", packet.WorkingSet.Notes)
+	}
+	if !strings.Contains(packet.WorkingSet.Notes[0].Reason, "boosted by local utility signal") {
+		t.Fatalf("expected utility-aware reason on selected note: %#v", packet.WorkingSet.Notes[0])
+	}
+}
