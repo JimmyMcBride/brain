@@ -7,6 +7,7 @@ import (
 	"io"
 	"path/filepath"
 
+	"brain/internal/buildinfo"
 	"brain/internal/config"
 	"brain/internal/output"
 	"brain/internal/update"
@@ -59,12 +60,19 @@ func addUpdateCommand(root *cobra.Command, flags *rootFlagsState, _ appLoader) {
 			out := updateCommandOutput{Result: result}
 
 			var refreshErr error
+			var migrationErr error
 			if !checkOnly && shouldRefreshSkills(result.Status) {
 				refreshBinary := result.CurrentPath
 				if result.InstalledPath != "" {
 					refreshBinary = result.InstalledPath
 				}
+				if refreshBinary == "" {
+					refreshBinary = buildinfo.Current().Path
+				}
 				out.skillRefreshResult, refreshErr = refreshInstalledSkills(refreshBinary, flags.configPath, projectRoot, globalTargets, localTargets)
+				if refreshErr == nil {
+					_, migrationErr = projectMigrationRunner(refreshBinary, flags.configPath, projectRoot)
+				}
 			}
 
 			printer := output.New(modeFromFlag(flags, cfg.OutputMode), cmd.OutOrStdout())
@@ -134,6 +142,12 @@ func addUpdateCommand(root *cobra.Command, flags *rootFlagsState, _ appLoader) {
 					return fmt.Errorf("binary updated, skill refresh incomplete: %w", refreshErr)
 				}
 				return errors.New("skill refresh incomplete: " + refreshErr.Error())
+			}
+			if migrationErr != nil {
+				if result.Updated {
+					return fmt.Errorf("binary updated, project migration incomplete: %w", migrationErr)
+				}
+				return errors.New("project migration incomplete: " + migrationErr.Error())
 			}
 			return nil
 		},

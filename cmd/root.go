@@ -53,7 +53,7 @@ func newRootCommand(opts rootOptions) *cobra.Command {
 	}
 
 	flags := &rootFlagsState{}
-	var enableSkillPreflight bool
+	var enableProjectPreflight bool
 	preflightDone := map[string]bool{}
 	cmd := &cobra.Command{
 		Use:           "brain",
@@ -61,7 +61,7 @@ func newRootCommand(opts rootOptions) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			enableSkillPreflight = shouldPreflightLocalSkills(cmd)
+			enableProjectPreflight = shouldPreflightProjectRepairs(cmd)
 			return nil
 		},
 	}
@@ -77,13 +77,16 @@ func newRootCommand(opts rootOptions) *cobra.Command {
 		if len(projectPath) != 0 && strings.TrimSpace(projectPath[0]) != "" {
 			resolvedProject = projectPath[0]
 		}
-		if enableSkillPreflight {
+		if enableProjectPreflight {
 			absProject, err := filepath.Abs(resolvedProject)
 			if err != nil {
 				return nil, err
 			}
 			if !preflightDone[absProject] {
 				if err := repairLocalSkillsIfNeeded(absProject); err != nil {
+					return nil, err
+				}
+				if err := applyProjectMigrationsIfNeeded(absProject); err != nil {
 					return nil, err
 				}
 				preflightDone[absProject] = true
@@ -195,7 +198,7 @@ func chooseTemplate(noteType, templateName string) string {
 	}
 }
 
-func shouldPreflightLocalSkills(cmd *cobra.Command) bool {
+func shouldPreflightProjectRepairs(cmd *cobra.Command) bool {
 	if cmd == nil {
 		return false
 	}

@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-15T20:40:53Z"
+updated: "2026-04-15T20:48:55Z"
 ---
 # Current State
 
@@ -15,7 +15,7 @@ This file is a deterministic snapshot of the repository state at the last refres
 - Current branch: `feature/context-substrate-direction`
 - Default branch: `main`
 - Remote: `https://github.com/JimmyMcBride/brain.git`
-- Go test files: `26`
+- Go test files: `27`
 
 ## Docs
 
@@ -32,6 +32,8 @@ This file is a deterministic snapshot of the repository state at the last refres
 ## Local Notes
 
 Add repo-specific notes here. `brain context refresh` preserves content outside managed blocks.
+
+- 2026-04-15: Wired project soft migrations into the actual Brain command lifecycle. `brain update` now runs project migrations for the current `--project` after binary install and skill refresh by invoking the freshly selected binary through a hidden `brain context migrate` command, `brain update --check` stays read-only, and normal app-backed commands now run one per-process project-repair preflight that repairs local Brain skills and applies pending project migrations lazily for older Brain repos while skipping bootstrap-only or mutation-free top-level commands.
 
 - 2026-04-15: Implemented the first-wave automatic soft project migrations in `internal/projectcontext/`. Brain now has an idempotent project-migration runner that reuses the managed-context refresh path plus existing-agent integration sync, applies named migration ids into the new repo-local ledger, refreshes stale Brain-managed docs, migrates legacy agent wrapper blocks in place, leaves unmanaged agent files alone, and reports clean `unchanged` behavior on reruns once a repo is current.
 

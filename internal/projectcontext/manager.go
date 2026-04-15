@@ -424,6 +424,14 @@ func bundleSpecs(snapshot Snapshot, policyBody string) []fileSpec {
 }
 
 func (m *Manager) syncManagedContext(ctx context.Context, projectDir string, dryRun, force, adopt bool) ([]Result, error) {
+	return m.syncManagedContextWithMode(ctx, projectDir, dryRun, force, adopt, false)
+}
+
+func (m *Manager) syncManagedContextForMigration(ctx context.Context, projectDir string) ([]Result, error) {
+	return m.syncManagedContextWithMode(ctx, projectDir, false, false, false, true)
+}
+
+func (m *Manager) syncManagedContextWithMode(ctx context.Context, projectDir string, dryRun, force, adopt, skipUnmanaged bool) ([]Result, error) {
 	snapshot := scanRepo(ctx, projectDir)
 	policyBody, err := RenderPolicy(snapshot)
 	if err != nil {
@@ -432,7 +440,7 @@ func (m *Manager) syncManagedContext(ctx context.Context, projectDir string, dry
 	specs := bundleSpecs(snapshot, policyBody)
 	results := make([]Result, 0, len(specs))
 	for _, spec := range specs {
-		result, err := syncSpec(spec, dryRun, force, adopt)
+		result, err := syncSpecForMode(spec, dryRun, force, adopt, skipUnmanaged)
 		if err != nil {
 			return nil, err
 		}
@@ -443,6 +451,26 @@ func (m *Manager) syncManagedContext(ctx context.Context, projectDir string, dry
 	}
 	sortResultsByPath(results)
 	return results, nil
+}
+
+func syncSpecForMode(spec fileSpec, dryRun, force, adopt, skipUnmanaged bool) (Result, error) {
+	if !skipUnmanaged || spec.Style != "markdown" {
+		return syncSpec(spec, dryRun, force, adopt)
+	}
+	existing, err := os.ReadFile(spec.Path)
+	if err != nil && !os.IsNotExist(err) {
+		return Result{}, err
+	}
+	if err == nil && !strings.Contains(string(existing), managedBegin(spec.BlockID)) && !strings.Contains(string(existing), managedEnd(spec.BlockID)) && strings.TrimSpace(string(existing)) != "" {
+		return Result{
+			Path:                 filepath.ToSlash(spec.Path),
+			Kind:                 spec.Kind,
+			Action:               "unchanged",
+			PreservedUserContent: true,
+			ManagedBlocks:        []string{spec.BlockID},
+		}, nil
+	}
+	return syncSpec(spec, dryRun, force, adopt)
 }
 
 func (m *Manager) syncAgentIntegrations(projectDir string, agents []string, dryRun, adopt bool) ([]Result, error) {

@@ -263,6 +263,30 @@ func TestApplyProjectMigrationsLeavesUnmanagedAgentFilesAloneAndBecomesNoop(t *t
 	}
 }
 
+func TestApplyProjectMigrationsSkipsUnmanagedBrainOwnedDocs(t *testing.T) {
+	project := newInstalledBrainProject(t)
+	manager := New(t.TempDir())
+	manualAgents := "# Project Agent Contract\n\nCommitted durable note before publish.\n"
+	if err := os.WriteFile(filepath.Join(project, "AGENTS.md"), []byte(manualAgents), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := manager.ApplyProjectMigrations(context.Background(), project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != "applied" {
+		t.Fatalf("unexpected status: %s", result.Status)
+	}
+	body, err := os.ReadFile(filepath.Join(project, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != manualAgents {
+		t.Fatalf("expected unmanaged AGENTS.md to stay untouched:\n%s", string(body))
+	}
+}
+
 func TestApplyProjectMigrationsSkipsNonBrainRepos(t *testing.T) {
 	manager := New(t.TempDir())
 	result, err := manager.ApplyProjectMigrations(context.Background(), t.TempDir())

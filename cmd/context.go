@@ -6,8 +6,10 @@ import (
 	"io"
 	"strings"
 
+	"brain/internal/config"
 	"brain/internal/contextassembly"
 	"brain/internal/livecontext"
+	"brain/internal/output"
 	"brain/internal/projectcontext"
 	"brain/internal/search"
 	"brain/internal/session"
@@ -120,6 +122,35 @@ Use the other subcommands to inspect compatibility views or refresh the Brain-ma
 			return appCtx.Output.Print(bundle, func(w io.Writer) error {
 				_, err := io.WriteString(w, bundle.Content)
 				return err
+			})
+		},
+	}
+
+	migrateCmd := &cobra.Command{
+		Use:    "migrate",
+		Short:  "Apply pending Brain project migrations",
+		Hidden: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, _, err := config.LoadOrCreate(flags.configPath)
+			if err != nil {
+				return err
+			}
+			projectRoot := contextProjectPath(project, flags.projectPath)
+			result, err := contextManager().ApplyProjectMigrations(cmd.Context(), projectRoot)
+			if err != nil {
+				return err
+			}
+			printer := output.New(modeFromFlag(flags, cfg.OutputMode), cmd.OutOrStdout())
+			return printer.Print(result, func(w io.Writer) error {
+				if _, err := fmt.Fprintf(w, "migrations: %s\n", result.Status); err != nil {
+					return err
+				}
+				for _, applied := range result.AppliedMigrationIDs {
+					if _, err := fmt.Fprintf(w, "migration: %s\n", applied); err != nil {
+						return err
+					}
+				}
+				return nil
 			})
 		},
 	}
@@ -490,6 +521,7 @@ Use the other subcommands to inspect compatibility views or refresh the Brain-ma
 	loadCmd.Flags().StringVar(&project, "project", "", "project root to load context from")
 	loadCmd.Flags().IntVar(&level, "level", 0, "compatibility context depth to load: 0, 1, 2, or 3")
 	loadCmd.Flags().StringVar(&query, "query", "", "search query for level 3 context")
+	migrateCmd.Flags().StringVar(&project, "project", "", "project root to migrate")
 	assembleCmd.Flags().StringVar(&project, "project", "", "project root to assemble context from")
 	assembleCmd.Flags().StringVar(&assembleTask, "task", "", "task text to assemble context for")
 	assembleCmd.Flags().IntVar(&assembleLimit, "limit", 8, "maximum selected context items")
@@ -509,7 +541,7 @@ Use the other subcommands to inspect compatibility views or refresh the Brain-ma
 	liveCmd.Flags().BoolVar(&liveExplain, "explain", false, "include rationale and missing-signal detail")
 
 	structureCmd.AddCommand(structureStatusCmd)
-	contextCmd.AddCommand(installCmd, refreshCmd, loadCmd, assembleCmd, compileCmd, explainCmd, statsCmd, structureCmd, liveCmd)
+	contextCmd.AddCommand(installCmd, refreshCmd, loadCmd, migrateCmd, assembleCmd, compileCmd, explainCmd, statsCmd, structureCmd, liveCmd)
 	root.AddCommand(contextCmd)
 }
 

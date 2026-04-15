@@ -278,7 +278,7 @@ func (m *Manager) applyProjectMigration(ctx context.Context, projectDir string, 
 	)
 	switch migration.ID {
 	case "refresh-brain-managed-context-v1":
-		results, err = m.syncManagedContext(ctx, projectDir, false, false, false)
+		results, err = m.syncManagedContextForMigration(ctx, projectDir)
 	case "refresh-existing-agent-integrations-v1":
 		results, err = m.syncAgentIntegrations(projectDir, nil, false, false)
 	default:

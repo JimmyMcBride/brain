@@ -15,6 +15,7 @@ import (
 
 	"brain/internal/buildinfo"
 	"brain/internal/config"
+	"brain/internal/projectcontext"
 	"brain/internal/skills"
 	"brain/internal/update"
 )
@@ -1470,10 +1471,12 @@ func TestCLIUpdateCommand(t *testing.T) {
 	env := newCLIEnv(t)
 	restoreUpdater := newUpdater
 	restoreSkillRunner := skillInstallRunner
+	restoreMigrationRunner := projectMigrationRunner
 	restoreBuild := setCLICommandBuildInfo("v0.1.0", "abc123", "2026-04-10T00:00:00Z")
 	defer func() {
 		newUpdater = restoreUpdater
 		skillInstallRunner = restoreSkillRunner
+		projectMigrationRunner = restoreMigrationRunner
 		restoreBuild()
 	}()
 
@@ -1491,6 +1494,10 @@ func TestCLIUpdateCommand(t *testing.T) {
 		t.Fatal("unexpected skill refresh during update --check")
 		return nil, nil
 	}
+	projectMigrationRunner = func(binaryPath, configPath, projectPath string) (*projectcontext.ApplyProjectMigrationsResult, error) {
+		t.Fatal("unexpected project migration during update --check")
+		return nil, nil
+	}
 	checkOnly := requireOK(t, env.run(t, "", "--config", env.config, "update", "--check"))
 	if !strings.Contains(checkOnly, "update: v0.1.0 -> v0.2.0") {
 		t.Fatalf("unexpected check output:\n%s", checkOnly)
@@ -1501,10 +1508,12 @@ func TestCLIUpdateRefreshesInstalledSkills(t *testing.T) {
 	env := newCLIEnv(t)
 	restoreUpdater := newUpdater
 	restoreSkillRunner := skillInstallRunner
+	restoreMigrationRunner := projectMigrationRunner
 	restoreBuild := setCLICommandBuildInfo("v0.1.0", "abc123", "2026-04-10T00:00:00Z")
 	defer func() {
 		newUpdater = restoreUpdater
 		skillInstallRunner = restoreSkillRunner
+		projectMigrationRunner = restoreMigrationRunner
 		restoreBuild()
 	}()
 
@@ -1532,6 +1541,7 @@ func TestCLIUpdateRefreshesInstalledSkills(t *testing.T) {
 	}
 
 	var calls []string
+	var migrationCalls []string
 	skillInstallRunner = func(binaryPath, configPath, projectPath string, scope skills.Scope, agents []string) ([]skills.InstallResult, error) {
 		calls = append(calls, string(scope)+":"+strings.Join(agents, ","))
 		results := make([]skills.InstallResult, 0, len(agents))
@@ -1554,6 +1564,13 @@ func TestCLIUpdateRefreshesInstalledSkills(t *testing.T) {
 		}
 		return results, nil
 	}
+	projectMigrationRunner = func(binaryPath, configPath, projectPath string) (*projectcontext.ApplyProjectMigrationsResult, error) {
+		migrationCalls = append(migrationCalls, binaryPath+":"+projectPath)
+		return &projectcontext.ApplyProjectMigrationsResult{
+			ProjectDir: projectPath,
+			Status:     "applied",
+		}, nil
+	}
 
 	output := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "update"))
 	if !strings.Contains(output, "skills:  refreshed") {
@@ -1561,6 +1578,9 @@ func TestCLIUpdateRefreshesInstalledSkills(t *testing.T) {
 	}
 	if len(calls) != 2 || calls[0] != "global:codex" || calls[1] != "local:copilot" {
 		t.Fatalf("unexpected refresh calls: %v", calls)
+	}
+	if len(migrationCalls) != 1 || migrationCalls[0] != filepath.Join(env.root, "bin", "brain")+":"+env.project {
+		t.Fatalf("unexpected migration calls: %v", migrationCalls)
 	}
 }
 
@@ -1586,10 +1606,12 @@ func TestCLIUpdateFailsWhenSkillRefreshIsIncomplete(t *testing.T) {
 	env := newCLIEnv(t)
 	restoreUpdater := newUpdater
 	restoreSkillRunner := skillInstallRunner
+	restoreMigrationRunner := projectMigrationRunner
 	restoreBuild := setCLICommandBuildInfo("v0.1.0", "abc123", "2026-04-10T00:00:00Z")
 	defer func() {
 		newUpdater = restoreUpdater
 		skillInstallRunner = restoreSkillRunner
+		projectMigrationRunner = restoreMigrationRunner
 		restoreBuild()
 	}()
 
@@ -1614,6 +1636,10 @@ func TestCLIUpdateFailsWhenSkillRefreshIsIncomplete(t *testing.T) {
 	skillInstallRunner = func(binaryPath, configPath, projectPath string, scope skills.Scope, agents []string) ([]skills.InstallResult, error) {
 		return nil, fmt.Errorf("boom")
 	}
+	projectMigrationRunner = func(binaryPath, configPath, projectPath string) (*projectcontext.ApplyProjectMigrationsResult, error) {
+		t.Fatal("unexpected project migration when skill refresh failed")
+		return nil, nil
+	}
 
 	result := env.run(t, "", "--config", env.config, "update")
 	if result.err == nil || !strings.Contains(result.err.Error(), "binary updated, skill refresh incomplete") {
@@ -1621,6 +1647,47 @@ func TestCLIUpdateFailsWhenSkillRefreshIsIncomplete(t *testing.T) {
 	}
 	if !strings.Contains(result.stdout, "skills:  failed") {
 		t.Fatalf("expected printed failed skill refresh status:\n%s", result.stdout)
+	}
+}
+
+func TestCLILocalProjectPreflightAppliesPendingMigrations(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+
+	staleAgents := "# Project Agent Contract\n\n<!-- brain:begin agents-contract -->\nstale\n<!-- brain:end agents-contract -->\n\n## Local Notes\n\nkeep me\n"
+	if err := os.WriteFile(filepath.Join(env.project, "AGENTS.md"), []byte(staleAgents), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ledgerPath := filepath.Join(env.project, ".brain", "state", "project-migrations.json")
+	if err := os.Remove(ledgerPath); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "find", "overview"))
+	if _, err := os.Stat(ledgerPath); err != nil {
+		t.Fatalf("expected migration ledger to be written during preflight: %v", err)
+	}
+	agentsBody, err := os.ReadFile(filepath.Join(env.project, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(agentsBody), "brain context compile") || !strings.Contains(string(agentsBody), "keep me") {
+		t.Fatalf("expected preflight migration to refresh AGENTS.md:\n%s", string(agentsBody))
+	}
+}
+
+func TestCLISkipCommandsDoNotRunMigrationPreflight(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+
+	ledgerPath := filepath.Join(env.project, ".brain", "state", "project-migrations.json")
+	if err := os.Remove(ledgerPath); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "doctor"))
+	if _, err := os.Stat(ledgerPath); !os.IsNotExist(err) {
+		t.Fatalf("expected doctor to skip migration preflight, got err=%v", err)
 	}
 }
 
