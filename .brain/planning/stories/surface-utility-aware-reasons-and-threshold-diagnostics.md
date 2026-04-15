@@ -3,10 +3,10 @@ created: "2026-04-15T05:34:09Z"
 epic: v3-utility-aware-context-ranking
 project: brain
 spec: v3-utility-aware-context-ranking
-status: todo
+status: done
 title: Surface Utility-Aware Reasons And Threshold Diagnostics
 type: story
-updated: "2026-04-15T05:34:09Z"
+updated: "2026-04-15T15:26:09Z"
 ---
 # Surface Utility-Aware Reasons And Threshold Diagnostics
 

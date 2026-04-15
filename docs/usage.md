@@ -160,6 +160,8 @@ brain context structure status --project .
 brain context live --project . --task "auth flow"
 brain context live --project . --explain
 brain context compile --project . --task "auth flow"
+brain context explain --project . --last
+brain context stats --project .
 brain context assemble --project . --task "auth flow"
 brain context assemble --project . --explain
 ```
@@ -196,9 +198,18 @@ Use `--force` when adopting an existing unmanaged `AGENTS.md` or docs file into 
 - emits the smallest justified packet Brain currently knows how to build: base contract, changed files, touched boundaries, nearby tests, top durable note summaries, verification hints, ambiguities, and provenance
 - keeps boundary-aware context visible by carrying adjacency, responsibilities, and nearby-test relations into the packet
 - ranks verification hints into strong or suggested command guidance with explicit source provenance
+- applies conservative local utility adjustments only after repeated repo-local evidence such as later expansions, successful verification linkage, or durable-update linkage
 - keeps included context in summary form with exact anchors and explicit inclusion reasons
 - records packet metadata into the active session when a session is present, but still works normally without a session
 - is the best first choice when you want one compact startup packet instead of a full static bundle or a broader explain-oriented assembly view
+
+`context explain` and `context stats` are analysis surfaces for the compiler:
+
+- `context explain --last` inspects the latest recorded packet, its included items, later expansions, and downstream outcomes such as verification runs, durable updates, and closeout status
+- `context explain --packet <hash>` lets you inspect an older packet when you need to debug a specific compile result
+- `context stats` summarizes likely signal items, likely noise items, repeated expansion patterns, and common verification links from local compiler telemetry
+- both commands stay grounded in recorded packet metadata and local session telemetry rather than opaque remote analytics
+- use them when tuning context quality or debugging ranking behavior, not as a replacement for normal `context compile` usage
 
 `context assemble` is the task-focused packet interface:
 

@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-14T15:25:08Z"
+updated: "2026-04-15T12:00:00Z"
 ---
 # Current State
 
@@ -32,6 +32,8 @@ This file is a deterministic snapshot of the repository state at the last refres
 ## Local Notes
 
 Add repo-specific notes here. `brain context refresh` preserves content outside managed blocks.
+
+- 2026-04-15: Completed the `v3` context-compiler rollout slices for local packet telemetry, packet inspection surfaces, and conservative utility-aware ranking. Brain now records compile, expansion, verification, durable-update, and closeout events in session telemetry; exposes `brain context explain` and `brain context stats` for packet rationale and local signal/noise inspection; and uses repeated local expansions plus downstream outcomes to apply bounded utility boosts or penalties to future compiler note selection with explicit diagnostics.
 
 - 2026-04-15: Completed the `v2` context-compiler rollout slices for boundary-aware selection and verification surfaces. Brain now derives compiler-facing boundary graphs with adjacency, responsibilities, and owned tests; `context live` and `context compile` use those boundaries for touched-boundary, nearby-test, and durable-note selection; compiled packets keep boundary-aware nearby-test relations plus explicit provenance; and live/compiled context now surface repo-derived verification recipes from policy, Makefile targets, package scripts, CI workflows, and bounded successful session commands with strong-or-suggested guidance.
 

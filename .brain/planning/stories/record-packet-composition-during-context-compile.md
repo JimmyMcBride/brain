@@ -6,7 +6,7 @@ spec: v1-packet-provenance-and-session-recording
 status: done
 title: Record Packet Composition During Context Compile
 type: story
-updated: "2026-04-15T14:10:41Z"
+updated: "2026-04-15T15:26:09Z"
 ---
 # Record Packet Composition During Context Compile
 

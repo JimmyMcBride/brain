@@ -3,10 +3,10 @@ created: "2026-04-15T05:34:09Z"
 epic: v3-context-utility-analysis-surfaces
 project: brain
 spec: v3-context-utility-analysis-surfaces
-status: todo
+status: done
 title: Add Context Stats For Signal Noise And Expansion Patterns
 type: story
-updated: "2026-04-15T05:34:09Z"
+updated: "2026-04-15T15:26:09Z"
 ---
 # Add Context Stats For Signal Noise And Expansion Patterns
 
