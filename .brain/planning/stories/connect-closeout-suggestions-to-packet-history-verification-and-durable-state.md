@@ -3,10 +3,10 @@ created: "2026-04-15T05:34:50Z"
 epic: v4-session-closeout-promotion-suggestions
 project: brain
 spec: v4-session-closeout-promotion-suggestions
-status: todo
+status: done
 title: Connect Closeout Suggestions To Packet History Verification And Durable State
 type: story
-updated: "2026-04-15T05:34:50Z"
+updated: "2026-04-15T16:05:19Z"
 ---
 # Connect Closeout Suggestions To Packet History Verification And Durable State
 

@@ -3,10 +3,10 @@ created: "2026-04-15T05:34:50Z"
 epic: v4-promotion-gate-and-durable-promotion-types
 project: brain
 spec: v4-promotion-gate-and-durable-promotion-types
-status: todo
+status: done
 title: Define Promotable And Non-Promotable Categories For Compiler-Era Brain
 type: story
-updated: "2026-04-15T05:34:50Z"
+updated: "2026-04-15T16:05:19Z"
 ---
 # Define Promotable And Non-Promotable Categories For Compiler-Era Brain
 

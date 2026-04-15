@@ -3,10 +3,10 @@ created: "2026-04-15T05:34:50Z"
 epic: v4-context-compiler-ux-migration
 project: brain
 spec: v4-context-compiler-ux-migration
-status: todo
+status: done
 title: Update Docs And The Brain Skill To Teach The Compiler Model
 type: story
-updated: "2026-04-15T05:34:50Z"
+updated: "2026-04-15T16:05:19Z"
 ---
 # Update Docs And The Brain Skill To Teach The Compiler Model
 
