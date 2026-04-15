@@ -1771,18 +1771,25 @@ func TestCLIDoctorReportsProjectMigrationStatus(t *testing.T) {
 	env := newCLIEnv(t)
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
 
+	current := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "doctor"))
+	if !strings.Contains(current, "project_migrations: ok (current)") {
+		t.Fatalf("expected current project migrations in doctor output after init:\n%s", current)
+	}
+
+	ledgerPath := filepath.Join(env.project, ".brain", "state", "project-migrations.json")
+	if err := os.Remove(ledgerPath); err != nil {
+		t.Fatal(err)
+	}
 	pending := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "doctor"))
 	if !strings.Contains(pending, "project_migrations: fail (pending") {
 		t.Fatalf("expected pending project migrations in doctor output:\n%s", pending)
 	}
-
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "find", "overview"))
-	current := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "doctor"))
-	if !strings.Contains(current, "project_migrations: ok (current)") {
-		t.Fatalf("expected current project migrations in doctor output:\n%s", current)
+	currentAfterRepair := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "doctor"))
+	if !strings.Contains(currentAfterRepair, "project_migrations: ok (current)") {
+		t.Fatalf("expected current project migrations in doctor output:\n%s", currentAfterRepair)
 	}
 
-	ledgerPath := filepath.Join(env.project, ".brain", "state", "project-migrations.json")
 	if err := os.WriteFile(ledgerPath, []byte("{not-json"), 0o644); err != nil {
 		t.Fatal(err)
 	}

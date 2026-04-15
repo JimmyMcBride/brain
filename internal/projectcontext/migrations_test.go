@@ -332,6 +332,52 @@ func TestApplyProjectMigrationsSkipsNonBrainRepos(t *testing.T) {
 	}
 }
 
+func TestInstallInitializesProjectMigrationsAsCurrent(t *testing.T) {
+	project := newBrainProjectForMigrations(t)
+	manager := New(t.TempDir())
+
+	if _, err := manager.Install(context.Background(), Request{ProjectDir: project}); err != nil {
+		t.Fatal(err)
+	}
+
+	plan, err := manager.PlanProjectMigrations(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Status != projectMigrationPlanCurrent {
+		t.Fatalf("expected current plan after install, got=%s", plan.Status)
+	}
+	if len(plan.PendingMigrations) != 0 {
+		t.Fatalf("expected no pending migrations after install, got=%d", len(plan.PendingMigrations))
+	}
+	if len(plan.AppliedMigrations) != len(KnownProjectMigrations()) {
+		t.Fatalf("expected all known migrations applied after install, got=%d", len(plan.AppliedMigrations))
+	}
+}
+
+func TestAdoptInitializesProjectMigrationsAsCurrent(t *testing.T) {
+	project := newBrainProjectForMigrations(t)
+	if err := os.WriteFile(filepath.Join(project, "AGENTS.md"), []byte("Manual contract\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	manager := New(t.TempDir())
+
+	if _, err := manager.Adopt(context.Background(), Request{ProjectDir: project}); err != nil {
+		t.Fatal(err)
+	}
+
+	plan, err := manager.PlanProjectMigrations(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Status != projectMigrationPlanCurrent {
+		t.Fatalf("expected current plan after adopt, got=%s", plan.Status)
+	}
+	if len(plan.PendingMigrations) != 0 {
+		t.Fatalf("expected no pending migrations after adopt, got=%d", len(plan.PendingMigrations))
+	}
+}
+
 func newBrainProjectForMigrations(t *testing.T) string {
 	t.Helper()
 	project := t.TempDir()
@@ -352,6 +398,9 @@ func newInstalledBrainProject(t *testing.T) string {
 	}
 	manager := New(t.TempDir())
 	if _, err := manager.Install(context.Background(), Request{ProjectDir: project}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(projectMigrationLedgerPath(project)); err != nil && !os.IsNotExist(err) {
 		t.Fatal(err)
 	}
 	return project

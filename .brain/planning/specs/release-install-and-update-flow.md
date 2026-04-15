@@ -2,7 +2,7 @@
 created: "2026-04-11T21:53:09Z"
 epic: release-install-and-update-flow
 project: brain
-status: draft
+status: approved
 title: Release, Install, And Update Flow Spec
 type: spec
 updated: "2026-04-16T00:16:00Z"

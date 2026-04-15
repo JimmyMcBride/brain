@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 const localNotesSection = "## Local Notes\n\nAdd repo-specific notes here. `brain context refresh` preserves content outside managed blocks.\n"
@@ -90,17 +91,55 @@ func New(home string) *Manager {
 }
 
 func (m *Manager) Install(ctx context.Context, req Request) ([]Result, error) {
-	return m.apply(ctx, req)
+	results, err := m.apply(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if err := m.initializeProjectMigrationLedger(req); err != nil {
+		return nil, err
+	}
+	return results, nil
 }
 
 func (m *Manager) Adopt(ctx context.Context, req Request) ([]Result, error) {
 	req.Force = true
 	req.Adopt = true
-	return m.apply(ctx, req)
+	results, err := m.apply(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if err := m.initializeProjectMigrationLedger(req); err != nil {
+		return nil, err
+	}
+	return results, nil
 }
 
 func (m *Manager) Refresh(ctx context.Context, req Request) ([]Result, error) {
 	return m.apply(ctx, req)
+}
+
+func (m *Manager) initializeProjectMigrationLedger(req Request) error {
+	if req.DryRun {
+		return nil
+	}
+	projectDir, err := filepath.Abs(defaultProjectDir(req.ProjectDir))
+	if err != nil {
+		return err
+	}
+	if !usesBrainWorkspace(projectDir) {
+		return nil
+	}
+	now := time.Now().UTC()
+	state := defaultProjectMigrationState()
+	known := KnownProjectMigrations()
+	state.Applied = make([]AppliedProjectMigration, 0, len(known))
+	appliedIDs := make([]string, 0, len(known))
+	for _, migration := range known {
+		state.Applied = append(state.Applied, NewAppliedProjectMigration(migration.ID, now))
+		appliedIDs = append(appliedIDs, migration.ID)
+	}
+	state.LastRun = NewProjectMigrationRun("bootstrap_current", appliedIDs, appliedIDs, now, nil)
+	return m.SaveProjectMigrationState(projectDir, state)
 }
 
 func (m *Manager) Load(req LoadRequest) (*LoadedContext, error) {
