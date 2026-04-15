@@ -37,12 +37,12 @@ func addContextCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLo
 
 	contextCmd := &cobra.Command{
 		Use:   "context",
-		Short: "Install or refresh project agent context files",
+		Short: "Compile and manage project-local context",
 		Long: strings.TrimSpace(`
-Manage project-local agent context files owned by brain.
+Compile task-sized context packets and manage the project-local context files owned by brain.
 
-This creates a minimal root AGENTS/CLAUDE contract plus a modular
-.brain/context bundle that can be refreshed as the repository evolves.
+Prefer brain context compile when you need context for a task.
+Use the other subcommands to inspect compatibility views or refresh the Brain-managed context bundle on disk.
 `),
 	}
 
@@ -76,7 +76,7 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 
 	loadCmd := &cobra.Command{
 		Use:   "load",
-		Short: "Load a deterministic context bundle by level",
+		Short: "Load a legacy static context bundle by level",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			projectRoot := contextProjectPath(project, flags.projectPath)
 			appCtx, err := loadApp(projectRoot)
@@ -126,7 +126,7 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 
 	assembleCmd := &cobra.Command{
 		Use:   "assemble",
-		Short: "Assemble a task-focused context packet",
+		Short: "Assemble a broader task-focused context packet",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			projectRoot := contextProjectPath(project, flags.projectPath)
 			appCtx, err := loadApp(projectRoot)
@@ -488,7 +488,7 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 		sub.Flags().BoolVar(&force, "force", false, "adopt unmanaged files by preserving existing content under Local Notes")
 	}
 	loadCmd.Flags().StringVar(&project, "project", "", "project root to load context from")
-	loadCmd.Flags().IntVar(&level, "level", 0, "context depth to load: 0, 1, 2, or 3")
+	loadCmd.Flags().IntVar(&level, "level", 0, "compatibility context depth to load: 0, 1, 2, or 3")
 	loadCmd.Flags().StringVar(&query, "query", "", "search query for level 3 context")
 	assembleCmd.Flags().StringVar(&project, "project", "", "project root to assemble context from")
 	assembleCmd.Flags().StringVar(&assembleTask, "task", "", "task text to assemble context for")

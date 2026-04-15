@@ -21,6 +21,7 @@ Use this file for the structural shape of the repository.
 - `internal/plan/`
 - `internal/project/`
 - `internal/projectcontext/`
+- `internal/promotion/`
 - `internal/search/`
 - `internal/session/`
 - `internal/skills/`

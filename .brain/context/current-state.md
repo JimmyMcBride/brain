@@ -15,7 +15,7 @@ This file is a deterministic snapshot of the repository state at the last refres
 - Current branch: `feature/context-substrate-direction`
 - Default branch: `main`
 - Remote: `https://github.com/JimmyMcBride/brain.git`
-- Go test files: `25`
+- Go test files: `26`
 
 ## Docs
 
@@ -32,6 +32,8 @@ This file is a deterministic snapshot of the repository state at the last refres
 ## Local Notes
 
 Add repo-specific notes here. `brain context refresh` preserves content outside managed blocks.
+
+- 2026-04-15: Completed the `v4` context-compiler rollout slices for promotion gating, closeout suggestions, and compiler-era UX migration. Brain now classifies first-wave durable-memory candidates through `internal/promotion`, surfaces packet-backed promotion suggestions during blocked closeout, renders `brain distill --session` as a promotion-review note instead of a fixed target list, teaches `brain context compile` as the primary context surface, and refreshes generated repo guidance plus the Brain skill around promotion-aware closeout.
 
 - 2026-04-15: Completed the `v3` context-compiler rollout slices for local packet telemetry, packet inspection surfaces, and conservative utility-aware ranking. Brain now records compile, expansion, verification, durable-update, and closeout events in session telemetry; exposes `brain context explain` and `brain context stats` for packet rationale and local signal/noise inspection; and uses repeated local expansions plus downstream outcomes to apply bounded utility boosts or penalties to future compiler note selection with explicit diagnostics.
 

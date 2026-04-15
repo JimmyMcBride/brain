@@ -8,7 +8,8 @@ Use this file for agent operating workflow inside the repo.
 1. If no validated session is active, run `brain session start --task "<task>"`.
 2. If a session already exists, run `brain session validate`.
 3. Read `AGENTS.md`, `.brain/policy.yaml`, and the linked context files needed for the task.
-4. If project memory matters, run `brain find brain` or `brain search "brain <task>"`.
+4. Run `brain context compile --task "<task>"` for the smallest justified working set.
+5. If project memory still matters, run `brain find brain` or `brain search "brain <task>"`.
 
 ## During Work
 
@@ -30,6 +31,7 @@ Use this file for agent operating workflow inside the repo.
 ## Close-Out
 
 - Refresh or update durable notes for meaningful behavior, config, or architecture changes.
+- If `brain session finish` blocks, inspect the promotion suggestions or run `brain distill --session` to review promotable updates before forcing closeout.
 - If `skills/brain/` changed, reinstall the local Brain skill for Codex and OpenClaw with `brain skills install --scope local --agent codex --agent openclaw --project .`.
 - When opening a PR, make the title and body release-note friendly because GitHub release notes are generated from merged PR metadata.
 - Summarize shipped behavior in the PR, not just implementation steps, so future changelogs stay human-readable.

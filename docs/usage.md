@@ -1,6 +1,6 @@
 # Usage
 
-This is the practical operating guide for `brain` after install. Use it when you already understand the top-level pitch and want the day-to-day commands for adopting Brain in a repo, searching local context, planning work, and running the session workflow.
+This is the practical operating guide for `brain` after install. Use it when you already understand the top-level pitch and want the day-to-day commands for adopting Brain in a repo, compiling task context, retrieving local memory, and running the session workflow.
 
 `brain` is operated per project. Use `--project` when you are acting on a repo other than the current directory.
 
@@ -31,7 +31,7 @@ If no release has been published yet, the installer falls back to downloading th
 
 ## Bootstrap A Project
 
-This is the moment where a repo gets its local brain: contract, docs, generated context, planning model, and local state.
+This is the moment where a repo gets its local brain: contract, docs, generated context, and local state.
 
 For a new or mostly empty repo:
 
@@ -107,7 +107,7 @@ brain distill --project . --brainstorm .brain/brainstorms/event-follow-up-ideas.
 brain brainstorm distill --project . .brain/brainstorms/event-follow-up-ideas.md
 ```
 
-`brain distill --session` requires an active session and creates a proposal note under `.brain/resources/changes/` with source provenance, proposed target notes, and suggested markdown updates for review.
+`brain distill --session` requires an active session and creates a proposal note under `.brain/resources/changes/` with source provenance, promotion-review diagnostics, and suggested markdown updates for review.
 
 `brain distill --brainstorm ...` uses the same proposal flow for brainstorms. `brain brainstorm distill ...` remains supported as a compatibility wrapper.
 
@@ -143,54 +143,30 @@ Planning is intentionally opinionated:
 
 ## Context Management
 
-Install or refresh project context:
+Compile task context first, then reach for the compatibility views only when you need them:
 
 ```bash
+brain context compile --project . --task "auth flow"
+brain context explain --project . --last
+brain context stats --project .
 brain context install --project .
 brain context refresh --project .
 brain context refresh --project . --agent claude
 brain context refresh --project . --dry-run
-brain context load --project . --level 0
-brain context load --project . --level 1
-brain context load --project . --level 2
-brain context load --project . --level 3 --query "auth flow"
 brain context structure --project .
 brain context structure --project . --path internal/search
 brain context structure status --project .
 brain context live --project . --task "auth flow"
 brain context live --project . --explain
-brain context compile --project . --task "auth flow"
-brain context explain --project . --last
-brain context stats --project .
 brain context assemble --project . --task "auth flow"
 brain context assemble --project . --explain
+brain context load --project . --level 0
+brain context load --project . --level 1
+brain context load --project . --level 2
+brain context load --project . --level 3 --query "auth flow"
 ```
 
 Use `--force` when adopting an existing unmanaged `AGENTS.md` or docs file into the managed-block model.
-
-`context load` is read-only and deterministic:
-
-- level 0 loads the AGENTS summary plus current state
-- level 1 adds overview and workflows
-- level 2 loads the full static context bundle
-- level 3 adds search-injected relevant context, using `--query` or the active session task
-
-`context structure` is the structural repo inspection surface:
-
-- returns grouped boundaries, entrypoints, config surfaces, and test surfaces
-- auto-rebuilds the derived structural cache when it is missing or stale
-- supports `--path` to focus on one subtree
-- `context structure status` reports freshness and counts without rebuilding
-
-`context live` is the live-work inspection surface:
-
-- resolves the task from `--task` or the active session
-- returns an on-demand packet with task, session, changed-file, touched-boundary, nearby-test, verification, policy-hint, and ambiguity sections
-- adds rationale and missing-signal reporting with `--explain`
-- does not persist live state to SQLite or the session file
-- derives repo-observable verification recipes from policy, Makefile targets, package scripts, CI workflows, and bounded recent successful session commands when they exist
-- reports recent recorded session commands plus verification-profile satisfaction when a session is active
-- only emits policy hints for strong-match conditions such as missing verification or missing durable note updates after repo changes
 
 `context compile` is the summary-first working-set compiler:
 
@@ -211,6 +187,23 @@ Use `--force` when adopting an existing unmanaged `AGENTS.md` or docs file into 
 - both commands stay grounded in recorded packet metadata and local session telemetry rather than opaque remote analytics
 - use them when tuning context quality or debugging ranking behavior, not as a replacement for normal `context compile` usage
 
+`context structure` is the structural repo inspection surface:
+
+- returns grouped boundaries, entrypoints, config surfaces, and test surfaces
+- auto-rebuilds the derived structural cache when it is missing or stale
+- supports `--path` to focus on one subtree
+- `context structure status` reports freshness and counts without rebuilding
+
+`context live` is the live-work inspection surface:
+
+- resolves the task from `--task` or the active session
+- returns an on-demand packet with task, session, changed-file, touched-boundary, nearby-test, verification, policy-hint, and ambiguity sections
+- adds rationale and missing-signal reporting with `--explain`
+- does not persist live state to SQLite or the session file
+- derives repo-observable verification recipes from policy, Makefile targets, package scripts, CI workflows, and bounded recent successful session commands when they exist
+- reports recent recorded session commands plus verification-profile satisfaction when a session is active
+- only emits policy hints for strong-match conditions such as missing verification or missing durable note updates after repo changes
+
 `context assemble` is the task-focused packet interface:
 
 - resolves the task from `--task` or the active session
@@ -218,6 +211,13 @@ Use `--force` when adopting an existing unmanaged `AGENTS.md` or docs file into 
 - shows ambiguities and confidence for the current task packet
 - adds rationale, omitted-nearby context, and missing-group reporting with `--explain`
 - remains useful when you want the broader packet shape and explain surfaces during the compiler transition
+
+`context load` is the legacy compatibility path:
+
+- level 0 loads the AGENTS summary plus current state
+- level 1 adds overview and workflows
+- level 2 loads the full static context bundle
+- level 3 adds search-injected relevant context, using `--query` or the active session task
 
 `context install` and `context refresh` manage the root contract plus `.brain/context/*`. They do not create missing agent-specific instruction files.
 
@@ -245,6 +245,7 @@ brain session finish --project . --summary "auth flow tightened"
 ```
 
 If finish blocks because repo changes need durable memory updates, run `brain distill --project . --session`, review the proposal, apply the note updates that matter, and retry `brain session finish`.
+The blocked closeout output also surfaces packet-backed promotion suggestions when Brain can justify them. Review those suggestions first, then use the distill note to decide what should actually become durable memory.
 
 ## Skills
 

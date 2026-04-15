@@ -57,7 +57,7 @@ func newRootCommand(opts rootOptions) *cobra.Command {
 	preflightDone := map[string]bool{}
 	cmd := &cobra.Command{
 		Use:           "brain",
-		Short:         "Project-local brain for docs, planning, context, and workflow",
+		Short:         "Project-local memory, retrieval, context, and workflow for AI agents",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {

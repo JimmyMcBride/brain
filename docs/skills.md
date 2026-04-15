@@ -10,7 +10,7 @@ The point of the Brain skill is simple: it teaches the agent how to operate agai
 - `skills/brain/agents/openai.yaml`
 - `skills/brain/agents/openclaw.yaml`
 
-The Brain skill is the generic fallback for project-local Brain workflows, memory, epic/spec/story planning, brainstorming, context, and sessions.
+The Brain skill is the generic fallback for project-local Brain workflows, memory, compiled task context, and sessions.
 
 ## Install Targets
 
@@ -98,5 +98,7 @@ When a repo uses sessions, the skill should steer agents toward:
 - `brain session validate`
 - `brain session run -- <command>`
 - `brain session finish`
+
+If finish blocks, the skill should steer agents toward the closeout promotion suggestions first and then to `brain distill --session` for the full promotion review note.
 
 That keeps verification and durable memory updates visible and enforceable.
