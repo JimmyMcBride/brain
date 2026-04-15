@@ -40,11 +40,13 @@ type CompiledTest struct {
 }
 
 type VerificationHint struct {
-	ID      string `json:"id"`
-	Label   string `json:"label"`
-	Summary string `json:"summary"`
-	Source  string `json:"source"`
-	Reason  string `json:"reason"`
+	ID       string `json:"id"`
+	Label    string `json:"label"`
+	Command  string `json:"command,omitempty"`
+	Summary  string `json:"summary"`
+	Source   string `json:"source"`
+	Strength string `json:"strength,omitempty"`
+	Reason   string `json:"reason"`
 }
 
 type CompiledWorkingSet struct {

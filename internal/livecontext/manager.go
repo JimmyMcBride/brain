@@ -84,6 +84,7 @@ type NearbyTest struct {
 type Verification struct {
 	RecentCommands []VerificationCommand `json:"recent_commands"`
 	Profiles       []VerificationProfile `json:"profiles"`
+	Recipes        []VerificationRecipe  `json:"recipes"`
 }
 
 type VerificationCommand struct {
@@ -142,6 +143,7 @@ func (m *Manager) Collect(ctx context.Context, req Request) (*Packet, error) {
 	}
 	recentCommands := collectRecentCommands(req.Session)
 	verificationProfiles := collectVerificationProfiles(policy, req.Session)
+	verificationRecipes := collectVerificationRecipes(req.ProjectDir, policy, req.Session, verificationProfiles)
 	policyHints, err := m.collectPolicyHints(req.ProjectDir, policy, req.Session, taskSource, changedFiles, verificationProfiles)
 	if err != nil {
 		return nil, err
@@ -164,6 +166,7 @@ func (m *Manager) Collect(ctx context.Context, req Request) (*Packet, error) {
 		Verification: Verification{
 			RecentCommands: recentCommands,
 			Profiles:       verificationProfiles,
+			Recipes:        verificationRecipes,
 		},
 		PolicyHints: policyHints,
 		Ambiguities: buildAmbiguities(req.Session, gitAvailable, structureAvailable, changedFiles, nearbyTests, recentCommands),
@@ -315,7 +318,7 @@ func renderVerification(w io.Writer, verification Verification) error {
 	if _, err := io.WriteString(w, "## Verification\n\n"); err != nil {
 		return err
 	}
-	if len(verification.RecentCommands) == 0 && len(verification.Profiles) == 0 {
+	if len(verification.RecentCommands) == 0 && len(verification.Profiles) == 0 && len(verification.Recipes) == 0 {
 		_, err := io.WriteString(w, "- No recorded verification yet.\n\n")
 		return err
 	}
@@ -337,6 +340,15 @@ func renderVerification(w io.Writer, verification Verification) error {
 			return err
 		}
 	}
+	recipes := verification.Recipes
+	if len(recipes) > 4 {
+		recipes = recipes[:4]
+	}
+	for _, recipe := range recipes {
+		if _, err := fmt.Fprintf(w, "- recipe `%s` [%s, %s]: `%s`\n", recipe.Label, recipe.Strength, recipe.Source, recipe.Command); err != nil {
+			return err
+		}
+	}
 	_, err := io.WriteString(w, "\n")
 	return err
 }
@@ -353,8 +365,8 @@ func explainLines(packet *Packet) []string {
 	if packet.Worktree.GitAvailable {
 		lines = append(lines, "git availability allows live-work signals to compare current repo state")
 	}
-	if len(packet.Verification.RecentCommands) > 0 || len(packet.Verification.Profiles) > 0 {
-		lines = append(lines, "verification signals show which required checks already ran in this session")
+	if len(packet.Verification.RecentCommands) > 0 || len(packet.Verification.Profiles) > 0 || len(packet.Verification.Recipes) > 0 {
+		lines = append(lines, "verification signals combine repo-derived verification recipes with any checks already recorded in this session")
 	}
 	if len(packet.PolicyHints) > 0 {
 		lines = append(lines, "policy hints appear only when live-work conditions strongly suggest them")
@@ -373,7 +385,7 @@ func missingSignals(packet *Packet) []string {
 	if len(packet.NearbyTests) == 0 {
 		out = append(out, "nearby test signals are not populated yet")
 	}
-	if len(packet.Verification.RecentCommands) == 0 && len(packet.Verification.Profiles) == 0 {
+	if len(packet.Verification.RecentCommands) == 0 && len(packet.Verification.Profiles) == 0 && len(packet.Verification.Recipes) == 0 {
 		out = append(out, "verification signals are not populated yet")
 	}
 	if len(packet.PolicyHints) == 0 {

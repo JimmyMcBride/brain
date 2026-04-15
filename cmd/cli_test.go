@@ -941,7 +941,7 @@ func TestCLIContextLiveJSONReturnsStablePacketShape(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected verification payload: %#v", payload)
 	}
-	for _, key := range []string{"recent_commands", "profiles"} {
+	for _, key := range []string{"recent_commands", "profiles", "recipes"} {
 		if _, ok := verification[key].([]any); !ok {
 			t.Fatalf("expected %s array in verification payload: %#v", key, payload)
 		}
@@ -1026,7 +1026,7 @@ func TestCLIContextLiveReportsVerificationProfilesAndPolicyHints(t *testing.T) {
 	requireOK(t, env.run(t, "", "--config", env.config, "session", "run", "--project", env.project, "--", "go", "test", "./..."))
 
 	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "live"))
-	if !strings.Contains(human, "## Verification") || !strings.Contains(human, "go test ./...") {
+	if !strings.Contains(human, "## Verification") || !strings.Contains(human, "go test ./...") || !strings.Contains(human, "recipe `tests`") {
 		t.Fatalf("expected verification output in live context:\n%s", human)
 	}
 	if !strings.Contains(human, "## Policy Hints") || !strings.Contains(human, "Verification workflow") || !strings.Contains(human, "Durable memory update") {
@@ -1039,7 +1039,7 @@ func TestCLIContextLiveReportsVerificationProfilesAndPolicyHints(t *testing.T) {
 		t.Fatalf("parse json output: %v\n%s", err, jsonOut)
 	}
 	verification := payload["verification"].(map[string]any)
-	if len(verification["recent_commands"].([]any)) == 0 || len(verification["profiles"].([]any)) == 0 {
+	if len(verification["recent_commands"].([]any)) == 0 || len(verification["profiles"].([]any)) == 0 || len(verification["recipes"].([]any)) == 0 {
 		t.Fatalf("expected verification details in payload: %#v", payload)
 	}
 	if len(payload["policy_hints"].([]any)) == 0 {
@@ -1167,8 +1167,57 @@ func TestCLIContextCompileWithExplicitTask(t *testing.T) {
 	if _, ok := payload["provenance"]; !ok {
 		t.Fatalf("expected provenance in compile payload: %#v", payload)
 	}
+	if _, ok := payload["verification"].([]any); !ok {
+		t.Fatalf("expected compiled verification array in payload: %#v", payload)
+	}
 	if _, err := os.Stat(filepath.Join(env.project, ".brain", "session.json")); !os.IsNotExist(err) {
 		t.Fatalf("expected explicit no-session compile not to create an active session file, err=%v", err)
+	}
+}
+
+func TestCLIContextCompileIncludesVerificationRecipes(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	for path, body := range map[string]string{
+		"go.mod":                         "module example.com/test\n\ngo 1.26\n",
+		"internal/search/search.go":      "package search\n",
+		"internal/search/search_test.go": "package search\n",
+	} {
+		if err := os.MkdirAll(filepath.Join(env.project, filepath.Dir(path)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(env.project, path), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	override := "closeout:\n  verification_profiles:\n    - name: tests\n      commands:\n        - go test ./...\n    - name: build\n      commands:\n        - go build ./...\n"
+	if err := os.WriteFile(filepath.Join(env.project, ".brain", "policy.override.yaml"), []byte(override), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	initGitProject(t, env.project)
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "compile verification packet"))
+	if err := os.WriteFile(filepath.Join(env.project, "internal", "search", "search.go"), []byte("package search\n\nfunc Search() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "run", "--project", env.project, "--", "go", "test", "./..."))
+
+	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "compile"))
+	if !strings.Contains(human, "go test ./...") || !strings.Contains(human, "strong") {
+		t.Fatalf("expected verification recipes in compile output:\n%s", human)
+	}
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "compile"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, jsonOut)
+	}
+	verification := payload["verification"].([]any)
+	if len(verification) == 0 {
+		t.Fatalf("expected compiled verification hints in payload: %#v", payload)
+	}
+	first := verification[0].(map[string]any)
+	if first["command"] == "" || first["strength"] == "" {
+		t.Fatalf("expected command and strength in verification hint: %#v", payload)
 	}
 }
 

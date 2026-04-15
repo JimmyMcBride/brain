@@ -59,6 +59,11 @@ func TestCompileBuildsDeterministicPacket(t *testing.T) {
 				{Path: "internal/taskcontext/manager_test.go", Relation: "same_dir", Why: "test surface adjacent to compiler code"},
 			},
 			Verification: livecontext.Verification{
+				Recipes: []livecontext.VerificationRecipe{
+					{Label: "tests", Command: "go test ./internal/taskcontext", Source: "session_history", Strength: "suggested", Reason: "recent successful session command scoped to the touched boundary"},
+					{Label: "tests", Command: "go test ./...", Source: ".brain/policy.yaml", Strength: "strong", Reason: "required by verification profile \"tests\""},
+					{Label: "build", Command: "go build ./...", Source: ".brain/policy.yaml", Strength: "strong", Reason: "required by verification profile \"build\""},
+				},
 				Profiles: []livecontext.VerificationProfile{
 					{Name: "tests", Satisfied: false},
 					{Name: "build", Satisfied: true, MatchedCommand: "go build ./..."},
@@ -128,7 +133,7 @@ func TestCompileBuildsDeterministicPacket(t *testing.T) {
 	if !hasBoundaryLinkedNote {
 		t.Fatalf("expected boundary-linked note selection: %#v", packet.WorkingSet.Notes)
 	}
-	if len(packet.Verification) != 3 {
+	if len(packet.Verification) != 4 {
 		t.Fatalf("expected verification hints from profiles and policy hints: %#v", packet.Verification)
 	}
 	if len(packet.Provenance) != len(packet.BaseContract)+len(packet.WorkingSet.Notes) {
@@ -184,7 +189,7 @@ func TestRenderHumanIncludesCompilerSections(t *testing.T) {
 			},
 		},
 		Verification: []projectcontext.VerificationHint{
-			{ID: "profile:tests", Label: "tests", Summary: "Verification profile is not satisfied yet.", Source: ".brain/policy.yaml", Reason: "required verification profile is still missing"},
+			{ID: "recipe:tests", Label: "tests", Command: "go test ./...", Summary: "required by verification profile \"tests\"", Source: ".brain/policy.yaml", Strength: "strong", Reason: "required by verification profile \"tests\""},
 		},
 		Provenance: []projectcontext.PacketProvenance{
 			{ItemID: "base_boot_summary", Section: "base_contract", Anchor: projectcontext.ContextAnchor{Path: "AGENTS.md", Section: "Project Agent Contract"}, Reason: "always included as part of the base contract"},

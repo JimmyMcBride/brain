@@ -121,6 +121,12 @@ func RenderHuman(w io.Writer, packet *projectcontext.CompiledPacket) error {
 		}
 	} else {
 		for _, hint := range packet.Verification {
+			if hint.Command != "" {
+				if _, err := fmt.Fprintf(w, "- %s [%s] (`%s`): `%s`\n  %s\n  Reason: %s\n", hint.Label, hint.Strength, hint.Source, hint.Command, hint.Summary, hint.Reason); err != nil {
+					return err
+				}
+				continue
+			}
 			if _, err := fmt.Fprintf(w, "- %s (`%s`): %s\n  Reason: %s\n", hint.Label, hint.Source, hint.Summary, hint.Reason); err != nil {
 				return err
 			}
@@ -388,38 +394,94 @@ func selectVerificationHints(packet *livecontext.Packet) []projectcontext.Verifi
 	if packet == nil {
 		return []projectcontext.VerificationHint{}
 	}
-	hints := make([]projectcontext.VerificationHint, 0, len(packet.Verification.Profiles)+len(packet.PolicyHints))
-	for _, profile := range packet.Verification.Profiles {
-		summary := "Verification profile is not satisfied yet."
-		reason := "required verification profile is still missing"
-		if profile.Satisfied {
-			summary = "Verification profile is already satisfied."
-			reason = "recent recorded verification already satisfies this profile"
-		}
-		if profile.MatchedCommand != "" {
-			summary = fmt.Sprintf("%s Matched `%s`.", summary, profile.MatchedCommand)
-		}
+	hints := make([]projectcontext.VerificationHint, 0, len(packet.Verification.Recipes)+len(packet.PolicyHints))
+	selectedRecipes := selectRecipeHints(packet, 4)
+	for _, recipe := range selectedRecipes {
 		hints = append(hints, projectcontext.VerificationHint{
-			ID:      "profile:" + profile.Name,
-			Label:   profile.Name,
-			Summary: summary,
-			Source:  ".brain/policy.yaml",
-			Reason:  reason,
+			ID:       "recipe:" + shortHash(recipe.Source+recipe.Command),
+			Label:    recipe.Label,
+			Command:  recipe.Command,
+			Summary:  recipe.Reason,
+			Source:   recipe.Source,
+			Strength: recipe.Strength,
+			Reason:   recipe.Reason,
 		})
 	}
 	for _, hint := range packet.PolicyHints {
+		if !strings.Contains(strings.ToLower(hint.Label), "verification") {
+			continue
+		}
 		hints = append(hints, projectcontext.VerificationHint{
-			ID:      "policy:" + shortHash(hint.Source+hint.Label+hint.Excerpt),
-			Label:   hint.Label,
-			Summary: clampSummary(hint.Excerpt, 28),
-			Source:  hint.Source,
-			Reason:  hint.Why,
+			ID:       "policy:" + shortHash(hint.Source+hint.Label+hint.Excerpt),
+			Label:    hint.Label,
+			Summary:  clampSummary(hint.Excerpt, 28),
+			Source:   hint.Source,
+			Strength: "suggested",
+			Reason:   hint.Why,
 		})
 	}
 	sort.Slice(hints, func(i, j int) bool {
-		return hints[i].ID < hints[j].ID
+		if hints[i].Strength == hints[j].Strength {
+			return hints[i].ID < hints[j].ID
+		}
+		return hints[i].Strength == "strong"
 	})
 	return hints
+}
+
+func selectRecipeHints(packet *livecontext.Packet, limit int) []livecontext.VerificationRecipe {
+	if packet == nil || limit <= 0 {
+		return []livecontext.VerificationRecipe{}
+	}
+	recipes := append([]livecontext.VerificationRecipe(nil), packet.Verification.Recipes...)
+	sort.Slice(recipes, func(i, j int) bool {
+		return verificationRecipeLess(recipes[i], recipes[j], packet)
+	})
+	if len(recipes) > limit {
+		recipes = recipes[:limit]
+	}
+	return recipes
+}
+
+func verificationRecipeLess(a, b livecontext.VerificationRecipe, packet *livecontext.Packet) bool {
+	scoreA := verificationRecipeScore(a, packet)
+	scoreB := verificationRecipeScore(b, packet)
+	if scoreA == scoreB {
+		if a.Source == b.Source {
+			return a.Command < b.Command
+		}
+		return a.Source < b.Source
+	}
+	return scoreA > scoreB
+}
+
+func verificationRecipeScore(recipe livecontext.VerificationRecipe, packet *livecontext.Packet) int {
+	command := strings.ToLower(strings.TrimSpace(recipe.Command))
+	score := 0
+	if recipe.Strength == "strong" {
+		score += 100
+	} else {
+		score += 50
+	}
+	if strings.Contains(command, "test") && len(packet.NearbyTests) > 0 {
+		score += 25
+	}
+	if strings.Contains(command, "build") && len(packet.Worktree.ChangedFiles) > 0 {
+		score += 10
+	}
+	for _, boundary := range packet.Worktree.TouchedBoundaries {
+		root := strings.ToLower(strings.TrimSuffix(boundary.Path, "/"))
+		if root != "" && strings.Contains(command, root) {
+			score += 35
+		}
+	}
+	for _, test := range packet.NearbyTests {
+		dir := strings.ToLower(filepath.ToSlash(filepath.Dir(test.Path)))
+		if dir != "" && dir != "." && strings.Contains(command, dir) {
+			score += 45
+		}
+	}
+	return score
 }
 
 func buildAmbiguities(packet *livecontext.Packet, results []search.Result, graph *structure.BoundaryGraph, selectedNotes []projectcontext.CompiledItem) []string {
@@ -431,10 +493,10 @@ func buildAmbiguities(packet *livecontext.Packet, results []search.Result, graph
 	if graph == nil {
 		ambiguities = append(ambiguities, "boundary graph was unavailable, so note selection fell back to lexical ranking only")
 	}
-	if len(packet.Worktree.ChangedFiles) == 0 {
+	if len(packet.Worktree.ChangedFiles) == 0 && !containsAmbiguityFragment(ambiguities, "no changed files") {
 		ambiguities = append(ambiguities, "no changed files were detected, so file and boundary selection relied on current repo state rather than an active diff")
 	}
-	if len(packet.NearbyTests) == 0 {
+	if len(packet.NearbyTests) == 0 && !containsAmbiguityFragment(ambiguities, "no nearby tests") {
 		ambiguities = append(ambiguities, "no nearby tests were detected for the current task")
 	}
 	if len(selectedNotes) == 0 && len(lexicalDurableNotes(results, 1)) == 0 {
@@ -454,6 +516,16 @@ func buildAmbiguities(packet *livecontext.Packet, results []search.Result, graph
 	}
 	sort.Strings(ambiguities)
 	return dedupeStrings(ambiguities)
+}
+
+func containsAmbiguityFragment(ambiguities []string, fragment string) bool {
+	fragment = strings.ToLower(strings.TrimSpace(fragment))
+	for _, ambiguity := range ambiguities {
+		if strings.Contains(strings.ToLower(ambiguity), fragment) {
+			return true
+		}
+	}
+	return false
 }
 
 func buildProvenance(packet *projectcontext.CompiledPacket) []projectcontext.PacketProvenance {
