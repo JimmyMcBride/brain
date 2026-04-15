@@ -11,6 +11,7 @@ import (
 	"brain/internal/projectcontext"
 	"brain/internal/search"
 	"brain/internal/structure"
+	"brain/internal/taskcontext"
 
 	"github.com/spf13/cobra"
 )
@@ -25,6 +26,7 @@ func addContextCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLo
 	var assembleTask string
 	var assembleLimit int
 	var assembleExplain bool
+	var compileTask string
 	var structurePath string
 	var liveTask string
 	var liveExplain bool
@@ -207,6 +209,75 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 		},
 	}
 
+	compileCmd := &cobra.Command{
+		Use:   "compile",
+		Short: "Compile a summary-first working-set packet for a task",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			projectRoot := contextProjectPath(project, flags.projectPath)
+			appCtx, err := loadApp(projectRoot)
+			if err != nil {
+				return err
+			}
+			defer appCtx.Close()
+
+			active, err := appCtx.Session.Active(projectRoot)
+			if err != nil {
+				return err
+			}
+
+			resolvedTask := strings.TrimSpace(compileTask)
+			taskSource := "flag"
+			if resolvedTask == "" && active != nil {
+				resolvedTask = strings.TrimSpace(active.Task)
+				taskSource = "session"
+			}
+			if resolvedTask == "" {
+				return errors.New("context compile requires --task or an active session task")
+			}
+
+			activeTask := ""
+			if active != nil {
+				activeTask = strings.TrimSpace(active.Task)
+			}
+			if err := appCtx.SyncIndex(cmd.Context()); err != nil {
+				return err
+			}
+			searchResults, err := appCtx.Search.SearchWithOptions(cmd.Context(), resolvedTask, 12, search.Options{ActiveTask: activeTask})
+			if err != nil {
+				return err
+			}
+			structureSnapshot, err := appCtx.Structure.Snapshot(cmd.Context(), "")
+			if err != nil {
+				return err
+			}
+			livePacket, err := appCtx.Live.Collect(cmd.Context(), livecontext.Request{
+				ProjectDir:         projectRoot,
+				Task:               resolvedTask,
+				TaskSource:         taskSource,
+				Session:            active,
+				StructuralSnapshot: structureSnapshot,
+			})
+			if err != nil {
+				return err
+			}
+
+			manager := taskcontext.New(appCtx.Context)
+			packet, err := manager.Compile(taskcontext.Request{
+				ProjectDir:    projectRoot,
+				Task:          resolvedTask,
+				TaskSource:    taskSource,
+				SearchResults: searchResults,
+				LivePacket:    livePacket,
+			})
+			if err != nil {
+				return err
+			}
+			return appCtx.Output.Print(packet, func(w io.Writer) error {
+				return taskcontext.RenderHuman(w, packet)
+			})
+		},
+	}
+
 	structureCmd := &cobra.Command{
 		Use:   "structure",
 		Short: "Inspect structural repo context",
@@ -355,6 +426,8 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 	assembleCmd.Flags().StringVar(&assembleTask, "task", "", "task text to assemble context for")
 	assembleCmd.Flags().IntVar(&assembleLimit, "limit", 8, "maximum selected context items")
 	assembleCmd.Flags().BoolVar(&assembleExplain, "explain", false, "include selection rationale and omitted context")
+	compileCmd.Flags().StringVar(&project, "project", "", "project root to compile context from")
+	compileCmd.Flags().StringVar(&compileTask, "task", "", "task text to compile context for; defaults to the active session task")
 	structureCmd.Flags().StringVar(&project, "project", "", "project root to inspect structure from")
 	structureCmd.Flags().StringVar(&structurePath, "path", "", "subtree path filter for structural context")
 	structureStatusCmd.Flags().StringVar(&project, "project", "", "project root to inspect structure from")
@@ -363,7 +436,7 @@ This creates a minimal root AGENTS/CLAUDE contract plus a modular
 	liveCmd.Flags().BoolVar(&liveExplain, "explain", false, "include rationale and missing-signal detail")
 
 	structureCmd.AddCommand(structureStatusCmd)
-	contextCmd.AddCommand(installCmd, refreshCmd, loadCmd, assembleCmd, structureCmd, liveCmd)
+	contextCmd.AddCommand(installCmd, refreshCmd, loadCmd, assembleCmd, compileCmd, structureCmd, liveCmd)
 	root.AddCommand(contextCmd)
 }
 

@@ -1130,6 +1130,66 @@ func TestCLIContextAssembleExplainReportsRationaleAndAmbiguities(t *testing.T) {
 	}
 }
 
+func TestCLIContextCompileWithExplicitTask(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	if err := os.MkdirAll(filepath.Join(env.project, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(env.project, "docs", "context-compiler.md"), []byte("# Context Compiler\n\nKeep compiled context packets compact and deterministic.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "compile", "--task", "context compiler deterministic packet"))
+	for _, section := range []string{"## Compiled Context Packet", "## Base Contract", "## Working Set", "## Verification Hints", "## Provenance"} {
+		if !strings.Contains(human, section) {
+			t.Fatalf("expected section %q in compile output:\n%s", section, human)
+		}
+	}
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "compile", "--task", "context compiler deterministic packet"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, jsonOut)
+	}
+	task := payload["task"].(map[string]any)
+	if task["text"] != "context compiler deterministic packet" || task["source"] != "flag" {
+		t.Fatalf("unexpected compile task payload: %#v", payload)
+	}
+	baseContract := payload["base_contract"].([]any)
+	if len(baseContract) != 5 {
+		t.Fatalf("expected five base contract items: %#v", payload)
+	}
+	workingSet := payload["working_set"].(map[string]any)
+	if _, ok := workingSet["notes"]; !ok {
+		t.Fatalf("expected working_set.notes in compile payload: %#v", payload)
+	}
+	if _, ok := payload["provenance"]; !ok {
+		t.Fatalf("expected provenance in compile payload: %#v", payload)
+	}
+}
+
+func TestCLIContextCompileUsesActiveSessionTask(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	initGitProject(t, env.project)
+
+	startOutput := requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "session-backed context compile"))
+	if !strings.Contains(startOutput, "Started session") {
+		t.Fatalf("unexpected session start output:\n%s", startOutput)
+	}
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "compile"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, jsonOut)
+	}
+	task := payload["task"].(map[string]any)
+	if task["text"] != "session-backed context compile" || task["source"] != "session" {
+		t.Fatalf("expected session task resolution in compile payload: %#v", payload)
+	}
+}
+
 func TestCLISessionWorkflow(t *testing.T) {
 	env := newCLIEnv(t)
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
