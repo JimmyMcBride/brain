@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-15T20:48:55Z"
+updated: "2026-04-16T04:52:53Z"
 ---
 # Current State
 
@@ -12,7 +12,7 @@ This file is a deterministic snapshot of the repository state at the last refres
 - Root: `.`
 - Runtime: `go`
 - Go module: `brain`
-- Current branch: `feature/context-substrate-direction`
+- Current branch: `feature/context-packet-optimization`
 - Default branch: `main`
 - Remote: `https://github.com/JimmyMcBride/brain.git`
 - Go test files: `27`
@@ -32,6 +32,22 @@ This file is a deterministic snapshot of the repository state at the last refres
 ## Local Notes
 
 Add repo-specific notes here. `brain context refresh` preserves content outside managed blocks.
+
+- 2026-04-16: Refined the parked capsules plan so it stays on the shelf cleanly. If `derived-doc-capsules-and-drift-audit` is revived later, the intended operator-facing shape is `capsules=off|auto|on`, default `off`, with `auto` making per-compile decisions from local fresh-packet telemetry and capsule health rather than silently flipping a permanent global switch.
+
+- 2026-04-16: Added a small fresh-packet telemetry slice to `brain context stats`. Local compiler telemetry now rolls up fresh packet budget pressure separately from reused and delta packets, reports how often fresh packets were under pressure, and highlights recurring omitted markdown docs so the capsules decision can stay evidence-based instead of speculative.
+
+- 2026-04-16: Evaluated whether session reuse already cuts enough repeated packet weight to defer capsules. Using branch code via `go run .` on representative tasks, fresh compile responses were about `1425-1431` human-estimated tokens and `2781-2787` JSON-estimated tokens with packet budgets around `891-897 / 900`, while repeated same-task compiles dropped to about `281-287` human-estimated tokens and `412-418` JSON-estimated tokens as compact `reused` responses, roughly an `80%` human reduction and `85%` JSON reduction. A clean same-task fingerprint change probe produced a compact `delta` response at about `283` human-estimated tokens and `421` JSON-estimated tokens with explicit invalidation reasons. The current recommendation is to hold `derived-doc-capsules-and-drift-audit` until real evidence shows the first-turn full packet, not repeated packet weight, is still the bottleneck.
+
+- 2026-04-16: Completed the second context-packet-optimization execution slice for session packet reuse. `brain context compile` now fingerprints relevant compile inputs such as task, budget, changed files, touched boundaries, durable search signals, source summary state, and verification requirements; reuses the latest matching active-session packet as a compact response when those inputs are unchanged; emits compact `delta` responses with changed sections, changed item ids, and invalidation reasons when the task is stable but the packet changed; supports `--fresh` to bypass reuse; stores full packet bodies plus lineage metadata in session records; and surfaces cache status plus reuse or delta lineage in `brain context explain`, `docs/usage.md`, and `skills/brain/SKILL.md`.
+
+- 2026-04-15: Ran a real-task calibration pass over the new budgeted context packet presets and found that the main issue was budget accounting, not the preset constants themselves. The compiler was double-counting note provenance in `budget.used` for note-bearing packets and was not reserving the fixed working-set plus provenance section overhead before optional selection. That follow-up is now fixed, focused tests enforce that representative packets stay within target budgets, and the sampled `small|default|large` presets now behave like lean / normal / roomy tiers on representative Brain tasks without further constant changes.
+
+- 2026-04-15: Completed the first context-packet-optimization execution slice for budgeted context packets. `brain context compile` now supports deterministic `small|default|large` presets plus explicit integer token budgets, all compiler-facing and compiled packet items expose estimated token costs, working-set selection now omits optional boundaries/files/tests/notes under a hard remaining budget instead of fixed item-count caps alone, and both compile and explain surfaces now report budget target, used, remaining, reserve buckets, and top omitted candidates. `docs/usage.md` plus `skills/brain/SKILL.md` were updated in the same branch, and representative tests now pin that tighter presets actually emit leaner working sets while keeping mandatory sections.
+
+- 2026-04-15: Started a new planning branch from fresh `origin/main` for the next context-efficiency layer. Added the new brainstorm note `.brain/brainstorms/token-efficient-context-direction.md` plus three draft epic/spec pairs for `budgeted-context-packets`, `session-packet-reuse`, and `derived-doc-capsules-and-drift-audit`, all framed around the 20/80 token-efficiency path: hard packet budgets first, session-local packet reuse second, and derived doc capsules with drift auditing instead of an always-injected rule-file model.
+
+- 2026-04-16: Ran the full planning loop for the next context-efficiency layer. Approved the three specs for `budgeted-context-packets`, `session-packet-reuse`, and `derived-doc-capsules-and-drift-audit`; created thirteen execution-ready story notes under `.brain/planning/stories/`; and aligned each epic/spec with the locked order of work: hard packet budgets first, session packet reuse second, and derived capsules plus drift audit third.
 
 - 2026-04-16: Tightened the automatic project-upgrade UX at bootstrap. Fresh `brain init`, `brain adopt`, and `brain context install` flows now initialize the repo-local project-migration ledger as current, so a brand-new Brain repo does not show `project_migrations: pending` in `brain doctor` before any unrelated preflight command has run. Also closed the release/install planning cleanup by marking the spec approved now that the migration lifecycle work is fully implemented.
 
@@ -83,7 +99,7 @@ Add repo-specific notes here. `brain context refresh` preserves content outside 
 
 - 2026-04-11: Updated `scripts/refresh-global-brain.sh` to match the new Brain-only `brain skills install` CLI so maintainer refreshes no longer rely on the removed `--skill` flag.
 - 2026-04-11: Replaced the old paradigm-based planning model with an opinionated epic-only spec-driven workflow. `brain plan` now centers on brainstorm -> epic -> spec -> stories, removes milestone/cycle support, auto-creates one canonical draft spec per epic, gates new stories on approved specs, and migrates legacy epic projects by backfilling spec notes and story metadata.
-- 2026-04-11: Removed the final legacy planning compatibility path from `.brain/project.yaml` so Brain now accepts only `planning_model: epic_spec_v1`, and rewrote the README flow so install is followed immediately by adding the Brain skill and then by the brainstorm -> epic -> spec -> story execution workflow.
+- 2026-04-11: Removed the final legacy planning compatibility path from `.brain/project.yaml` so Brain now accepts only `planning_model: epic_spec_v1`, and rewrote the README flow so install is followed immediately by adding the Brain skill and then by the brainstorm -> epic -> story execution workflow.
 - 2026-04-11: Added automatic stable release tagging from `main` so each push creates the next patch semver tag, triggers the existing GitHub release packaging flow, and makes installers plus `brain update` target the latest stable release from `main` by default.
 - 2026-04-11: Fixed publish-only session closeout so finish validation can treat accepted durable notes committed in the session commit range as satisfying the memory rule, and ignore volatile `.brain/state` plus session runtime files when checking meaningful git cleanliness.
 - 2026-04-11: Fixed automatic GitHub release publishing so main pushes no longer stop at tag creation. The tag workflow now calls the reusable release workflow directly after pushing the new semver tag, which avoids the GitHub `GITHUB_TOKEN` workflow-chaining limitation that was leaving tags without downloadable release assets.

@@ -25,6 +25,7 @@ type Request struct {
 	ProjectDir     string
 	Task           string
 	TaskSource     string
+	Budget         string
 	SearchResults  []search.Result
 	LivePacket     *livecontext.Packet
 	BoundaryGraph  *structure.BoundaryGraph
@@ -75,25 +76,35 @@ func (m *Manager) Compile(req Request) (*projectcontext.CompiledPacket, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	workingSetNotes := selectWorkingSetNotes(req.ProjectDir, req.SearchResults, sourceSummaries, req.LivePacket, req.BoundaryGraph, req.UtilitySignals, 5)
+	budget, err := resolveCompileBudget(strings.TrimSpace(req.Budget))
+	if err != nil {
+		return nil, err
+	}
+	baseContractItems := selectBaseContract(baseContract)
+	verificationHints := selectVerificationHints(req.LivePacket)
+	reserveBase := estimateBaseContractReserve(baseContractItems)
+	reserveVerification := estimateVerificationReserve(verificationHints)
+	reserveDiagnostics := estimateDiagnosticsReserve(task, taskSource, req.LivePacket)
+	workingSet := selectBudgetedWorkingSet(
+		max(0, budget.Target-reserveBase-reserveVerification-reserveDiagnostics-estimateSelectionOverheadReserve()),
+		selectBoundaries(req.LivePacket, 0),
+		selectFiles(req.LivePacket, 0),
+		selectTests(req.LivePacket, 0),
+		rankedWorkingSetNotes(req.ProjectDir, req.SearchResults, sourceSummaries, req.LivePacket, req.BoundaryGraph, req.UtilitySignals),
+	)
 	packet := &projectcontext.CompiledPacket{
 		Task: projectcontext.CompiledTask{
 			Text:    task,
 			Summary: summarizeTask(task),
 			Source:  taskSource,
 		},
-		BaseContract: selectBaseContract(baseContract),
-		WorkingSet: projectcontext.CompiledWorkingSet{
-			Boundaries: selectBoundaries(req.LivePacket, 4),
-			Files:      selectFiles(req.LivePacket, 6),
-			Tests:      selectTests(req.LivePacket, 4),
-			Notes:      workingSetNotes,
-		},
-		Verification: selectVerificationHints(req.LivePacket),
-		Ambiguities:  buildAmbiguities(req.LivePacket, req.SearchResults, req.BoundaryGraph, workingSetNotes),
+		BaseContract: baseContractItems,
+		WorkingSet:   workingSet.Selected,
+		Verification: verificationHints,
+		Ambiguities:  buildAmbiguities(req.LivePacket, req.SearchResults, req.BoundaryGraph, workingSet.Selected.Notes),
 	}
 	packet.Provenance = buildProvenance(packet)
+	packet.Budget = buildPacketBudget(packet, budget, reserveBase, reserveVerification, reserveDiagnostics, workingSet.Omitted)
 	return packet, nil
 }
 
@@ -102,6 +113,9 @@ func RenderHuman(w io.Writer, packet *projectcontext.CompiledPacket) error {
 		return errors.New("compiled packet is required")
 	}
 	if _, err := fmt.Fprintf(w, "## Compiled Context Packet\n\n- Task: `%s`\n- Summary: %s\n- Source: `%s`\n\n", packet.Task.Text, packet.Task.Summary, packet.Task.Source); err != nil {
+		return err
+	}
+	if err := renderBudget(w, packet.Budget); err != nil {
 		return err
 	}
 	if _, err := io.WriteString(w, "## Base Contract\n\n"); err != nil {
@@ -186,10 +200,11 @@ func selectFiles(packet *livecontext.Packet, limit int) []projectcontext.Compile
 	files := make([]projectcontext.CompiledFile, 0, min(limit, len(packet.Worktree.ChangedFiles)))
 	for _, file := range trimChangedFiles(packet.Worktree.ChangedFiles, limit) {
 		files = append(files, projectcontext.CompiledFile{
-			Path:   file.Path,
-			Status: file.Status,
-			Source: file.Source,
-			Reason: file.Why,
+			Path:            file.Path,
+			Status:          file.Status,
+			Source:          file.Source,
+			Reason:          file.Why,
+			EstimatedTokens: projectcontext.EstimateTokens(file.Path, file.Status, file.Source, file.Why),
 		})
 	}
 	return files
@@ -208,6 +223,7 @@ func selectBoundaries(packet *livecontext.Packet, limit int) []projectcontext.Co
 			Reason:             boundary.Why,
 			AdjacentBoundaries: append([]string(nil), boundary.AdjacentBoundaries...),
 			Responsibilities:   append([]string(nil), boundary.Responsibilities...),
+			EstimatedTokens:    projectcontext.EstimateTokens(boundary.Path, boundary.Label, boundary.Role, boundary.Why, strings.Join(boundary.AdjacentBoundaries, " "), strings.Join(boundary.Responsibilities, " ")),
 		})
 	}
 	return boundaries
@@ -220,41 +236,45 @@ func selectTests(packet *livecontext.Packet, limit int) []projectcontext.Compile
 	tests := make([]projectcontext.CompiledTest, 0, min(limit, len(packet.NearbyTests)))
 	for _, test := range trimTests(packet.NearbyTests, limit) {
 		tests = append(tests, projectcontext.CompiledTest{
-			Path:     test.Path,
-			Relation: test.Relation,
-			Reason:   test.Why,
+			Path:            test.Path,
+			Relation:        test.Relation,
+			Reason:          test.Why,
+			EstimatedTokens: projectcontext.EstimateTokens(test.Path, test.Relation, test.Why),
 		})
 	}
 	return tests
 }
 
 func selectWorkingSetNotes(projectDir string, results []search.Result, generated []projectcontext.ContextItem, packet *livecontext.Packet, graph *structure.BoundaryGraph, utility map[string]ItemUtilitySignal, limit int) []projectcontext.CompiledItem {
+	ranked := rankedWorkingSetNotes(projectDir, results, generated, packet, graph, utility)
 	if limit <= 0 {
-		return []projectcontext.CompiledItem{}
+		return ranked
 	}
-	if graph == nil || packet == nil || len(packet.Worktree.TouchedBoundaries) == 0 {
-		return lexicalDurableNotes(results, utility, limit)
+	if len(ranked) > limit {
+		return append([]projectcontext.CompiledItem(nil), ranked[:limit]...)
 	}
+	return ranked
+}
 
+func rankedWorkingSetNotes(projectDir string, results []search.Result, generated []projectcontext.ContextItem, packet *livecontext.Packet, graph *structure.BoundaryGraph, utility map[string]ItemUtilitySignal) []projectcontext.CompiledItem {
+	if graph == nil || packet == nil || len(packet.Worktree.TouchedBoundaries) == 0 {
+		return lexicalDurableNotes(results, utility, 0)
+	}
 	touchedOrder := orderedTouchedBoundaries(packet, graph)
 	candidates := buildNoteCandidates(projectDir, results, generated, packet, graph, utility)
 	if len(candidates) == 0 {
-		return lexicalDurableNotes(results, utility, limit)
+		return lexicalDurableNotes(results, utility, 0)
 	}
 
 	grouped := map[string][]noteCandidate{}
-	unscoped := []noteCandidate{}
 	for _, candidate := range candidates {
-		if candidate.primaryBoundary == "" {
-			unscoped = append(unscoped, candidate)
-			continue
+		if candidate.primaryBoundary != "" {
+			grouped[candidate.primaryBoundary] = append(grouped[candidate.primaryBoundary], candidate)
 		}
-		grouped[candidate.primaryBoundary] = append(grouped[candidate.primaryBoundary], candidate)
 	}
 	for key := range grouped {
 		sort.Slice(grouped[key], func(i, j int) bool { return noteCandidateLess(grouped[key][i], grouped[key][j]) })
 	}
-	sort.Slice(unscoped, func(i, j int) bool { return noteCandidateLess(unscoped[i], unscoped[j]) })
 
 	selected := []projectcontext.CompiledItem{}
 	seen := map[string]struct{}{}
@@ -269,9 +289,6 @@ func selectWorkingSetNotes(projectDir string, results []search.Result, generated
 		}
 		selected = append(selected, candidate.item)
 		seen[candidate.item.ID] = struct{}{}
-		if len(selected) == limit {
-			return selected
-		}
 	}
 
 	remaining := []noteCandidate{}
@@ -284,21 +301,14 @@ func selectWorkingSetNotes(projectDir string, results []search.Result, generated
 	sort.Slice(remaining, func(i, j int) bool { return noteCandidateLess(remaining[i], remaining[j]) })
 	for _, candidate := range remaining {
 		selected = append(selected, candidate.item)
-		if len(selected) == limit {
-			break
-		}
+		seen[candidate.item.ID] = struct{}{}
 	}
-	if len(selected) < limit {
-		for _, item := range lexicalDurableNotes(results, utility, limit-len(selected)) {
-			if _, ok := seen[item.ID]; ok {
-				continue
-			}
-			selected = append(selected, item)
-			seen[item.ID] = struct{}{}
-			if len(selected) == limit {
-				break
-			}
+	for _, item := range lexicalDurableNotes(results, utility, 0) {
+		if _, ok := seen[item.ID]; ok {
+			continue
 		}
+		selected = append(selected, item)
+		seen[item.ID] = struct{}{}
 	}
 	return selected
 }
@@ -333,9 +343,12 @@ func lexicalDurableNotes(results []search.Result, utility map[string]ItemUtility
 	}
 	sort.Slice(candidates, func(i, j int) bool { return noteCandidateLess(candidates[i], candidates[j]) })
 	selected := make([]projectcontext.CompiledItem, 0, min(limit, len(candidates)))
+	if limit <= 0 {
+		selected = make([]projectcontext.CompiledItem, 0, len(candidates))
+	}
 	for _, candidate := range candidates {
 		selected = append(selected, candidate.item)
-		if len(selected) == limit {
+		if limit > 0 && len(selected) == limit {
 			break
 		}
 	}
@@ -443,13 +456,14 @@ func selectVerificationHints(packet *livecontext.Packet) []projectcontext.Verifi
 	selectedRecipes := selectRecipeHints(packet, 4)
 	for _, recipe := range selectedRecipes {
 		hints = append(hints, projectcontext.VerificationHint{
-			ID:       "recipe:" + shortHash(recipe.Source+recipe.Command),
-			Label:    recipe.Label,
-			Command:  recipe.Command,
-			Summary:  recipe.Reason,
-			Source:   recipe.Source,
-			Strength: recipe.Strength,
-			Reason:   recipe.Reason,
+			ID:              "recipe:" + shortHash(recipe.Source+recipe.Command),
+			Label:           recipe.Label,
+			Command:         recipe.Command,
+			Summary:         recipe.Reason,
+			Source:          recipe.Source,
+			Strength:        recipe.Strength,
+			Reason:          recipe.Reason,
+			EstimatedTokens: projectcontext.EstimateTokens(recipe.Label, recipe.Command, recipe.Source, recipe.Strength, recipe.Reason),
 		})
 	}
 	for _, hint := range packet.PolicyHints {
@@ -457,12 +471,13 @@ func selectVerificationHints(packet *livecontext.Packet) []projectcontext.Verifi
 			continue
 		}
 		hints = append(hints, projectcontext.VerificationHint{
-			ID:       "policy:" + shortHash(hint.Source+hint.Label+hint.Excerpt),
-			Label:    hint.Label,
-			Summary:  clampSummary(hint.Excerpt, 28),
-			Source:   hint.Source,
-			Strength: "suggested",
-			Reason:   hint.Why,
+			ID:              "policy:" + shortHash(hint.Source+hint.Label+hint.Excerpt),
+			Label:           hint.Label,
+			Summary:         clampSummary(hint.Excerpt, 28),
+			Source:          hint.Source,
+			Strength:        "suggested",
+			Reason:          hint.Why,
+			EstimatedTokens: projectcontext.EstimateTokens(hint.Label, clampSummary(hint.Excerpt, 28), hint.Source, hint.Why),
 		})
 	}
 	sort.Slice(hints, func(i, j int) bool {
@@ -600,6 +615,45 @@ func buildProvenance(packet *projectcontext.CompiledPacket) []projectcontext.Pac
 	return provenance
 }
 
+func renderBudget(w io.Writer, budget projectcontext.PacketBudget) error {
+	if _, err := io.WriteString(w, "## Budget\n\n"); err != nil {
+		return err
+	}
+	line := fmt.Sprintf(
+		"- Target: %d tokens\n- Used: %d tokens\n- Remaining: %d tokens\n- Reserve base contract: %d tokens\n- Reserve verification: %d tokens\n- Reserve diagnostics: %d tokens\n- Omitted due to budget: %d\n",
+		budget.Target,
+		budget.Used,
+		budget.Remaining,
+		budget.ReserveBaseContract,
+		budget.ReserveVerification,
+		budget.ReserveDiagnostics,
+		budget.OmittedDueToBudget,
+	)
+	if budget.Preset != "" {
+		line = fmt.Sprintf("- Preset: `%s`\n%s", budget.Preset, line)
+	}
+	if _, err := io.WriteString(w, line); err != nil {
+		return err
+	}
+	if budget.MandatoryOverTarget {
+		if _, err := io.WriteString(w, "- Mandatory sections exceeded the target budget before optional working-set selection.\n"); err != nil {
+			return err
+		}
+	}
+	if len(budget.OmittedCandidates) != 0 {
+		if _, err := io.WriteString(w, "- Top omitted candidates:\n"); err != nil {
+			return err
+		}
+		for _, item := range budget.OmittedCandidates {
+			if _, err := fmt.Fprintf(w, "  - %s [%s] (`%s`, %d tokens): %s\n", item.Title, item.Section, anchorLabel(item.Anchor), item.EstimatedTokens, item.Reason); err != nil {
+				return err
+			}
+		}
+	}
+	_, err := io.WriteString(w, "\n")
+	return err
+}
+
 func renderBoundaries(w io.Writer, items []projectcontext.CompiledBoundary) error {
 	if _, err := io.WriteString(w, "### Boundaries\n\n"); err != nil {
 		return err
@@ -714,8 +768,9 @@ func baseDurableNoteItem(result search.Result) projectcontext.ContextItem {
 			Path:    filepath.ToSlash(strings.TrimSpace(result.NotePath)),
 			Section: noteAnchorSection(result),
 		},
-		SourceHash:    shortHash(raw),
-		ExpansionCost: len(strings.Fields(raw)),
+		SourceHash:      shortHash(raw),
+		ExpansionCost:   len(strings.Fields(raw)),
+		EstimatedTokens: projectcontext.EstimateTokens(result.NoteTitle, result.Heading, clampSummary(result.Snippet, 30), result.NotePath),
 	}
 }
 
@@ -1095,6 +1150,13 @@ func trimTests(items []livecontext.NearbyTest, limit int) []livecontext.NearbyTe
 
 func min(a, b int) int {
 	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a, b int) int {
+	if a > b {
 		return a
 	}
 	return b

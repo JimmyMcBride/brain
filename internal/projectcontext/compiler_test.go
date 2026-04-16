@@ -28,7 +28,7 @@ func TestBuildBaseContractItems(t *testing.T) {
 		if item.Kind != ContextItemKindBaseContract {
 			t.Fatalf("expected base contract kind, got %#v", item)
 		}
-		if item.Summary == "" || item.Anchor.Path == "" || item.SourceHash == "" || item.ExpansionCost == 0 {
+		if item.Summary == "" || item.Anchor.Path == "" || item.SourceHash == "" || item.ExpansionCost == 0 || item.EstimatedTokens == 0 {
 			t.Fatalf("expected populated compiler item fields: %#v", item)
 		}
 		if words := len(strings.Fields(item.Summary)); words > 50 {
@@ -78,7 +78,7 @@ func TestBuildSourceSummaryItems(t *testing.T) {
 		if item.Anchor.Path == "" || item.Anchor.Section == "" {
 			t.Fatalf("expected anchor path and section: %#v", item)
 		}
-		if item.SourceHash == "" || item.ExpansionCost == 0 {
+		if item.SourceHash == "" || item.ExpansionCost == 0 || item.EstimatedTokens == 0 {
 			t.Fatalf("expected source metadata: %#v", item)
 		}
 	}
@@ -101,5 +101,16 @@ func TestBuildSourceSummaryItems(t *testing.T) {
 	}
 	if !foundWorkflow || !foundPolicy {
 		t.Fatalf("expected workflow and policy summary items, got=%#v", items)
+	}
+}
+
+func TestEstimateTokensTreatsCodeishTextConservatively(t *testing.T) {
+	plain := EstimateTokens("Keep packet output compact and deterministic.")
+	codeish := EstimateTokens("cmd/context.go", "internal/taskcontext/manager.go", "go test ./...")
+	if plain == 0 || codeish == 0 {
+		t.Fatalf("expected non-zero token estimates: plain=%d codeish=%d", plain, codeish)
+	}
+	if codeish <= plain {
+		t.Fatalf("expected code-heavy/path-heavy text to cost at least as much as plain prose: plain=%d codeish=%d", plain, codeish)
 	}
 }

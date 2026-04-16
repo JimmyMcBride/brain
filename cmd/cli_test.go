@@ -1142,7 +1142,7 @@ func TestCLIContextCompileWithExplicitTask(t *testing.T) {
 	}
 
 	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "compile", "--task", "context compiler deterministic packet"))
-	for _, section := range []string{"## Compiled Context Packet", "## Base Contract", "## Working Set", "## Verification Hints", "## Provenance"} {
+	for _, section := range []string{"## Compiled Context Packet", "## Budget", "## Base Contract", "## Working Set", "## Verification Hints", "## Provenance"} {
 		if !strings.Contains(human, section) {
 			t.Fatalf("expected section %q in compile output:\n%s", section, human)
 		}
@@ -1156,6 +1156,10 @@ func TestCLIContextCompileWithExplicitTask(t *testing.T) {
 	task := payload["task"].(map[string]any)
 	if task["text"] != "context compiler deterministic packet" || task["source"] != "flag" {
 		t.Fatalf("unexpected compile task payload: %#v", payload)
+	}
+	budget := payload["budget"].(map[string]any)
+	if budget["target"].(float64) == 0 || budget["used"].(float64) == 0 {
+		t.Fatalf("expected compile budget diagnostics in payload: %#v", payload)
 	}
 	baseContract := payload["base_contract"].([]any)
 	if len(baseContract) != 5 {
@@ -1207,7 +1211,7 @@ func TestCLIContextCompileIncludesVerificationRecipes(t *testing.T) {
 		t.Fatalf("expected verification recipes in compile output:\n%s", human)
 	}
 
-	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "compile"))
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "compile", "--fresh"))
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
 		t.Fatalf("parse json output: %v\n%s", err, jsonOut)
@@ -1254,6 +1258,110 @@ func TestCLIContextCompileUsesActiveSessionTask(t *testing.T) {
 	if len(packetRecords) != 1 {
 		t.Fatalf("expected one packet record after session-backed compile: %#v", sessionPayload)
 	}
+	record := packetRecords[0].(map[string]any)
+	if _, ok := record["budget"].(map[string]any); !ok {
+		t.Fatalf("expected packet budget metadata in the recorded packet: %#v", sessionPayload)
+	}
+}
+
+func TestCLIContextCompileReusesLatestMatchingSessionPacket(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	initGitProject(t, env.project)
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "session packet reuse"))
+
+	firstJSON := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "compile"))
+	var first map[string]any
+	if err := json.Unmarshal([]byte(firstJSON), &first); err != nil {
+		t.Fatalf("parse first compile payload: %v\n%s", err, firstJSON)
+	}
+	if first["cache_status"] != "fresh" || first["full_packet_included"] != true {
+		t.Fatalf("expected first compile to be a full fresh packet: %#v", first)
+	}
+
+	secondJSON := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "compile"))
+	var second map[string]any
+	if err := json.Unmarshal([]byte(secondJSON), &second); err != nil {
+		t.Fatalf("parse second compile payload: %v\n%s", err, secondJSON)
+	}
+	if second["cache_status"] != "reused" || second["full_packet_included"] != false {
+		t.Fatalf("expected second compile to reuse compactly: %#v", second)
+	}
+	if second["reused_from"] != first["packet_hash"] {
+		t.Fatalf("expected reuse lineage to point at first packet: first=%#v second=%#v", first, second)
+	}
+	if _, ok := second["base_contract"]; ok {
+		t.Fatalf("did not expect compact reuse payload to re-emit base_contract: %#v", second)
+	}
+	if _, ok := second["working_set"]; ok {
+		t.Fatalf("did not expect compact reuse payload to re-emit working_set: %#v", second)
+	}
+}
+
+func TestCLIContextCompileFreshBypassesSessionReuse(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	initGitProject(t, env.project)
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "session packet reuse"))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "compile"))
+
+	freshJSON := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "compile", "--fresh"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(freshJSON), &payload); err != nil {
+		t.Fatalf("parse fresh compile payload: %v\n%s", err, freshJSON)
+	}
+	if payload["cache_status"] != "fresh" || payload["full_packet_included"] != true {
+		t.Fatalf("expected --fresh to force a standalone full packet: %#v", payload)
+	}
+	if !strings.Contains(payload["fallback_reason"].(string), "fresh compile requested") {
+		t.Fatalf("expected explicit fresh fallback reason: %#v", payload)
+	}
+	if _, ok := payload["base_contract"].([]any); !ok {
+		t.Fatalf("expected --fresh payload to include full packet sections: %#v", payload)
+	}
+}
+
+func TestCLIContextCompileEmitsCompactDeltaWhenRelevantInputsChange(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	initGitProject(t, env.project)
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "session packet reuse"))
+
+	firstJSON := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "compile"))
+	var first map[string]any
+	if err := json.Unmarshal([]byte(firstJSON), &first); err != nil {
+		t.Fatalf("parse first compile payload: %v\n%s", err, firstJSON)
+	}
+
+	if err := os.WriteFile(filepath.Join(env.project, "main.go"), []byte("package main\nfunc main() { println(\"changed\") }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	deltaJSON := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "compile"))
+	var delta map[string]any
+	if err := json.Unmarshal([]byte(deltaJSON), &delta); err != nil {
+		t.Fatalf("parse delta compile payload: %v\n%s", err, deltaJSON)
+	}
+	if delta["cache_status"] != "delta" || delta["full_packet_included"] != false {
+		t.Fatalf("expected compact delta payload: %#v", delta)
+	}
+	if delta["delta_from"] != first["packet_hash"] {
+		t.Fatalf("expected delta lineage to point at first packet: first=%#v delta=%#v", first, delta)
+	}
+	reasons := delta["invalidation_reasons"].([]any)
+	foundChangedFiles := false
+	for _, reason := range reasons {
+		if reason == "changed files changed" {
+			foundChangedFiles = true
+			break
+		}
+	}
+	if !foundChangedFiles {
+		t.Fatalf("expected changed-files invalidation reason, got %#v", delta)
+	}
+	if _, ok := delta["working_set"]; ok {
+		t.Fatalf("did not expect compact delta payload to re-emit working_set: %#v", delta)
+	}
 }
 
 func TestCLIContextExplainShowsRecordedPacketOutcomes(t *testing.T) {
@@ -1279,7 +1387,7 @@ func TestCLIContextExplainShowsRecordedPacketOutcomes(t *testing.T) {
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "read", notePath))
 
 	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "explain", "--last"))
-	for _, section := range []string{"## Packet", "## Included Items", "## Expanded Later", "## Downstream Outcomes"} {
+	for _, section := range []string{"## Packet", "## Budget", "## Lineage", "## Included Items", "## Expanded Later", "## Downstream Outcomes"} {
 		if !strings.Contains(human, section) {
 			t.Fatalf("expected section %q in explain output:\n%s", section, human)
 		}
@@ -1297,11 +1405,30 @@ func TestCLIContextExplainShowsRecordedPacketOutcomes(t *testing.T) {
 	if packet["packet_hash"] == "" {
 		t.Fatalf("expected packet hash in explain payload: %#v", payload)
 	}
+	if packet["cache_status"] == "" {
+		t.Fatalf("expected cache status in explain payload: %#v", payload)
+	}
+	if _, ok := packet["budget"].(map[string]any); !ok {
+		t.Fatalf("expected explain payload to include packet budget diagnostics: %#v", payload)
+	}
 	if len(payload["included_items"].([]any)) == 0 {
 		t.Fatalf("expected included items in explain payload: %#v", payload)
 	}
 	if len(payload["expanded_later"].([]any)) == 0 {
 		t.Fatalf("expected expanded item telemetry in explain payload: %#v", payload)
+	}
+}
+
+func TestCLIContextCompileRejectsInvalidBudget(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+
+	result := env.run(t, "", "--config", env.config, "--project", env.project, "context", "compile", "--task", "context compiler deterministic packet", "--budget", "tinyish")
+	if result.err == nil {
+		t.Fatalf("expected invalid budget error, stdout:\n%s", result.stdout)
+	}
+	if !strings.Contains(result.err.Error(), "invalid compile budget") {
+		t.Fatalf("expected clear invalid budget error, got %v", result.err)
 	}
 }
 
@@ -1330,16 +1457,19 @@ func TestCLIContextStatsSummarizesSignalAndVerificationLinks(t *testing.T) {
 
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "compile"))
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "read", notePath))
-	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "compile"))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "compile", "--fresh"))
 
 	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "stats", "--limit", "3"))
-	for _, section := range []string{"## Context Stats", "## Top Signal", "## Frequently Expanded", "## Common Verification Links"} {
+	for _, section := range []string{"## Context Stats", "## Top Signal", "## Frequently Expanded", "## Fresh Packet Pressure", "## Frequently Omitted Docs", "## Common Verification Links"} {
 		if !strings.Contains(human, section) {
 			t.Fatalf("expected section %q in stats output:\n%s", section, human)
 		}
 	}
 	if !strings.Contains(human, "likely_utility=likely_signal") {
 		t.Fatalf("expected likely signal wording in stats output:\n%s", human)
+	}
+	if !strings.Contains(human, "Fresh packets analyzed:") {
+		t.Fatalf("expected fresh packet pressure counts in stats output:\n%s", human)
 	}
 	if !strings.Contains(human, "go version") {
 		t.Fatalf("expected recorded verification command in stats output:\n%s", human)
@@ -1362,6 +1492,13 @@ func TestCLIContextStatsSummarizesSignalAndVerificationLinks(t *testing.T) {
 	}
 	if len(payload["common_verification_links"].([]any)) == 0 {
 		t.Fatalf("expected verification links in stats payload: %#v", payload)
+	}
+	pressure, ok := payload["fresh_packet_pressure"].(map[string]any)
+	if !ok || pressure["fresh_packets_analyzed"].(float64) == 0 {
+		t.Fatalf("expected fresh packet pressure stats in payload: %#v", payload)
+	}
+	if _, ok := payload["frequently_omitted_docs"].([]any); !ok {
+		t.Fatalf("expected omitted-doc telemetry list in stats payload: %#v", payload)
 	}
 }
 

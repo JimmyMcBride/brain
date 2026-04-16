@@ -26,15 +26,16 @@ type ContextAnchor struct {
 }
 
 type ContextItem struct {
-	ID            string          `json:"id"`
-	Kind          ContextItemKind `json:"kind"`
-	Title         string          `json:"title"`
-	Summary       string          `json:"summary"`
-	Anchor        ContextAnchor   `json:"anchor"`
-	Boundaries    []string        `json:"boundaries,omitempty"`
-	Files         []string        `json:"files,omitempty"`
-	SourceHash    string          `json:"source_hash"`
-	ExpansionCost int             `json:"expansion_cost"`
+	ID              string          `json:"id"`
+	Kind            ContextItemKind `json:"kind"`
+	Title           string          `json:"title"`
+	Summary         string          `json:"summary"`
+	Anchor          ContextAnchor   `json:"anchor"`
+	Boundaries      []string        `json:"boundaries,omitempty"`
+	Files           []string        `json:"files,omitempty"`
+	SourceHash      string          `json:"source_hash"`
+	ExpansionCost   int             `json:"expansion_cost"`
+	EstimatedTokens int             `json:"estimated_tokens"`
 }
 
 func (m *Manager) BuildBaseContractItems(projectDir string) ([]ContextItem, error) {
@@ -250,8 +251,9 @@ func newContextItem(id string, kind ContextItemKind, title, path, section, raw, 
 			Path:    path,
 			Section: section,
 		},
-		SourceHash:    hashContextSource(raw),
-		ExpansionCost: len(strings.Fields(raw)),
+		SourceHash:      hashContextSource(raw),
+		ExpansionCost:   len(strings.Fields(raw)),
+		EstimatedTokens: EstimateTokens(title, path, section, summary),
 	}
 }
 

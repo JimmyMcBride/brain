@@ -1,5 +1,7 @@
 # 🧠 brain
 
+![Scarecrow dancing](docs/assets/scarecrow.gif)
+
 ## Give Your AI Coding Agent A Real Brain Inside The Repo
 
 `brain` is a local-first memory, context, planning, and retrieval layer for AI coding agents.
