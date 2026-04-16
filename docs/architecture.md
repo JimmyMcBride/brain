@@ -8,7 +8,7 @@ The repo has three important layers:
 
 1. workspace and notes
 2. indexing, retrieval, and safety
-3. context compilation, optional project workflows, and sessions
+3. context compilation, session enforcement, and upgrade-aware repo guidance
 
 ## Workspace Model
 
@@ -36,11 +36,11 @@ The index is local to each project under `.brain/state/brain.sqlite3`.
 
 - `internal/projectcontext` generates and refreshes `AGENTS.md`, `.brain/context/*`, and `.brain/policy.yaml`, and it can integrate Brain-managed sections into existing local agent instruction files
 - `internal/taskcontext` owns the summary-first context compiler and packet assembly for `brain context compile`
-- `internal/session` enforces preflight and closeout workflow rules
-- `internal/project` owns `.brain/project.yaml` and the fixed epic-spec planning model
-- `internal/plan` owns epic/spec/story planning behavior plus legacy epic migration
-- `internal/brainstorm` owns project-local brainstorming flows
-- `internal/promotion` classifies review-first durable-memory candidates for closeout and distillation
+- `internal/structure` derives boundary, entrypoint, config-surface, and test-surface data for compiler consumers
+- `internal/livecontext` inspects worktree, session, and verification-adjacent signals for live task context
+- `internal/session` enforces preflight and closeout workflow rules and records packet telemetry
+- `internal/distill` turns active session work into review-first durable-memory proposals
+- `internal/promotion` classifies durable-memory candidates for closeout and distillation
 - `internal/skills` installs the Brain skill into agent runtimes
 - `internal/update` owns version/update behavior
 
@@ -48,7 +48,7 @@ The index is local to each project under `.brain/state/brain.sqlite3`.
 
 - `main.go` boots Cobra
 - `cmd/*` stays thin and maps flags/args to internal services
-- `internal/app` wires config, workspace, notes, search, context compilation, sessions, optional planning workflows, history, and output
+- `internal/app` wires config, workspace, notes, search, context compilation, sessions, distillation, skills, and output
 
 ## Key Design Rules
 

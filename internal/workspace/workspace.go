@@ -23,8 +23,6 @@ func (s *Service) Initialize() error {
 	for _, dir := range []string{
 		".brain",
 		".brain/context",
-		".brain/brainstorms",
-		".brain/planning",
 		".brain/resources/captures",
 		".brain/resources/changes",
 		".brain/resources/references",

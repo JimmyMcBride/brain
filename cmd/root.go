@@ -111,8 +111,6 @@ func addCommands(root *cobra.Command, flags *rootFlagsState, loadApp appLoader) 
 	addFindCommand(root, flags, loadApp)
 	addSearchCommand(root, flags, loadApp)
 	addDistillCommand(root, flags, loadApp)
-	addBrainstormCommand(root, flags, loadApp)
-	addPlanCommand(root, flags, loadApp)
 	addHistoryCommand(root, flags, loadApp)
 	addUndoCommand(root, flags, loadApp)
 	addContextCommand(root, flags, loadApp)
@@ -183,16 +181,8 @@ func chooseTemplate(noteType, templateName string) string {
 		return templateName
 	}
 	switch noteType {
-	case "brainstorm", "brainstorm_distill":
-		return "brainstorm.md"
 	case "decision":
 		return "decision.md"
-	case "epic":
-		return "epic.md"
-	case "spec":
-		return "spec.md"
-	case "story":
-		return "story.md"
 	default:
 		return "resource.md"
 	}

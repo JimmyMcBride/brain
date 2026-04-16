@@ -5,7 +5,7 @@ args:
       required: false
 description: Use this skill when working with a project-local Brain workspace managed by the `brain` CLI, especially for repo memory, retrieval, compiled task context, session hygiene, and safe markdown updates.
 name: brain
-updated: "2026-04-16T04:39:23Z"
+updated: "2026-04-16T22:00:00Z"
 user-invocable: true
 ---
 # Brain
@@ -79,12 +79,6 @@ Use these commands by default:
   - Summarize likely signal, likely noise, repeated expansions, verification links, fresh-packet budget pressure, and recurring omitted markdown docs from local compiler telemetry.
 - `brain distill --session`
   - Create a session-scoped promotion-review proposal with source provenance, promotion diagnostics, and suggested durable note updates.
-- `brain distill --brainstorm <path>`
-  - Create the same style of proposal note from a brainstorm source.
-- `brain brainstorm ...`
-  - Manage project-local brainstorming notes.
-- `brain plan ...`
-  - Manage project-local epics, specs, and stories with a spec-driven workflow.
 - `brain context structure`
   - Inspect the derived structural repo map of boundaries, entrypoints, config surfaces, and test surfaces.
 - `brain context structure --path "..."`
@@ -164,10 +158,9 @@ Use these commands by default:
 ## Distillation Workflow
 
 1. Run `brain distill --session` when a working session surfaced decisions, tradeoffs, bugs, or discoveries that should become durable memory.
-2. Run `brain distill --brainstorm <path>` when a brainstorm should collapse into proposed durable note updates.
-3. Review the proposal note under `.brain/resources/changes/`, including the promotion review section and the suggested targets that were actually classified as promotable.
-4. Apply the durable note updates with `brain edit` or by updating the target notes directly after review.
-5. Treat distill as a proposal generator, not as an auto-write path.
+2. Review the proposal note under `.brain/resources/changes/`, including the promotion review section and the suggested targets that were actually classified as promotable.
+3. Apply the durable note updates with `brain edit` or by updating the target notes directly after review.
+4. Treat distill as a proposal generator, not as an auto-write path.
 
 ## Session Recovery
 

@@ -1042,8 +1042,6 @@ project:
       - AGENTS.md
       - docs/**
       - .brain/context/**
-      - .brain/planning/**
-      - .brain/brainstorms/**
       - .brain/resources/**
 session:
   require_task: true

@@ -243,12 +243,8 @@ func noteTypeBoost(noteType string) float64 {
 	switch strings.ToLower(strings.TrimSpace(noteType)) {
 	case "decision":
 		return 0.08
-	case "spec":
-		return 0.07
 	case "change":
 		return 0.06
-	case "epic", "story":
-		return 0.04
 	case "reference", "resource":
 		return 0.02
 	default:

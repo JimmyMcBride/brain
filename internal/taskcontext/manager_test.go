@@ -248,7 +248,7 @@ func TestCompileBlendsUtilitySignalsConservatively(t *testing.T) {
 		Task:       "compiler telemetry signal",
 		TaskSource: "flag",
 		SearchResults: []search.Result{
-			{NotePath: ".brain/brainstorms/compiler-telemetry-signal.md", NoteTitle: "Compiler Telemetry Signal", Heading: "Notes", Snippet: "Compiler telemetry signal details for cmd/context.go and internal/taskcontext/manager.go.", NoteType: "brainstorm", Score: 0.82},
+			{NotePath: ".brain/resources/references/compiler-telemetry-signal.md", NoteTitle: "Compiler Telemetry Signal", Heading: "Notes", Snippet: "Compiler telemetry signal details for cmd/context.go and internal/taskcontext/manager.go.", NoteType: "resource", Score: 0.82},
 			{NotePath: "docs/compiler-boundaries.md", NoteTitle: "Compiler Boundaries", Heading: "Boundaries", Snippet: "Compiler boundary notes for internal/taskcontext/manager.go and cmd/context.go.", NoteType: "doc", Score: 0.93},
 			{NotePath: ".brain/resources/references/irrelevant.md", NoteTitle: "Irrelevant", Heading: "Elsewhere", Snippet: "Historical note about packaging only.", NoteType: "resource", Score: 0.99},
 		},
@@ -292,7 +292,7 @@ func TestCompileBlendsUtilitySignalsConservatively(t *testing.T) {
 			},
 		},
 		UtilitySignals: map[string]ItemUtilitySignal{
-			"durable_note:" + shortHash(".brain/brainstorms/compiler-telemetry-signal.md#Notes"): {
+			"durable_note:" + shortHash(".brain/resources/references/compiler-telemetry-signal.md#Notes"): {
 				LikelyUtility:               "likely_signal",
 				IncludeCount:                3,
 				ExpandCount:                 2,
@@ -315,7 +315,7 @@ func TestCompileBlendsUtilitySignalsConservatively(t *testing.T) {
 	if len(packet.WorkingSet.Notes) < 2 {
 		t.Fatalf("expected multiple working-set notes: %#v", packet.WorkingSet.Notes)
 	}
-	if packet.WorkingSet.Notes[0].Anchor.Path != ".brain/brainstorms/compiler-telemetry-signal.md" {
+	if packet.WorkingSet.Notes[0].Anchor.Path != ".brain/resources/references/compiler-telemetry-signal.md" {
 		t.Fatalf("expected utility-supported boundary note to rank first: %#v", packet.WorkingSet.Notes)
 	}
 	if !strings.Contains(packet.WorkingSet.Notes[0].Reason, "boosted by local utility signal") {
@@ -339,7 +339,7 @@ func TestCompileBudgetPresetsShrinkRepresentativePacket(t *testing.T) {
 			{NotePath: "docs/context-compiler.md", NoteTitle: "Context Compiler", Heading: "Budget", Snippet: "Keep context compile output compact and deterministic while preserving provenance and verification hints for cmd/context.go internal/taskcontext/manager.go and internal/session/telemetry.go.", NoteType: "doc", Score: 0.98},
 			{NotePath: "docs/packet-ux.md", NoteTitle: "Packet UX", Heading: "Diagnostics", Snippet: "Show packet budget diagnostics and omitted-candidate pressure clearly in human and JSON surfaces without hiding anchors or provenance.", NoteType: "doc", Score: 0.93},
 			{NotePath: ".brain/resources/changes/compiler-budget.md", NoteTitle: "Compiler Budget", Heading: "Rollout", Snippet: "Budget-aware selection should keep the highest-value working set that fits and preserve mandatory sections under tight packet budgets.", NoteType: "brain", Score: 0.91},
-			{NotePath: ".brain/brainstorms/token-packets.md", NoteTitle: "Token Packets", Heading: "Direction", Snippet: "Hard packet budgets come first, packet reuse second, capsules third. Avoid generic rule-pack systems.", NoteType: "brainstorm", Score: 0.89},
+			{NotePath: ".brain/resources/references/token-packets.md", NoteTitle: "Token Packets", Heading: "Direction", Snippet: "Hard packet budgets come first, packet reuse second, capsules third. Avoid generic rule-pack systems.", NoteType: "resource", Score: 0.89},
 		},
 		LivePacket: &livecontext.Packet{
 			Worktree: livecontext.WorktreeInfo{

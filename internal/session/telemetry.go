@@ -129,7 +129,7 @@ type UtilitySnapshot struct {
 	Items                 []UtilityItemStat      `json:"items"`
 	VerificationLinks     []VerificationLinkStat `json:"verification_links,omitempty"`
 	FreshPacketPressure   FreshPacketPressure    `json:"fresh_packet_pressure"`
-	FrequentlyOmittedDocs []OmittedDocStat       `json:"frequently_omitted_docs,omitempty"`
+	FrequentlyOmittedDocs []OmittedDocStat       `json:"frequently_omitted_docs"`
 }
 
 type ContextStatsRequest struct {
@@ -146,7 +146,7 @@ type ContextStats struct {
 	FrequentlyExpanded      []UtilityItemStat      `json:"frequently_expanded,omitempty"`
 	CommonVerificationLinks []VerificationLinkStat `json:"common_verification_links,omitempty"`
 	FreshPacketPressure     FreshPacketPressure    `json:"fresh_packet_pressure"`
-	FrequentlyOmittedDocs   []OmittedDocStat       `json:"frequently_omitted_docs,omitempty"`
+	FrequentlyOmittedDocs   []OmittedDocStat       `json:"frequently_omitted_docs"`
 }
 
 type packetIncludedItem struct {
@@ -251,7 +251,7 @@ func (m *Manager) BuildUtilitySnapshot(projectDir string) (*UtilitySnapshot, err
 		Items:                 append([]UtilityItemStat(nil), analysis.items...),
 		VerificationLinks:     append([]VerificationLinkStat(nil), analysis.verification...),
 		FreshPacketPressure:   analysis.freshPressure,
-		FrequentlyOmittedDocs: append([]OmittedDocStat(nil), analysis.omittedDocs...),
+		FrequentlyOmittedDocs: trimOmittedDocs(analysis.omittedDocs, 0),
 	}, nil
 }
 
@@ -442,7 +442,10 @@ func (m *Manager) buildTelemetryAnalysis(projectDir string) (*telemetryAnalysis,
 }
 
 func trimOmittedDocs(items []OmittedDocStat, limit int) []OmittedDocStat {
-	if len(items) == 0 || limit <= 0 || len(items) <= limit {
+	if len(items) == 0 {
+		return []OmittedDocStat{}
+	}
+	if limit <= 0 || len(items) <= limit {
 		return append([]OmittedDocStat(nil), items...)
 	}
 	return append([]OmittedDocStat(nil), items[:limit]...)

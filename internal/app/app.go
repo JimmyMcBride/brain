@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 
 	"brain/internal/backup"
-	"brain/internal/brainstorm"
 	"brain/internal/config"
 	"brain/internal/distill"
 	"brain/internal/embeddings"
@@ -17,8 +16,6 @@ import (
 	"brain/internal/livecontext"
 	"brain/internal/notes"
 	"brain/internal/output"
-	"brain/internal/plan"
-	"brain/internal/project"
 	"brain/internal/projectcontext"
 	"brain/internal/search"
 	"brain/internal/session"
@@ -29,27 +26,24 @@ import (
 )
 
 type App struct {
-	Config     *config.Config
-	Paths      config.Paths
-	Workspace  *workspace.Service
-	Templates  *templates.Manager
-	Notes      *notes.Manager
-	Backups    *backup.Manager
-	History    *history.Logger
-	Undoer     *history.Undoer
-	Index      *index.Store
-	Embedder   embeddings.Provider
-	Search     *search.Engine
-	Project    *project.Manager
-	Brainstorm *brainstorm.Manager
-	Distill    *distill.Manager
-	Plan       *plan.Manager
-	Skills     *skills.Installer
-	Context    *projectcontext.Manager
-	Structure  *structure.Manager
-	Live       *livecontext.Manager
-	Session    *session.Manager
-	Output     *output.Printer
+	Config    *config.Config
+	Paths     config.Paths
+	Workspace *workspace.Service
+	Templates *templates.Manager
+	Notes     *notes.Manager
+	Backups   *backup.Manager
+	History   *history.Logger
+	Undoer    *history.Undoer
+	Index     *index.Store
+	Embedder  embeddings.Provider
+	Search    *search.Engine
+	Distill   *distill.Manager
+	Skills    *skills.Installer
+	Context   *projectcontext.Manager
+	Structure *structure.Manager
+	Live      *livecontext.Manager
+	Session   *session.Manager
+	Output    *output.Printer
 }
 
 type Options struct {
@@ -95,11 +89,8 @@ func New(configPath, projectPath string, jsonOutput bool, opts Options) (*App, e
 	}
 	searchEngine := search.New(store, embedder)
 	notesManager := notes.New(workspaceSvc, tpl, backups, historyLog)
-	projectManager := project.New(notesManager, workspaceSvc)
 	sessionManager := session.New(historyLog)
-	brainstormManager := brainstorm.New(notesManager, searchEngine, projectManager)
-	distillManager := distill.New(notesManager, searchEngine, projectManager, historyLog, sessionManager)
-	planManager := plan.New(notesManager, projectManager)
+	distillManager := distill.New(notesManager, historyLog, sessionManager)
 	userHome, _ := os.UserHomeDir()
 	structureManager, err := structure.New(store, workspaceSvc)
 	if err != nil {
@@ -108,27 +99,24 @@ func New(configPath, projectPath string, jsonOutput bool, opts Options) (*App, e
 	liveContextManager := livecontext.New(historyLog)
 
 	return &App{
-		Config:     cfg,
-		Paths:      paths,
-		Workspace:  workspaceSvc,
-		Templates:  tpl,
-		Notes:      notesManager,
-		Backups:    backups,
-		History:    historyLog,
-		Undoer:     history.NewUndoer(historyLog, backups, workspaceSvc),
-		Index:      store,
-		Embedder:   embedder,
-		Search:     searchEngine,
-		Project:    projectManager,
-		Brainstorm: brainstormManager,
-		Distill:    distillManager,
-		Plan:       planManager,
-		Skills:     skills.NewInstaller(userHome),
-		Context:    projectcontext.New(userHome),
-		Structure:  structureManager,
-		Live:       liveContextManager,
-		Session:    sessionManager,
-		Output:     output.New(cfg.OutputMode, opts.Stdout),
+		Config:    cfg,
+		Paths:     paths,
+		Workspace: workspaceSvc,
+		Templates: tpl,
+		Notes:     notesManager,
+		Backups:   backups,
+		History:   historyLog,
+		Undoer:    history.NewUndoer(historyLog, backups, workspaceSvc),
+		Index:     store,
+		Embedder:  embedder,
+		Search:    searchEngine,
+		Distill:   distillManager,
+		Skills:    skills.NewInstaller(userHome),
+		Context:   projectcontext.New(userHome),
+		Structure: structureManager,
+		Live:      liveContextManager,
+		Session:   sessionManager,
+		Output:    output.New(cfg.OutputMode, opts.Stdout),
 	}, nil
 }
 

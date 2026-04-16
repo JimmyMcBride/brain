@@ -4,13 +4,15 @@
 
 ## Give Your AI Coding Agent A Real Brain Inside The Repo
 
-`brain` is a local-first memory, context, planning, and retrieval layer for AI coding agents.
+`brain` is a local-first memory, context, retrieval, and workflow layer for AI coding agents.
 
-It gives every project its own durable brain inside the repo, so the agent stops starting from scratch, stops wasting turns rediscovering context, and works more reliably as the codebase evolves.
+It gives every project a durable operating memory inside the repo so the agent stops starting from scratch, stops wasting turns rediscovering context, and works more reliably as the codebase evolves.
 
 - Durable project memory in plain markdown
-- Spec-driven workflow from brainstorming to shipped code
-- Lower token spend and less tool sprawl by keeping everything local and integrated
+- Compiled startup context with packet budgets and session reuse
+- Local retrieval backed by project-local SQLite
+- Session enforcement for verification and durable updates
+- Note history and undo for Brain-managed markdown
 
 ## The Problem
 
@@ -21,54 +23,34 @@ That usually means:
 - repeated prompting just to restore project context
 - stale assumptions about architecture and product decisions
 - extra tokens spent rediscovering what the repo already knows
-- planning that lives in separate tools instead of next to the code
 - weak continuity across sessions, branches, and feature work
+- too much context living in chat history instead of the repo
 
 `brain` fixes that by making the project itself the memory system.
 
 ## Who This Is For
 
-`brain` is for developers who already use AI coding agents heavily and are tired of paying the context tax every session.
+`brain` fits best when:
 
-It fits best when:
-
-- you use an AI agent regularly on a real, evolving codebase
-- you are tired of repeating the same architecture and product context
-- you want planning, docs, retrieval, and workflow to live with the code
-- you want the project to stay understandable to humans too, not just the agent
+- you use an AI coding agent regularly on a real, evolving codebase
+- you want repo-local context instead of depending on chat history
+- you want retrieval, compiled context, and workflow discipline to live with the code
+- you want Brain to stay focused on memory and execution context instead of trying to own every part of software delivery
 
 ## What Brain Actually Does
 
-`brain` keeps human docs at the repo root, machine-managed state under `.brain/`, and a local SQLite search index for durable project knowledge.
+`brain` keeps human docs at the repo root, machine-managed context under `.brain/`, and a local SQLite index for durable project knowledge.
 
 It provides explicit workflows for:
 
-- docs and project context
-- brainstorming
-- epic -> spec -> story planning
+- project contracts and docs
 - local retrieval
+- compiled task context
+- session enforcement
 - note history and undo
-- session enforcement for verification and durable updates
+- promotion-style distillation from active work sessions
 
-This is not another hosted dashboard, cloud vector database, or external planning layer. It lives with the project and is built specifically to work well with AI agents.
-
-## Elevator Pitch
-
-`brain` gives every software project its own local brain for AI agents: docs, context, planning, history, and search, all stored with the repo. It helps agents stop starting from scratch, stop wasting turns rediscovering context, and work more reliably in evolving codebases.
-
-## Why It Helps
-
-When an agent can read a real project contract, search durable project knowledge, follow a planning workflow, and update the right notes as the code evolves, you get a tighter and cheaper development loop.
-
-Instead of stitching together n8n, cloud vector storage, external planning tools, and fragile chat history, `brain` keeps the important layer local:
-
-- fewer moving parts
-- fewer subscriptions and hosted dependencies
-- less prompt repetition
-- lower token waste
-- better continuity between sessions
-
-It does not make software work magic. It gives the agent a stable operating memory so it makes better decisions with less thrash.
+This is not another hosted dashboard, cloud vector database, or issue tracker. It lives with the project and is built specifically to help coding agents stay grounded in local truth.
 
 ## Mental Model
 
@@ -80,18 +62,16 @@ my-project/
   docs/
   .brain/
     context/
-    brainstorms/
-    planning/
     resources/
+    sessions/
     state/
 ```
 
 - `AGENTS.md` is the root contract for humans and agents.
 - `docs/` is the human-readable project documentation layer.
 - `.brain/context/` is the generated modular context bundle.
-- `.brain/planning/` holds epics, specs, and stories.
-- `.brain/brainstorms/` holds project-local ideation notes.
 - `.brain/resources/` holds durable references, captures, and change history.
+- `.brain/sessions/` holds recorded session ledgers.
 - `.brain/state/` holds SQLite, history logs, backups, and other local state.
 
 ## Install
@@ -165,37 +145,6 @@ Preview the target paths first:
 brain skills targets --scope both --agent codex --agent claude --agent copilot --agent pi --project .
 ```
 
-`brain skills` installs only the Brain skill from this repo. That gives the agent a ready-made way to use Brain correctly instead of treating the project brain like random files.
-
-## Brainstorm To Planning To Execution
-
-Brain is intentionally opinionated here:
-
-1. brainstorm the high-level what and why
-2. promote the brainstorm into an epic
-3. build and approve the epic's canonical spec
-4. break the approved spec into execution stories
-5. complete stories while keeping the spec as the source of truth
-
-In a project directory:
-
-```bash
-brain init --project .
-brain doctor --project .
-brain context install --project .
-brain plan init --project .
-
-brain brainstorm start --project . "Newsletter system"
-brain plan epic promote --project . newsletter-system
-brain plan spec show --project . newsletter-system
-brain plan spec status --project . newsletter-system --set approved
-brain plan story create --project . newsletter-system "Template editor"
-brain plan story update --project . template-editor --status in_progress
-brain plan status --project .
-```
-
-Use `brain adopt --project .` instead of `brain init --project .` when the repo already has docs or an unmanaged `AGENTS.md`.
-
 ## Quick Start
 
 In any project directory:
@@ -204,63 +153,45 @@ In any project directory:
 brain init --project .
 brain doctor --project .
 brain context install --project .
-brain plan init --project .
-brain brainstorm start --project . "Initial ideas"
 brain search --project . "architecture"
+brain context compile --project . --task "auth flow"
+brain session start --project . --task "tighten auth flow"
+brain session run --project . -- go test ./...
+brain session finish --project . --summary "auth flow tightened"
 ```
 
-## Why Brain Exists
+Use `brain adopt --project .` instead of `brain init --project .` when the repo already has docs or an unmanaged `AGENTS.md`.
 
-`brain` exists because most AI agent pain is not raw coding ability. It is continuity failure.
+## What Brain Does Not Try To Be
 
-Agents can write code quickly, but they lose project context, drift on decisions, forget why work was scoped a certain way, and burn money re-learning the same repo over and over. Brain exists to keep that continuity local, durable, and usable by both the agent and the human team.
+`brain` intentionally stays focused on repo-local memory and execution context.
 
-## Why This Saves Time And Money
+It does not try to replace:
 
-`brain` cuts waste in two places:
+- your roadmap or issue tracker
+- your issue tracker
+- hosted product-management software
+- cloud memory systems glued on top of the repo
 
-- token waste from repeatedly feeding the same project context back into the agent
-- tool waste from spreading memory, planning, retrieval, and workflow across too many separate systems
-
-You still need good prompts and good engineering judgment. But when the agent can work against a stable local brain, you spend less money and fewer turns just rebuilding context.
-
-## Explore Brain In More Detail
-
-### How Brain Works
-
-`brain` keeps markdown as the source of truth and uses local SQLite state for retrieval and operational support. Human-facing docs stay readable, while the agent gets a structured project contract, generated context, planning notes, and local search without any central service dependency.
-
-Deep dive: [`docs/architecture.md`](docs/architecture.md)
-
-### Using Brain Day To Day
-
-The core operating loop is simple: install or adopt Brain in a repo, install the Brain skill, retrieve context with local search, move ideas into epics/specs/stories, and enforce verification plus durable note updates through sessions when you want a stricter workflow.
-
-Deep dive: [`docs/usage.md`](docs/usage.md)
-
-### Brain Skill
-
-The Brain skill is the generic fallback that helps an agent immediately understand how to operate against a Brain-managed repo. It teaches the agent to read the project contract first, use Brain search and note workflows, and respect the repo’s planning and session model.
-
-Deep dive: [`docs/skills.md`](docs/skills.md)
-
-### Why This Model
-
-The design is opinionated on purpose: one brain per project, plain markdown first, local search instead of centralized memory, and explicit contracts instead of hidden magic. That keeps the system portable, understandable, and resilient as a codebase evolves.
-
-Deep dive: [`docs/why.md`](docs/why.md)
+If you already use separate delivery tools, Brain is designed to complement them rather than compete with them.
 
 ## Main Commands
 
 - `brain init`: bootstrap a project-local Brain workspace
-- `brain adopt`: adopt an existing repo into the Brain managed context model
+- `brain adopt`: adopt an existing repo into the Brain-managed context model
 - `brain doctor`: validate local Brain setup
 - `brain read`, `brain edit`: inspect and update managed markdown
 - `brain find`, `brain search`: project-local retrieval
-- `brain brainstorm ...`: project-local brainstorming
-- `brain plan ...`: project-local epic/spec/story planning
-- `brain context ...`: install or refresh project context files
+- `brain context ...`: install, refresh, compile, inspect, and analyze task context
+- `brain distill --session`: create a reviewed distillation proposal from active session work
 - `brain session ...`: enforce workflow and verification rules
 - `brain skills ...`: install the Brain skill for agent runtimes
 - `brain history`, `brain undo`: inspect and revert tracked note changes
 - `brain version`, `brain update`: inspect or update the CLI
+
+## Deep Dives
+
+- [Usage](docs/usage.md)
+- [Architecture](docs/architecture.md)
+- [Skills](docs/skills.md)
+- [Why](docs/why.md)

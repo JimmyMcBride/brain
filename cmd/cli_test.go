@@ -120,6 +120,16 @@ func requireOK(t *testing.T, result cliResult) string {
 	return result.stdout
 }
 
+func writeCLIFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestCLIProjectLifecycle(t *testing.T) {
 	env := newCLIEnv(t)
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
@@ -445,63 +455,16 @@ func TestCLIDistillSessionCreatesProposal(t *testing.T) {
 	}
 }
 
-func TestCLIDistillBrainstormModeMatchesLegacyWrapper(t *testing.T) {
+func TestCLIDistillRequiresSessionFlag(t *testing.T) {
 	env := newCLIEnv(t)
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
 
-	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "brainstorm", "start", "Auth Ideas"))
-	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "brainstorm", "idea", ".brain/brainstorms/auth-ideas.md", "-b", "Favor explicit durable memory over transcript storage."))
-
-	topLevel := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "distill", "--brainstorm", ".brain/brainstorms/auth-ideas.md"))
-	legacy := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "brainstorm", "distill", ".brain/brainstorms/auth-ideas.md"))
-	if topLevel != legacy {
-		t.Fatalf("expected equivalent command output\nnew:\n%s\nlegacy:\n%s", topLevel, legacy)
+	result := env.run(t, "", "--config", env.config, "--project", env.project, "distill")
+	if result.err == nil {
+		t.Fatalf("expected distill without --session to fail")
 	}
-
-	noteRaw, err := os.ReadFile(filepath.Join(env.project, ".brain", "resources", "changes", "auth-ideas-distill-proposal.md"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	note := string(noteRaw)
-	if !strings.Contains(note, "Mode: `brainstorm`") || !strings.Contains(note, "[[.brain/brainstorms/auth-ideas.md]]") {
-		t.Fatalf("expected brainstorm provenance in proposal:\n%s", note)
-	}
-	if !strings.Contains(note, "### .brain/resources/decisions/auth-ideas.md") {
-		t.Fatalf("expected proposed decision target in proposal:\n%s", note)
-	}
-}
-
-func TestCLIProjectPlanningWorkflow(t *testing.T) {
-	env := newCLIEnv(t)
-	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
-
-	initOutput := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "plan", "init"))
-	if !strings.Contains(initOutput, "Initialized epic-only planning") {
-		t.Fatalf("unexpected plan init output:\n%s", initOutput)
-	}
-
-	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "brainstorm", "start", "Auth Ideas"))
-	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "plan", "epic", "promote", "auth-ideas"))
-	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "plan", "spec", "status", "auth-ideas", "--set", "approved"))
-	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "plan", "story", "create", "auth-ideas", "Login Flow", "-b", "Support email and password login.", "--criteria", "Validate email format", "--resource", "[[.brain/brainstorms/auth-ideas.md]]"))
-	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "plan", "story", "update", "login-flow", "--status", "done", "--criteria", "Hash passwords"))
-
-	storyPath := filepath.Join(env.project, ".brain", "planning", "stories", "login-flow.md")
-	storyRaw, err := os.ReadFile(storyPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	story := string(storyRaw)
-	if !strings.Contains(story, "Support email and password login.") || !strings.Contains(story, "- [ ] Hash passwords") {
-		t.Fatalf("unexpected story contents:\n%s", story)
-	}
-	if !strings.Contains(story, "spec: auth-ideas") {
-		t.Fatalf("expected story to reference canonical spec:\n%s", story)
-	}
-
-	statusOutput := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "plan", "status"))
-	if !strings.Contains(statusOutput, "epic_spec_v1") || !strings.Contains(statusOutput, "Stories: 1 total, 1 done, 0 in progress, 0 blocked, 0 remaining") || !strings.Contains(statusOutput, "Epic Auth Ideas [approved]: 1/1 stories done") {
-		t.Fatalf("unexpected status output:\n%s", statusOutput)
+	if !strings.Contains(result.err.Error(), "distill currently supports only --session") {
+		t.Fatalf("unexpected error: %v", result.err)
 	}
 }
 
@@ -1367,8 +1330,17 @@ func TestCLIContextCompileEmitsCompactDeltaWhenRelevantInputsChange(t *testing.T
 func TestCLIContextExplainShowsRecordedPacketOutcomes(t *testing.T) {
 	env := newCLIEnv(t)
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
-	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "brainstorm", "start", "Compiler Telemetry Signal"))
-	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "brainstorm", "idea", ".brain/brainstorms/compiler-telemetry-signal.md", "-b", "Compiler telemetry signal note for explain output."))
+	writeCLIFile(t, filepath.Join(env.project, ".brain", "resources", "references", "compiler-telemetry-signal.md"), `---
+title: Compiler Telemetry Signal
+type: resource
+updated: 2026-04-16T00:00:00Z
+---
+# Compiler Telemetry Signal
+
+## Notes
+
+Compiler telemetry signal note for explain output.
+`)
 	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "compiler telemetry signal"))
 
 	compiledJSON := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "compile"))
@@ -1435,8 +1407,17 @@ func TestCLIContextCompileRejectsInvalidBudget(t *testing.T) {
 func TestCLIContextStatsSummarizesSignalAndVerificationLinks(t *testing.T) {
 	env := newCLIEnv(t)
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
-	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "brainstorm", "start", "Compiler Telemetry Signal"))
-	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "brainstorm", "idea", ".brain/brainstorms/compiler-telemetry-signal.md", "-b", "Compiler telemetry signal note for stats output."))
+	writeCLIFile(t, filepath.Join(env.project, ".brain", "resources", "references", "compiler-telemetry-signal.md"), `---
+title: Compiler Telemetry Signal
+type: resource
+updated: 2026-04-16T00:00:00Z
+---
+# Compiler Telemetry Signal
+
+## Notes
+
+Compiler telemetry signal note for stats output.
+`)
 	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "compiler telemetry signal"))
 
 	compiledJSON := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "compile"))
