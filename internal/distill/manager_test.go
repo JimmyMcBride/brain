@@ -9,13 +9,8 @@ import (
 	"testing"
 
 	"brain/internal/backup"
-	"brain/internal/config"
-	"brain/internal/embeddings"
 	"brain/internal/history"
-	"brain/internal/index"
 	"brain/internal/notes"
-	"brain/internal/project"
-	"brain/internal/search"
 	"brain/internal/session"
 	"brain/internal/templates"
 	"brain/internal/workspace"
@@ -120,8 +115,6 @@ project:
       - AGENTS.md
       - docs/**
       - .brain/context/**
-      - .brain/planning/**
-      - .brain/brainstorms/**
       - .brain/resources/**
 session:
   require_task: true
@@ -152,26 +145,8 @@ closeout:
 
 	historyLog := history.New(filepath.Join(root, ".brain", "state", "history.jsonl"))
 	notesManager := notes.New(workspaceSvc, templates.New(), backup.New(filepath.Join(root, ".brain", "state", "backups")), historyLog)
-	projectManager := project.New(notesManager, workspaceSvc)
-	store, err := index.New(filepath.Join(root, ".brain", "state", "brain.sqlite3"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = store.Close() })
-	provider, err := embeddings.New(&config.Config{
-		EmbeddingProvider: "localhash",
-		EmbeddingModel:    "hash-v1",
-		OutputMode:        "json",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.Reindex(context.Background(), workspaceSvc, provider); err != nil {
-		t.Fatal(err)
-	}
-	searchEngine := search.New(store, provider)
 	sessionManager := session.New(historyLog)
-	manager := New(notesManager, searchEngine, projectManager, historyLog, sessionManager)
+	manager := New(notesManager, historyLog, sessionManager)
 	return manager, testHarness{
 		root:    root,
 		notes:   notesManager,

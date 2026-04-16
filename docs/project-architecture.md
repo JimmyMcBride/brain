@@ -7,7 +7,6 @@ Use this file for the structural shape of the repository.
 
 - `internal/app/`
 - `internal/backup/`
-- `internal/brainstorm/`
 - `internal/buildinfo/`
 - `internal/config/`
 - `internal/contextassembly/`
@@ -18,8 +17,6 @@ Use this file for the structural shape of the repository.
 - `internal/livecontext/`
 - `internal/notes/`
 - `internal/output/`
-- `internal/plan/`
-- `internal/project/`
 - `internal/projectcontext/`
 - `internal/promotion/`
 - `internal/search/`

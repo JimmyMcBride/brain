@@ -103,8 +103,6 @@ func DefaultPolicy(snapshot Snapshot) Policy {
 					"AGENTS.md",
 					"docs/**",
 					".brain/context/**",
-					".brain/planning/**",
-					".brain/brainstorms/**",
 					".brain/resources/**",
 				},
 			},

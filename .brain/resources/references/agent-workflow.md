@@ -24,4 +24,4 @@ source: "migrated_project_memory"
 
 ## Durable Memory Rule
 
-Update durable notes when command behavior, search/index semantics, context generation, planning behavior, or release/update flows change. Prefer updating an existing note over producing noise.
+Update durable notes when command behavior, search/index semantics, context generation, session behavior, or release/update flows change. Prefer updating an existing note over producing noise.

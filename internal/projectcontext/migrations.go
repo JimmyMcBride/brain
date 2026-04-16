@@ -316,7 +316,6 @@ func projectMigrationLedgerPath(projectDir string) string {
 func usesBrainWorkspace(projectDir string) bool {
 	for _, rel := range []string{
 		".brain/policy.yaml",
-		".brain/project.yaml",
 		".brain/state/brain.sqlite3",
 	} {
 		if _, err := os.Stat(filepath.Join(projectDir, filepath.FromSlash(rel))); err == nil {

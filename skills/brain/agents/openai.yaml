@@ -1,6 +1,6 @@
 interface:
   display_name: "Brain"
-  short_description: "Use the brain CLI for project-local memory, retrieval, planning, context, and safe markdown workflows."
+  short_description: "Use the brain CLI for project-local memory, retrieval, compiled context, and safe markdown workflows."
   default_prompt: "Use the brain skill and prefer repo-local Brain commands over ad hoc project memory files."
 
 policy:

@@ -217,9 +217,9 @@ updated: 2026-04-12T00:00:00Z
 
 Retrieval ranking should prefer stable project memory.
 `,
-		filepath.Join(root, ".brain", "brainstorms", "search-strategy.md"): `---
-title: Search Strategy Brainstorm
-type: brainstorm
+		filepath.Join(root, ".brain", "resources", "references", "search-strategy.md"): `---
+title: Search Strategy Reference
+type: resource
 updated: 2026-04-12T00:00:00Z
 ---
 # Search Strategy

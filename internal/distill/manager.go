@@ -6,33 +6,24 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
 	"brain/internal/history"
 	"brain/internal/notes"
-	"brain/internal/project"
 	"brain/internal/promotion"
-	"brain/internal/search"
 	"brain/internal/session"
 )
 
-var slugPattern = regexp.MustCompile(`[^a-z0-9]+`)
-
 type Manager struct {
 	notes   *notes.Manager
-	search  *search.Engine
-	project *project.Manager
 	history *history.Logger
 	session *session.Manager
 }
 
-func New(notesManager *notes.Manager, searchEngine *search.Engine, projectManager *project.Manager, historyLog *history.Logger, sessionManager *session.Manager) *Manager {
+func New(notesManager *notes.Manager, historyLog *history.Logger, sessionManager *session.Manager) *Manager {
 	return &Manager{
 		notes:   notesManager,
-		search:  searchEngine,
-		project: projectManager,
 		history: historyLog,
 		session: sessionManager,
 	}
@@ -80,104 +71,6 @@ func (m *Manager) FromSession(ctx context.Context, limit int) (*notes.Note, erro
 	}, body)
 }
 
-func (m *Manager) FromBrainstorm(ctx context.Context, path string, limit int) (*notes.Note, error) {
-	note, err := m.notes.Read(path)
-	if err != nil {
-		return nil, err
-	}
-	if note.Type != "brainstorm" {
-		return nil, fmt.Errorf("note %s is type %q, not brainstorm", path, note.Type)
-	}
-	if limit <= 0 {
-		limit = 6
-	}
-
-	query := strings.TrimSpace(note.Title + " " + note.Content)
-	results, err := m.search.Search(ctx, query, limit+1)
-	if err != nil {
-		return nil, err
-	}
-	related := make([]search.Result, 0, len(results))
-	for _, result := range results {
-		if result.NotePath == note.Path {
-			continue
-		}
-		related = append(related, result)
-		if len(related) >= limit {
-			break
-		}
-	}
-
-	sourceSlug := strings.TrimSuffix(filepath.Base(note.Path), filepath.Ext(note.Path))
-	title := strings.TrimSpace(note.Title)
-	if title == "" {
-		title = sourceSlug
-	}
-	title += " Distill Proposal"
-	body := renderBrainstormProposal(brainstormProposal{
-		Title:      title,
-		SourcePath: note.Path,
-		KeyIdeas:   extractSection(note.Content, "Ideas"),
-		Related:    related,
-		Targets: []proposalTarget{
-			{
-				Path:   "AGENTS.md",
-				Reason: "carry forward any durable workflow or policy guidance that emerged from the brainstorm",
-				Body: []string{
-					fmt.Sprintf("- Promote the durable guidance from %q only if it should become repo contract.", note.Title),
-				},
-			},
-			{
-				Path:   ".brain/context/current-state.md",
-				Reason: "capture the active problem framing if the brainstorm changes what the project is currently pursuing",
-				Body: []string{
-					fmt.Sprintf("- Note how %q changes the current focus or next actions.", note.Title),
-				},
-			},
-			{
-				Path:   filepath.ToSlash(filepath.Join(".brain/resources/changes", sourceSlug+".md")),
-				Reason: "turn the brainstorm into a durable change note once the ideas collapse into an execution path",
-				Body: []string{
-					fmt.Sprintf("# %s", note.Title),
-					"",
-					"## Summary",
-					"- Distill the strongest ideas that should survive beyond the brainstorm.",
-					"",
-					"## References",
-					fmt.Sprintf("- [[%s]]", note.Path),
-				},
-			},
-			{
-				Path:   filepath.ToSlash(filepath.Join(".brain/resources/decisions", sourceSlug+".md")),
-				Reason: "preserve the why if the brainstorm already surfaces a clear choice or tradeoff",
-				Body: []string{
-					fmt.Sprintf("# Why we chose %s", note.Title),
-					"",
-					"## Context",
-					"",
-					"## Options Considered",
-					"",
-					"## Decision",
-					"",
-					"## Tradeoffs",
-				},
-			},
-		},
-	})
-
-	return m.createProposal(title, map[string]any{
-		"type":              "distill_proposal",
-		"distill_scope":     "brainstorm",
-		"source_brainstorm": note.Path,
-		"proposed_targets": proposalPaths([]proposalTarget{
-			{Path: "AGENTS.md"},
-			{Path: ".brain/context/current-state.md"},
-			{Path: filepath.ToSlash(filepath.Join(".brain/resources/changes", sourceSlug+".md"))},
-			{Path: filepath.ToSlash(filepath.Join(".brain/resources/decisions", sourceSlug+".md"))},
-		}),
-	}, body)
-}
-
 type sessionProposal struct {
 	Title       string
 	SessionID   string
@@ -188,14 +81,6 @@ type sessionProposal struct {
 	DiffSummary string
 	RecentNotes []history.Entry
 	Assessments []promotion.Assessment
-}
-
-type brainstormProposal struct {
-	Title      string
-	SourcePath string
-	KeyIdeas   string
-	Related    []search.Result
-	Targets    []proposalTarget
 }
 
 type proposalTarget struct {
@@ -245,37 +130,6 @@ func renderSessionProposal(proposal sessionProposal) string {
 	}
 	appendPromotionReview(&b, proposal.Assessments)
 	appendTargets(&b, promotableTargetEntries(proposal.Assessments))
-	return b.String()
-}
-
-func renderBrainstormProposal(proposal brainstormProposal) string {
-	var b strings.Builder
-	b.WriteString("# " + proposal.Title + "\n\n")
-	b.WriteString("## Source Provenance\n\n")
-	b.WriteString("- Mode: `brainstorm`\n")
-	b.WriteString("- Source: `[[" + proposal.SourcePath + "]]`\n")
-	b.WriteString("\n### Key Ideas\n\n")
-	if strings.TrimSpace(proposal.KeyIdeas) == "" {
-		b.WriteString("- No brainstorm ideas were captured yet.\n")
-	} else {
-		b.WriteString(strings.TrimSpace(proposal.KeyIdeas) + "\n")
-	}
-	b.WriteString("\n\n### Related Notes\n\n")
-	if len(proposal.Related) == 0 {
-		b.WriteString("- No related notes found.\n")
-	} else {
-		for _, result := range proposal.Related {
-			line := "- `[[" + result.NotePath + "]]`"
-			if result.Heading != "" {
-				line += " -> `" + result.Heading + "`"
-			}
-			if strings.TrimSpace(result.Snippet) != "" {
-				line += ": " + strings.TrimSpace(result.Snippet)
-			}
-			b.WriteString(line + "\n")
-		}
-	}
-	appendTargets(&b, proposal.Targets)
 	return b.String()
 }
 
@@ -489,57 +343,10 @@ func normalizeStatusLines(lines []string) []string {
 	return out
 }
 
-func proposalPaths(targets []proposalTarget) []string {
-	out := make([]string, 0, len(targets))
-	for _, target := range targets {
-		out = append(out, target.Path)
-	}
-	return out
-}
-
 func isDurableNotePath(path string) bool {
 	path = filepath.ToSlash(strings.TrimSpace(path))
 	if path == "" {
 		return false
 	}
 	return path == "AGENTS.md" || strings.HasPrefix(path, "docs/") || strings.HasPrefix(path, ".brain/")
-}
-
-func slugify(value string) string {
-	value = strings.ToLower(strings.TrimSpace(value))
-	value = slugPattern.ReplaceAllString(value, "-")
-	return strings.Trim(value, "-")
-}
-
-func extractSection(content, heading string) string {
-	lines := strings.Split(content, "\n")
-	inSection := false
-	sectionLevel := 0
-	var out []string
-
-	for _, line := range lines {
-		if strings.HasPrefix(line, "#") {
-			level := 0
-			for _, ch := range line {
-				if ch == '#' {
-					level++
-				} else {
-					break
-				}
-			}
-			title := strings.TrimSpace(strings.TrimLeft(line, "#"))
-			if strings.EqualFold(title, heading) {
-				inSection = true
-				sectionLevel = level
-				continue
-			}
-			if inSection && level <= sectionLevel {
-				break
-			}
-		}
-		if inSection {
-			out = append(out, line)
-		}
-	}
-	return strings.TrimSpace(strings.Join(out, "\n"))
 }

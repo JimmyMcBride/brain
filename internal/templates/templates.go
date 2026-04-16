@@ -69,81 +69,11 @@ Captured: {{ .Now }}
 
 ## Wins
 `,
-	"brainstorm.md": `# Brainstorm: {{ .Title }}
-
-Started: {{ .Now }}
-
-## Focus Question
-
-What are we exploring?
-
-## Ideas
-
-## Related
-
-## Raw Notes
-`,
 	"project_meta.md": `# {{ .Title }}
 
 ## Outcome
 
 ## Current Status
-
-## Notes
-`,
-	"epic.md": `# {{ .Title }}
-
-Created: {{ .Now }}
-
-## Summary
-
-## Why It Matters
-
-## Spec
-
-## Sources
-
-## Progress
-
-## Notes
-`,
-	"spec.md": `# {{ .Title }}
-
-Created: {{ .Now }}
-
-## Why
-
-## Problem
-
-## Goals
-
-## Non-Goals
-
-## Requirements
-
-## UX / Flows
-
-## Data / Interfaces
-
-## Risks / Open Questions
-
-## Rollout
-
-## Story Breakdown
-
-## Resources
-
-## Notes
-`,
-	"story.md": `# {{ .Title }}
-
-Created: {{ .Now }}
-
-## Description
-
-## Acceptance Criteria
-
-## Resources
 
 ## Notes
 `,

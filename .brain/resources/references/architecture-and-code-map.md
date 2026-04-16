@@ -17,7 +17,7 @@ Brain is a single Go CLI.
 - `internal/workspace` owns project-root validation and managed markdown discovery.
 - `internal/notes` owns frontmatter, templates, note IO, and history-aware updates.
 - `internal/index`, `internal/search`, and `internal/embeddings` own the local retrieval stack.
-- `internal/projectcontext`, `internal/session`, `internal/plan`, and `internal/brainstorm` own the repo-local workflow layer.
+- `internal/projectcontext`, `internal/taskcontext`, `internal/session`, `internal/livecontext`, and `internal/distill` own the repo-local workflow layer.
 
 ## Important Boundaries
 
