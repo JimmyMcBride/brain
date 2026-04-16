@@ -1,13 +1,13 @@
 ---
-name: brain
-description: Use this skill when working with a project-local Brain workspace managed by the `brain` CLI, especially for repo memory, retrieval, compiled task context, session hygiene, and safe markdown updates.
-user-invocable: true
 args:
-  - name: task
-    description: The project-memory or Brain workflow task to perform.
-    required: false
+    - description: The project-memory or Brain workflow task to perform.
+      name: task
+      required: false
+description: Use this skill when working with a project-local Brain workspace managed by the `brain` CLI, especially for repo memory, retrieval, compiled task context, session hygiene, and safe markdown updates.
+name: brain
+updated: "2026-04-16T04:39:23Z"
+user-invocable: true
 ---
-
 # Brain
 
 Use `brain` as the primary interface for project-local memory and workflow.
@@ -68,11 +68,15 @@ Use these commands by default:
 - `brain search --inject "query"`
   - Return ranked results plus an agent-ready `## Relevant Context` block that can be reused directly.
 - `brain context compile --task "..."`
-  - Compile the smallest summary-first working-set packet Brain can justify for the task, including anchors, provenance, nearby tests, and verification hints.
+  - Compile the smallest summary-first working-set packet Brain can justify for the task, including anchors, provenance, nearby tests, verification hints, and budget diagnostics.
+- `brain context compile --task "..." --budget small`
+  - Ask for a leaner startup packet with a named preset or an explicit integer token target.
+- `brain context compile --task "..." --fresh`
+  - Bypass session-local packet reuse and force a standalone full packet when debugging or inspecting packet contents.
 - `brain context explain --last`
-  - Inspect the latest recorded compiled packet, including later expansions and downstream session outcomes.
+  - Inspect the latest recorded compiled packet, including cache status, reuse or delta lineage, later expansions, and downstream session outcomes.
 - `brain context stats`
-  - Summarize likely signal, likely noise, repeated expansions, and verification links from local compiler telemetry.
+  - Summarize likely signal, likely noise, repeated expansions, verification links, fresh-packet budget pressure, and recurring omitted markdown docs from local compiler telemetry.
 - `brain distill --session`
   - Create a session-scoped promotion-review proposal with source provenance, promotion diagnostics, and suggested durable note updates.
 - `brain distill --brainstorm <path>`
@@ -146,13 +150,16 @@ Use these commands by default:
 ## Context Workflow
 
 1. `brain context compile --task "<task>"` for the smallest justified startup packet.
-2. `brain context explain --last` when you need to inspect why the latest packet looked the way it did, which items were expanded later, or which downstream verification and closeout outcomes were recorded.
-3. `brain context stats` when you are tuning compiler behavior and want a compact view of likely signal, likely noise, repeated expansions, and verification-link patterns from local telemetry.
-4. `brain context structure` when you need repo boundaries, entrypoints, config surfaces, or test surfaces before deeper retrieval.
-5. `brain context live --task "<task>"` when you need current session, changed-file, touched-boundary, nearby-test, verification-recipe, or policy signals, not just compiled startup context.
-6. `brain context assemble --task "<task>"` when you need the broader typed packet instead of the compiler-first working set.
-7. `brain context assemble --explain` when you need to inspect why Brain chose its broader packet and what it left nearby.
-8. `brain context load --level ...` only when you need the older static-bundle compatibility view.
+2. Add `--budget small|default|large|<integer>` when you need a tighter or wider packet and want Brain to explain budget pressure explicitly.
+3. Expect compile to reuse the latest matching packet inside the active session when relevant compile inputs are unchanged, and to emit a compact delta when the task is stable but the packet changed.
+4. Add `--fresh` when you need to bypass that session-local reuse or delta behavior and force a standalone full packet.
+5. `brain context explain --last` when you need to inspect why the latest packet looked the way it did, whether Brain reused or delta-linked it, which items were expanded later, or which downstream verification and closeout outcomes were recorded.
+6. `brain context stats` when you are tuning compiler behavior and want a compact view of likely signal, likely noise, repeated expansions, verification-link patterns, fresh-packet budget pressure, and recurring omitted docs from local telemetry.
+7. `brain context structure` when you need repo boundaries, entrypoints, config surfaces, or test surfaces before deeper retrieval.
+8. `brain context live --task "<task>"` when you need current session, changed-file, touched-boundary, nearby-test, verification-recipe, or policy signals, not just compiled startup context.
+9. `brain context assemble --task "<task>"` when you need the broader typed packet instead of the compiler-first working set.
+10. `brain context assemble --explain` when you need to inspect why Brain chose its broader packet and what it left nearby.
+11. `brain context load --level ...` only when you need the older static-bundle compatibility view.
 
 ## Distillation Workflow
 

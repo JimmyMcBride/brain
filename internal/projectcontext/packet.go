@@ -24,29 +24,33 @@ type CompiledBoundary struct {
 	Reason             string   `json:"reason"`
 	AdjacentBoundaries []string `json:"adjacent_boundaries,omitempty"`
 	Responsibilities   []string `json:"responsibilities,omitempty"`
+	EstimatedTokens    int      `json:"estimated_tokens"`
 }
 
 type CompiledFile struct {
-	Path   string `json:"path"`
-	Status string `json:"status"`
-	Source string `json:"source"`
-	Reason string `json:"reason"`
+	Path            string `json:"path"`
+	Status          string `json:"status"`
+	Source          string `json:"source"`
+	Reason          string `json:"reason"`
+	EstimatedTokens int    `json:"estimated_tokens"`
 }
 
 type CompiledTest struct {
-	Path     string `json:"path"`
-	Relation string `json:"relation"`
-	Reason   string `json:"reason"`
+	Path            string `json:"path"`
+	Relation        string `json:"relation"`
+	Reason          string `json:"reason"`
+	EstimatedTokens int    `json:"estimated_tokens"`
 }
 
 type VerificationHint struct {
-	ID       string `json:"id"`
-	Label    string `json:"label"`
-	Command  string `json:"command,omitempty"`
-	Summary  string `json:"summary"`
-	Source   string `json:"source"`
-	Strength string `json:"strength,omitempty"`
-	Reason   string `json:"reason"`
+	ID              string `json:"id"`
+	Label           string `json:"label"`
+	Command         string `json:"command,omitempty"`
+	Summary         string `json:"summary"`
+	Source          string `json:"source"`
+	Strength        string `json:"strength,omitempty"`
+	Reason          string `json:"reason"`
+	EstimatedTokens int    `json:"estimated_tokens"`
 }
 
 type CompiledWorkingSet struct {
@@ -65,6 +69,7 @@ type PacketProvenance struct {
 
 type CompiledPacket struct {
 	Task         CompiledTask       `json:"task"`
+	Budget       PacketBudget       `json:"budget"`
 	BaseContract []CompiledItem     `json:"base_contract"`
 	WorkingSet   CompiledWorkingSet `json:"working_set"`
 	Verification []VerificationHint `json:"verification"`

@@ -85,14 +85,18 @@ type PacketTelemetryEvent struct {
 }
 
 type PacketRecord struct {
-	PacketHash       string                         `json:"packet_hash"`
-	TaskText         string                         `json:"task_text"`
-	TaskSummary      string                         `json:"task_summary"`
-	TaskSource       string                         `json:"task_source"`
-	CompiledAt       time.Time                      `json:"compiled_at"`
-	IncludedItemIDs  []string                       `json:"included_item_ids"`
-	IncludedAnchors  []projectcontext.ContextAnchor `json:"included_anchors"`
-	InclusionReasons []PacketInclusionReason        `json:"inclusion_reasons"`
+	PacketHash  string                      `json:"packet_hash"`
+	TaskText    string                      `json:"task_text"`
+	TaskSummary string                      `json:"task_summary"`
+	TaskSource  string                      `json:"task_source"`
+	CompiledAt  time.Time                   `json:"compiled_at"`
+	Budget      projectcontext.PacketBudget `json:"budget"`
+	projectcontext.PacketCacheMetadata
+	FingerprintInputs projectcontext.PacketFingerprintInputs `json:"fingerprint_inputs,omitempty"`
+	IncludedItemIDs   []string                               `json:"included_item_ids"`
+	IncludedAnchors   []projectcontext.ContextAnchor         `json:"included_anchors"`
+	InclusionReasons  []PacketInclusionReason                `json:"inclusion_reasons"`
+	Packet            *projectcontext.CompiledPacket         `json:"packet,omitempty"`
 }
 
 type ActiveSession struct {
@@ -506,7 +510,7 @@ func (m *Manager) RunCommand(ctx context.Context, req RunRequest, stdout, stderr
 	return result, nil
 }
 
-func (m *Manager) RecordCompiledPacket(projectDir, sessionID string, packet *projectcontext.CompiledPacket) error {
+func (m *Manager) RecordCompiledPacket(projectDir, sessionID string, packet *projectcontext.CompiledPacket, fingerprintInputs projectcontext.PacketFingerprintInputs, meta projectcontext.PacketCacheMetadata) error {
 	projectDir, err := filepath.Abs(defaultProjectDir(projectDir))
 	if err != nil {
 		return err
@@ -519,7 +523,7 @@ func (m *Manager) RecordCompiledPacket(projectDir, sessionID string, packet *pro
 		return err
 	}
 	activePath := filepath.Join(projectDir, filepath.FromSlash(policy.Session.ActiveFile))
-	record := packetRecordFromCompiledPacket(packet)
+	record := packetRecordFromCompiledPacket(packet, fingerprintInputs, meta)
 	return appendPacketRecord(activePath, sessionID, record)
 }
 
@@ -766,6 +770,8 @@ func appendPacketRecord(path, sessionID string, record PacketRecord) error {
 			PacketHash: record.PacketHash,
 			Metadata: map[string]any{
 				"included_item_ids": append([]string(nil), record.IncludedItemIDs...),
+				"cache_status":      string(record.CacheStatus),
+				"fingerprint":       record.Fingerprint,
 			},
 		})
 		return saveActiveSession(path, active)
@@ -803,16 +809,30 @@ func appendExpansionEvent(path, anchorPath string) error {
 	})
 }
 
-func packetRecordFromCompiledPacket(packet *projectcontext.CompiledPacket) PacketRecord {
+func packetRecordFromCompiledPacket(packet *projectcontext.CompiledPacket, fingerprintInputs projectcontext.PacketFingerprintInputs, meta projectcontext.PacketCacheMetadata) PacketRecord {
 	record := PacketRecord{
-		PacketHash:       packet.Hash(),
-		TaskText:         packet.Task.Text,
-		TaskSummary:      packet.Task.Summary,
-		TaskSource:       packet.Task.Source,
-		CompiledAt:       time.Now().UTC(),
-		IncludedItemIDs:  []string{},
-		IncludedAnchors:  []projectcontext.ContextAnchor{},
-		InclusionReasons: []PacketInclusionReason{},
+		PacketHash:  packet.Hash(),
+		TaskText:    packet.Task.Text,
+		TaskSummary: packet.Task.Summary,
+		TaskSource:  packet.Task.Source,
+		CompiledAt:  time.Now().UTC(),
+		Budget:      packet.Budget,
+		PacketCacheMetadata: projectcontext.PacketCacheMetadata{
+			CacheStatus:         meta.CacheStatus,
+			Fingerprint:         meta.Fingerprint,
+			ReusedFrom:          meta.ReusedFrom,
+			DeltaFrom:           meta.DeltaFrom,
+			ChangedSections:     append([]string(nil), meta.ChangedSections...),
+			ChangedItemIDs:      append([]string(nil), meta.ChangedItemIDs...),
+			InvalidationReasons: append([]string(nil), meta.InvalidationReasons...),
+			FullPacketIncluded:  meta.FullPacketIncluded,
+			FallbackReason:      meta.FallbackReason,
+		},
+		FingerprintInputs: fingerprintInputs,
+		IncludedItemIDs:   []string{},
+		IncludedAnchors:   []projectcontext.ContextAnchor{},
+		InclusionReasons:  []PacketInclusionReason{},
+		Packet:            packet,
 	}
 
 	appendItem := func(section string, item projectcontext.CompiledItem) {

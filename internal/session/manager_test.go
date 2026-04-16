@@ -236,48 +236,60 @@ func TestRecordCompiledPacketAppendsPacketMetadata(t *testing.T) {
 			Summary: "compile packet",
 			Source:  "session",
 		},
+		Budget: projectcontext.PacketBudget{
+			Preset:              "default",
+			Target:              900,
+			Used:                640,
+			Remaining:           260,
+			ReserveBaseContract: 220,
+			ReserveVerification: 80,
+			ReserveDiagnostics:  66,
+			OmittedDueToBudget:  2,
+		},
 		BaseContract: []projectcontext.CompiledItem{
 			{
 				ContextItem: projectcontext.ContextItem{
-					ID:      "base_boot_summary",
-					Title:   "Boot Summary",
-					Summary: "Use Brain-managed repo context before substantial work.",
-					Anchor:  projectcontext.ContextAnchor{Path: "AGENTS.md", Section: "Project Agent Contract"},
+					ID:              "base_boot_summary",
+					Title:           "Boot Summary",
+					Summary:         "Use Brain-managed repo context before substantial work.",
+					Anchor:          projectcontext.ContextAnchor{Path: "AGENTS.md", Section: "Project Agent Contract"},
+					EstimatedTokens: 24,
 				},
 				Reason: "always included as part of the base contract",
 			},
 		},
 		WorkingSet: projectcontext.CompiledWorkingSet{
 			Boundaries: []projectcontext.CompiledBoundary{
-				{Path: "internal/taskcontext/", Label: "internal/taskcontext", Role: "library", Reason: "task touches compiler code"},
+				{Path: "internal/taskcontext/", Label: "internal/taskcontext", Role: "library", Reason: "task touches compiler code", EstimatedTokens: 18},
 			},
 			Files: []projectcontext.CompiledFile{
-				{Path: "cmd/context.go", Status: "modified", Source: "worktree", Reason: "compile command changed"},
+				{Path: "cmd/context.go", Status: "modified", Source: "worktree", Reason: "compile command changed", EstimatedTokens: 14},
 			},
 			Tests: []projectcontext.CompiledTest{
-				{Path: "internal/taskcontext/manager_test.go", Relation: "same_dir", Reason: "adjacent test surface"},
+				{Path: "internal/taskcontext/manager_test.go", Relation: "same_dir", Reason: "adjacent test surface", EstimatedTokens: 12},
 			},
 			Notes: []projectcontext.CompiledItem{
 				{
 					ContextItem: projectcontext.ContextItem{
-						ID:      "note:abc123",
-						Title:   "Compiler Notes",
-						Summary: "Keep packet output compact.",
-						Anchor:  projectcontext.ContextAnchor{Path: "docs/compiler.md", Section: "Notes"},
+						ID:              "note:abc123",
+						Title:           "Compiler Notes",
+						Summary:         "Keep packet output compact.",
+						Anchor:          projectcontext.ContextAnchor{Path: "docs/compiler.md", Section: "Notes"},
+						EstimatedTokens: 16,
 					},
 					Reason: "ranked highly in local durable-note search for the task",
 				},
 			},
 		},
 		Verification: []projectcontext.VerificationHint{
-			{ID: "profile:tests", Label: "tests", Summary: "Verification profile is not satisfied yet.", Source: ".brain/policy.yaml", Reason: "required verification profile is still missing"},
+			{ID: "profile:tests", Label: "tests", Summary: "Verification profile is not satisfied yet.", Source: ".brain/policy.yaml", Reason: "required verification profile is still missing", EstimatedTokens: 18},
 		},
 	}
 
-	if err := manager.RecordCompiledPacket(project, started.Session.ID, packet); err != nil {
+	if err := recordCompiledPacketForTest(manager, project, started.Session.ID, packet); err != nil {
 		t.Fatalf("record compiled packet: %v", err)
 	}
-	if err := manager.RecordCompiledPacket(project, started.Session.ID, packet); err != nil {
+	if err := recordCompiledPacketForTest(manager, project, started.Session.ID, packet); err != nil {
 		t.Fatalf("record second compiled packet: %v", err)
 	}
 
@@ -291,6 +303,15 @@ func TestRecordCompiledPacketAppendsPacketMetadata(t *testing.T) {
 	first := active.PacketRecords[0]
 	if first.PacketHash == "" || first.TaskText != "compile packet" || first.TaskSource != "session" {
 		t.Fatalf("unexpected packet record: %#v", first)
+	}
+	if first.Budget.Target != 900 || first.Budget.OmittedDueToBudget != 2 {
+		t.Fatalf("expected packet budget metadata to be recorded: %#v", first.Budget)
+	}
+	if first.CacheStatus != projectcontext.PacketCacheStatusFresh || first.Fingerprint == "" || !first.FullPacketIncluded {
+		t.Fatalf("expected cache metadata to be recorded: %#v", first)
+	}
+	if first.Packet == nil || first.Packet.Hash() != first.PacketHash {
+		t.Fatalf("expected full packet body on session record: %#v", first)
 	}
 	if !reflect.DeepEqual(first.IncludedItemIDs, []string{
 		"base_boot_summary",
@@ -324,7 +345,7 @@ func TestPacketTelemetryLinksCompileExpandVerificationAndCloseout(t *testing.T) 
 	}
 
 	packet := makeCompiledPacket("telemetry linkage", "session")
-	if err := manager.RecordCompiledPacket(project, started.Session.ID, packet); err != nil {
+	if err := recordCompiledPacketForTest(manager, project, started.Session.ID, packet); err != nil {
 		t.Fatalf("record compiled packet: %v", err)
 	}
 	if err := manager.RecordPacketExpansion(project, "docs/compiler.md"); err != nil {
@@ -396,7 +417,7 @@ func TestPacketTelemetryRetentionIsBounded(t *testing.T) {
 		packet := makeCompiledPacket(fmt.Sprintf("packet-%d", i), "session")
 		packet.Task.Text = fmt.Sprintf("packet-%d", i)
 		packet.Task.Summary = fmt.Sprintf("packet-%d", i)
-		if err := manager.RecordCompiledPacket(project, started.Session.ID, packet); err != nil {
+		if err := recordCompiledPacketForTest(manager, project, started.Session.ID, packet); err != nil {
 			t.Fatalf("record compiled packet %d: %v", i, err)
 		}
 	}
@@ -427,7 +448,7 @@ func TestExplainPacketUsesLatestMatchingPacketRecord(t *testing.T) {
 	}
 
 	packet := makeCompiledPacket("explain latest packet", "session")
-	if err := manager.RecordCompiledPacket(project, started.Session.ID, packet); err != nil {
+	if err := recordCompiledPacketForTest(manager, project, started.Session.ID, packet); err != nil {
 		t.Fatalf("record first compiled packet: %v", err)
 	}
 	active, err := loadActiveSession(filepath.Join(project, ".brain", "session.json"))
@@ -437,7 +458,7 @@ func TestExplainPacketUsesLatestMatchingPacketRecord(t *testing.T) {
 	firstCompiledAt := active.PacketRecords[len(active.PacketRecords)-1].CompiledAt
 	time.Sleep(10 * time.Millisecond)
 
-	if err := manager.RecordCompiledPacket(project, started.Session.ID, packet); err != nil {
+	if err := recordCompiledPacketForTest(manager, project, started.Session.ID, packet); err != nil {
 		t.Fatalf("record second compiled packet: %v", err)
 	}
 	if err := manager.RecordPacketExpansion(project, "docs/compiler.md"); err != nil {
@@ -463,6 +484,43 @@ func TestExplainPacketUsesLatestMatchingPacketRecord(t *testing.T) {
 	}
 }
 
+func TestExplainPacketIncludesReuseLineageMetadata(t *testing.T) {
+	project := makeSessionProject(t, sessionPolicyYAML(t, nil, false))
+	manager := New(nil)
+	started, err := manager.Start(context.Background(), StartRequest{ProjectDir: project, Task: "reuse lineage"})
+	if err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+
+	packet := makeCompiledPacket("reuse lineage", "session")
+	if err := recordCompiledPacketForTest(manager, project, started.Session.ID, packet); err != nil {
+		t.Fatalf("record fresh packet: %v", err)
+	}
+
+	inputs := packetFingerprintInputsForTest(packet)
+	meta := projectcontext.PacketCacheMetadata{
+		CacheStatus:        projectcontext.PacketCacheStatusReused,
+		Fingerprint:        inputs.Hash(),
+		ReusedFrom:         packet.Hash(),
+		FullPacketIncluded: false,
+	}
+	time.Sleep(10 * time.Millisecond)
+	if err := manager.RecordCompiledPacket(project, started.Session.ID, packet, inputs, meta); err != nil {
+		t.Fatalf("record reused packet: %v", err)
+	}
+
+	explanation, err := manager.ExplainPacket(PacketExplainRequest{ProjectDir: project, Last: true})
+	if err != nil {
+		t.Fatalf("explain latest packet: %v", err)
+	}
+	if explanation.Packet.CacheStatus != projectcontext.PacketCacheStatusReused {
+		t.Fatalf("expected reused cache status, got %#v", explanation.Packet)
+	}
+	if explanation.Packet.ReusedFrom != packet.Hash() || explanation.Packet.FullPacketIncluded {
+		t.Fatalf("expected reuse lineage metadata, got %#v", explanation.Packet)
+	}
+}
+
 func TestContextStatsSurfaceConservativeUtilitySignals(t *testing.T) {
 	project := makeSessionProject(t, sessionPolicyYAML(t, nil, false))
 	manager := New(nil)
@@ -472,14 +530,14 @@ func TestContextStatsSurfaceConservativeUtilitySignals(t *testing.T) {
 	}
 
 	packet := makeCompiledPacket("stats utility", "session")
-	if err := manager.RecordCompiledPacket(project, started.Session.ID, packet); err != nil {
+	if err := recordCompiledPacketForTest(manager, project, started.Session.ID, packet); err != nil {
 		t.Fatalf("record first compiled packet: %v", err)
 	}
 	if err := manager.RecordPacketExpansion(project, "docs/compiler.md"); err != nil {
 		t.Fatalf("record first expansion: %v", err)
 	}
 	time.Sleep(10 * time.Millisecond)
-	if err := manager.RecordCompiledPacket(project, started.Session.ID, packet); err != nil {
+	if err := recordCompiledPacketForTest(manager, project, started.Session.ID, packet); err != nil {
 		t.Fatalf("record second compiled packet: %v", err)
 	}
 	if err := manager.RecordPacketExpansion(project, "docs/compiler.md"); err != nil {
@@ -501,6 +559,112 @@ func TestContextStatsSurfaceConservativeUtilitySignals(t *testing.T) {
 	}
 	if len(stats.TopNoise) != 0 {
 		t.Fatalf("did not expect likely-noise items in this scenario: %#v", stats.TopNoise)
+	}
+}
+
+func TestContextStatsSummarizesFreshPacketPressureAndOmittedDocs(t *testing.T) {
+	project := makeSessionProject(t, sessionPolicyYAML(t, nil, false))
+	manager := New(nil)
+	started, err := manager.Start(context.Background(), StartRequest{ProjectDir: project, Task: "capsule telemetry"})
+	if err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+
+	first := makeCompiledPacket("capsule telemetry", "session")
+	first.Budget.OmittedDueToBudget = 3
+	first.Budget.OmittedCandidates = []projectcontext.BudgetOmittedItem{
+		{
+			ID:              "note:agents",
+			Section:         "working_set.notes",
+			Title:           "Project Agent Contract",
+			Anchor:          projectcontext.ContextAnchor{Path: "AGENTS.md", Section: "Project Agent Contract"},
+			EstimatedTokens: 48,
+			Reason:          "budget pressure omitted a high-cost doc summary",
+		},
+		{
+			ID:              "note:workflows",
+			Section:         "working_set.notes",
+			Title:           "Workflow Guidance",
+			Anchor:          projectcontext.ContextAnchor{Path: ".brain/context/workflows.md", Section: "Workflows"},
+			EstimatedTokens: 43,
+			Reason:          "budget pressure omitted a high-cost doc summary",
+		},
+		{
+			ID:              "file:cmd",
+			Section:         "working_set.files",
+			Title:           "cmd/context.go",
+			Anchor:          projectcontext.ContextAnchor{Path: "cmd/context.go"},
+			EstimatedTokens: 18,
+			Reason:          "non-doc omission should not count toward capsule telemetry",
+		},
+	}
+	if err := recordCompiledPacketForTest(manager, project, started.Session.ID, first); err != nil {
+		t.Fatalf("record first compiled packet: %v", err)
+	}
+
+	reused := makeCompiledPacket("capsule telemetry", "session")
+	reused.Budget.OmittedDueToBudget = 1
+	reused.Budget.OmittedCandidates = []projectcontext.BudgetOmittedItem{
+		{
+			ID:              "note:agents",
+			Section:         "working_set.notes",
+			Title:           "Project Agent Contract",
+			Anchor:          projectcontext.ContextAnchor{Path: "AGENTS.md", Section: "Project Agent Contract"},
+			EstimatedTokens: 48,
+			Reason:          "reused packets should not affect fresh-pressure telemetry",
+		},
+	}
+	reusedInputs := packetFingerprintInputsForTest(reused)
+	if err := manager.RecordCompiledPacket(project, started.Session.ID, reused, reusedInputs, projectcontext.PacketCacheMetadata{
+		CacheStatus:        projectcontext.PacketCacheStatusReused,
+		Fingerprint:        reusedInputs.Hash(),
+		ReusedFrom:         first.Hash(),
+		FullPacketIncluded: false,
+	}); err != nil {
+		t.Fatalf("record reused compiled packet: %v", err)
+	}
+
+	second := makeCompiledPacket("capsule telemetry second", "session")
+	second.Budget.MandatoryOverTarget = true
+	second.Budget.OmittedDueToBudget = 1
+	second.Budget.OmittedCandidates = []projectcontext.BudgetOmittedItem{
+		{
+			ID:              "note:workflows",
+			Section:         "working_set.notes",
+			Title:           "Workflow Guidance",
+			Anchor:          projectcontext.ContextAnchor{Path: ".brain/context/workflows.md", Section: "Workflows"},
+			EstimatedTokens: 43,
+			Reason:          "same doc omitted again under fresh packet pressure",
+		},
+	}
+	if err := recordCompiledPacketForTest(manager, project, started.Session.ID, second); err != nil {
+		t.Fatalf("record second compiled packet: %v", err)
+	}
+
+	stats, err := manager.ContextStats(ContextStatsRequest{ProjectDir: project, Limit: 5})
+	if err != nil {
+		t.Fatalf("context stats: %v", err)
+	}
+	if stats.FreshPacketPressure.FreshPacketsAnalyzed != 2 {
+		t.Fatalf("expected 2 fresh packets analyzed, got %#v", stats.FreshPacketPressure)
+	}
+	if stats.FreshPacketPressure.FreshPacketsUnderPressure != 2 {
+		t.Fatalf("expected 2 pressured fresh packets, got %#v", stats.FreshPacketPressure)
+	}
+	if stats.FreshPacketPressure.MandatoryOverTarget != 1 {
+		t.Fatalf("expected 1 mandatory-over-target packet, got %#v", stats.FreshPacketPressure)
+	}
+	if stats.FreshPacketPressure.PressureRate != 1 {
+		t.Fatalf("expected full fresh pressure rate, got %#v", stats.FreshPacketPressure)
+	}
+	if len(stats.FrequentlyOmittedDocs) != 2 {
+		t.Fatalf("expected two markdown docs in omitted-doc telemetry, got %#v", stats.FrequentlyOmittedDocs)
+	}
+	if stats.FrequentlyOmittedDocs[0].Path != ".brain/context/workflows.md" || stats.FrequentlyOmittedDocs[0].OmittedPackets != 2 {
+		t.Fatalf("expected workflows doc to lead omitted docs, got %#v", stats.FrequentlyOmittedDocs)
+	}
+	if stats.FrequentlyOmittedDocs[1].Path != "AGENTS.md" || stats.FrequentlyOmittedDocs[1].OmittedPackets != 1 {
+		t.Fatalf("expected AGENTS doc to follow omitted docs, got %#v", stats.FrequentlyOmittedDocs)
 	}
 }
 
@@ -599,7 +763,7 @@ func TestValidateFinishSuggestsPacketBackedPromotions(t *testing.T) {
 		t.Fatalf("write code change: %v", err)
 	}
 	packet := makeCompiledPacket("replace context loading flow", "session")
-	if err := manager.RecordCompiledPacket(project, started.Session.ID, packet); err != nil {
+	if err := recordCompiledPacketForTest(manager, project, started.Session.ID, packet); err != nil {
 		t.Fatalf("record compiled packet: %v", err)
 	}
 	if _, err := manager.RunCommand(context.Background(), RunRequest{
@@ -755,42 +919,77 @@ func makeCompiledPacket(task, source string) *projectcontext.CompiledPacket {
 			Summary: task,
 			Source:  source,
 		},
+		Budget: projectcontext.PacketBudget{
+			Preset:              "default",
+			Target:              900,
+			Used:                640,
+			Remaining:           260,
+			ReserveBaseContract: 220,
+			ReserveVerification: 80,
+			ReserveDiagnostics:  66,
+		},
 		BaseContract: []projectcontext.CompiledItem{
 			{
 				ContextItem: projectcontext.ContextItem{
-					ID:      "base_boot_summary",
-					Title:   "Boot Summary",
-					Summary: "Use Brain-managed repo context before substantial work.",
-					Anchor:  projectcontext.ContextAnchor{Path: "AGENTS.md", Section: "Project Agent Contract"},
+					ID:              "base_boot_summary",
+					Title:           "Boot Summary",
+					Summary:         "Use Brain-managed repo context before substantial work.",
+					Anchor:          projectcontext.ContextAnchor{Path: "AGENTS.md", Section: "Project Agent Contract"},
+					EstimatedTokens: 24,
 				},
 				Reason: "always included as part of the base contract",
 			},
 		},
 		WorkingSet: projectcontext.CompiledWorkingSet{
 			Boundaries: []projectcontext.CompiledBoundary{
-				{Path: "internal/taskcontext/", Label: "internal/taskcontext", Role: "library", Reason: "task touches compiler code"},
+				{Path: "internal/taskcontext/", Label: "internal/taskcontext", Role: "library", Reason: "task touches compiler code", EstimatedTokens: 18},
 			},
 			Files: []projectcontext.CompiledFile{
-				{Path: "cmd/context.go", Status: "modified", Source: "worktree", Reason: "compile command changed"},
+				{Path: "cmd/context.go", Status: "modified", Source: "worktree", Reason: "compile command changed", EstimatedTokens: 14},
 			},
 			Tests: []projectcontext.CompiledTest{
-				{Path: "internal/taskcontext/manager_test.go", Relation: "same_dir", Reason: "adjacent test surface"},
+				{Path: "internal/taskcontext/manager_test.go", Relation: "same_dir", Reason: "adjacent test surface", EstimatedTokens: 12},
 			},
 			Notes: []projectcontext.CompiledItem{
 				{
 					ContextItem: projectcontext.ContextItem{
-						ID:      "note:abc123",
-						Title:   "Compiler Notes",
-						Summary: "Keep packet output compact.",
-						Anchor:  projectcontext.ContextAnchor{Path: "docs/compiler.md", Section: "Notes"},
+						ID:              "note:abc123",
+						Title:           "Compiler Notes",
+						Summary:         "Keep packet output compact.",
+						Anchor:          projectcontext.ContextAnchor{Path: "docs/compiler.md", Section: "Notes"},
+						EstimatedTokens: 16,
 					},
 					Reason: "ranked highly in local durable-note search for the task",
 				},
 			},
 		},
 		Verification: []projectcontext.VerificationHint{
-			{ID: "profile:tests", Label: "tests", Summary: "Verification profile is not satisfied yet.", Source: ".brain/policy.yaml", Reason: "required verification profile is still missing"},
+			{ID: "profile:tests", Label: "tests", Summary: "Verification profile is not satisfied yet.", Source: ".brain/policy.yaml", Reason: "required verification profile is still missing", EstimatedTokens: 18},
 		},
+	}
+}
+
+func recordCompiledPacketForTest(manager *Manager, project, sessionID string, packet *projectcontext.CompiledPacket) error {
+	inputs := packetFingerprintInputsForTest(packet)
+	meta := projectcontext.PacketCacheMetadata{
+		CacheStatus:        projectcontext.PacketCacheStatusFresh,
+		Fingerprint:        inputs.Hash(),
+		FullPacketIncluded: true,
+	}
+	return manager.RecordCompiledPacket(project, sessionID, packet, inputs, meta)
+}
+
+func packetFingerprintInputsForTest(packet *projectcontext.CompiledPacket) projectcontext.PacketFingerprintInputs {
+	return projectcontext.PacketFingerprintInputs{
+		TaskText:                 packet.Task.Text,
+		TaskSummary:              packet.Task.Summary,
+		TaskSource:               packet.Task.Source,
+		BudgetPreset:             packet.Budget.Preset,
+		BudgetTarget:             packet.Budget.Target,
+		ChangedFiles:             []string{"cmd/context.go|modified|worktree"},
+		TouchedBoundaries:        []string{"internal/taskcontext/|internal/taskcontext|library"},
+		SourceSummaryHashes:      []string{"source_agents_summary|abc123"},
+		VerificationRequirements: []string{"profile:tests|tests||.brain/policy.yaml||Verification profile is not satisfied yet."},
 	}
 }
 

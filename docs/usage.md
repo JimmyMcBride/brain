@@ -1,3 +1,6 @@
+---
+updated: "2026-04-16T04:39:23Z"
+---
 # Usage
 
 This is the practical operating guide for `brain` after install. Use it when you already understand the top-level pitch and want the day-to-day commands for adopting Brain in a repo, compiling task context, retrieving local memory, and running the session workflow.
@@ -147,6 +150,8 @@ Compile task context first, then reach for the compatibility views only when you
 
 ```bash
 brain context compile --project . --task "auth flow"
+brain context compile --project . --task "auth flow" --budget small
+brain context compile --project . --task "auth flow" --budget 1200
 brain context explain --project . --last
 brain context stats --project .
 brain context install --project .
@@ -171,21 +176,27 @@ Use `--force` when adopting an existing unmanaged `AGENTS.md` or docs file into 
 `context compile` is the summary-first working-set compiler:
 
 - resolves the task from `--task` or the active session
+- accepts `--budget small|default|large|<integer>` so you can ask for a tighter or wider startup packet without guessing what Brain will omit
 - emits the smallest justified packet Brain currently knows how to build: base contract, changed files, touched boundaries, nearby tests, top durable note summaries, verification hints, ambiguities, and provenance
+- uses deterministic local token-cost heuristics plus explicit reserve buckets for base contract, verification, and diagnostics before choosing optional working-set items
+- automatically reuses the latest matching packet inside the active session and returns a compact reused response instead of reprinting unchanged packet sections wholesale
+- emits a compact `delta` response with changed sections, changed item ids, and invalidation reasons when the task is stable but relevant compile inputs changed
+- supports `--fresh` when you need to bypass reuse and force a standalone full packet for debugging or inspection
 - keeps boundary-aware context visible by carrying adjacency, responsibilities, and nearby-test relations into the packet
 - ranks verification hints into strong or suggested command guidance with explicit source provenance
 - applies conservative local utility adjustments only after repeated repo-local evidence such as later expansions, successful verification linkage, or durable-update linkage
-- keeps included context in summary form with exact anchors and explicit inclusion reasons
-- records packet metadata into the active session when a session is present, but still works normally without a session
+- keeps included context in summary form with exact anchors and explicit inclusion reasons whenever Brain emits the full packet
+- reports target, used, remaining, reserve, omitted-candidate budget diagnostics, and reuse or delta lineage in compile output and `context explain`
+- records full packet bodies plus lineage metadata into the active session when a session is present, but still works normally without a session
 - is the best first choice when you want one compact startup packet instead of a full static bundle or a broader explain-oriented assembly view
 
 `context explain` and `context stats` are analysis surfaces for the compiler:
 
-- `context explain --last` inspects the latest recorded packet, its included items, later expansions, and downstream outcomes such as verification runs, durable updates, and closeout status
+- `context explain --last` inspects the latest recorded packet, including cache status, reuse or delta lineage, invalidation reasons, explicit full-packet fallback reasons, included items, later expansions, and downstream outcomes such as verification runs, durable updates, and closeout status
 - `context explain --packet <hash>` lets you inspect an older packet when you need to debug a specific compile result
-- `context stats` summarizes likely signal items, likely noise items, repeated expansion patterns, and common verification links from local compiler telemetry
+- `context stats` summarizes likely signal items, likely noise items, repeated expansion patterns, common verification links, fresh-packet budget-pressure frequency, and recurring omitted markdown docs from local compiler telemetry
 - both commands stay grounded in recorded packet metadata and local session telemetry rather than opaque remote analytics
-- use them when tuning context quality or debugging ranking behavior, not as a replacement for normal `context compile` usage
+- use them when tuning context quality, checking whether first-turn packets are under real budget pressure, or debugging ranking behavior, not as a replacement for normal `context compile` usage
 
 `context structure` is the structural repo inspection surface:
 

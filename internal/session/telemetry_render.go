@@ -15,7 +15,7 @@ func RenderPacketExplanationHuman(w io.Writer, explanation *PacketExplanation) e
 	}
 	if _, err := fmt.Fprintf(
 		w,
-		"## Packet\n\n- Hash: `%s`\n- Compiled: %s\n- Task: `%s`\n- Summary: %s\n- Source: `%s`\n- Session: `%s` (%s)\n\n",
+		"## Packet\n\n- Hash: `%s`\n- Compiled: %s\n- Task: `%s`\n- Summary: %s\n- Source: `%s`\n- Session: `%s` (%s)\n- Cache status: `%s`\n- Fingerprint: `%s`\n- Full packet included: %t\n\n",
 		explanation.Packet.PacketHash,
 		explanation.Packet.CompiledAt.Format(timeLayout),
 		explanation.Packet.TaskText,
@@ -23,7 +23,49 @@ func RenderPacketExplanationHuman(w io.Writer, explanation *PacketExplanation) e
 		explanation.Packet.TaskSource,
 		explanation.Packet.SessionID,
 		explanation.Packet.SessionStatus,
+		explanation.Packet.CacheStatus,
+		explanation.Packet.Fingerprint,
+		explanation.Packet.FullPacketIncluded,
 	); err != nil {
+		return err
+	}
+	if err := renderPacketBudget(w, explanation.Packet.Budget); err != nil {
+		return err
+	}
+	if _, err := io.WriteString(w, "## Lineage\n\n"); err != nil {
+		return err
+	}
+	if explanation.Packet.ReusedFrom != "" {
+		if _, err := fmt.Fprintf(w, "- Reused from: `%s`\n", explanation.Packet.ReusedFrom); err != nil {
+			return err
+		}
+	}
+	if explanation.Packet.DeltaFrom != "" {
+		if _, err := fmt.Fprintf(w, "- Delta from: `%s`\n", explanation.Packet.DeltaFrom); err != nil {
+			return err
+		}
+	}
+	if explanation.Packet.FallbackReason != "" {
+		if _, err := fmt.Fprintf(w, "- Full-packet fallback: %s\n", explanation.Packet.FallbackReason); err != nil {
+			return err
+		}
+	}
+	for _, reason := range explanation.Packet.InvalidationReasons {
+		if _, err := fmt.Fprintf(w, "- Invalidation: %s\n", reason); err != nil {
+			return err
+		}
+	}
+	if len(explanation.Packet.ChangedSections) != 0 {
+		if _, err := fmt.Fprintf(w, "- Changed sections: %s\n", strings.Join(explanation.Packet.ChangedSections, ", ")); err != nil {
+			return err
+		}
+	}
+	if len(explanation.Packet.ChangedItemIDs) != 0 {
+		if _, err := fmt.Fprintf(w, "- Changed item ids: %s\n", strings.Join(explanation.Packet.ChangedItemIDs, ", ")); err != nil {
+			return err
+		}
+	}
+	if _, err := io.WriteString(w, "\n"); err != nil {
 		return err
 	}
 	if _, err := io.WriteString(w, "## Included Items\n\n"); err != nil {
@@ -130,6 +172,42 @@ func RenderPacketExplanationHuman(w io.Writer, explanation *PacketExplanation) e
 	return nil
 }
 
+func renderPacketBudget(w io.Writer, budget projectcontext.PacketBudget) error {
+	if _, err := io.WriteString(w, "## Budget\n\n"); err != nil {
+		return err
+	}
+	if budget.Preset != "" {
+		if _, err := fmt.Fprintf(w, "- Preset: `%s`\n", budget.Preset); err != nil {
+			return err
+		}
+	}
+	if _, err := fmt.Fprintf(
+		w,
+		"- Target: %d tokens\n- Used: %d tokens\n- Remaining: %d tokens\n- Reserve base contract: %d tokens\n- Reserve verification: %d tokens\n- Reserve diagnostics: %d tokens\n- Omitted due to budget: %d\n",
+		budget.Target,
+		budget.Used,
+		budget.Remaining,
+		budget.ReserveBaseContract,
+		budget.ReserveVerification,
+		budget.ReserveDiagnostics,
+		budget.OmittedDueToBudget,
+	); err != nil {
+		return err
+	}
+	if budget.MandatoryOverTarget {
+		if _, err := io.WriteString(w, "- Mandatory sections exceeded the target budget before optional working-set selection.\n"); err != nil {
+			return err
+		}
+	}
+	for _, item := range budget.OmittedCandidates {
+		if _, err := fmt.Fprintf(w, "- Omitted `%s` [%s] (`%s`, %d tokens): %s\n", item.Title, item.Section, anchorLabel(item.Anchor), item.EstimatedTokens, item.Reason); err != nil {
+			return err
+		}
+	}
+	_, err := io.WriteString(w, "\n")
+	return err
+}
+
 func RenderContextStatsHuman(w io.Writer, stats *ContextStats) error {
 	if stats == nil {
 		return errors.New("context stats are required")
@@ -150,6 +228,12 @@ func RenderContextStatsHuman(w io.Writer, stats *ContextStats) error {
 		return err
 	}
 	if err := renderUtilityGroup(w, "Frequently Expanded", stats.FrequentlyExpanded); err != nil {
+		return err
+	}
+	if err := renderFreshPacketPressure(w, stats.FreshPacketPressure); err != nil {
+		return err
+	}
+	if err := renderOmittedDocs(w, "Frequently Omitted Docs", stats.FrequentlyOmittedDocs); err != nil {
 		return err
 	}
 	if _, err := io.WriteString(w, "## Common Verification Links\n\n"); err != nil {
@@ -196,6 +280,40 @@ func renderUtilityGroup(w io.Writer, title string, items []UtilityItemStat) erro
 			if _, err := fmt.Fprintf(w, "  Evidence: %s\n", reason); err != nil {
 				return err
 			}
+		}
+	}
+	_, err := io.WriteString(w, "\n")
+	return err
+}
+
+func renderFreshPacketPressure(w io.Writer, pressure FreshPacketPressure) error {
+	if _, err := io.WriteString(w, "## Fresh Packet Pressure\n\n"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(
+		w,
+		"- Fresh packets analyzed: %d\n- Fresh packets under budget pressure: %d\n- Mandatory over target: %d\n- Pressure rate: %.1f%%\n\n",
+		pressure.FreshPacketsAnalyzed,
+		pressure.FreshPacketsUnderPressure,
+		pressure.MandatoryOverTarget,
+		pressure.PressureRate*100,
+	); err != nil {
+		return err
+	}
+	return nil
+}
+
+func renderOmittedDocs(w io.Writer, title string, items []OmittedDocStat) error {
+	if _, err := fmt.Fprintf(w, "## %s\n\n", title); err != nil {
+		return err
+	}
+	if len(items) == 0 {
+		_, err := io.WriteString(w, "- None recorded yet.\n\n")
+		return err
+	}
+	for _, item := range items {
+		if _, err := fmt.Fprintf(w, "- `%s`: omitted in %d fresh packet(s)\n", item.Path, item.OmittedPackets); err != nil {
+			return err
 		}
 	}
 	_, err := io.WriteString(w, "\n")

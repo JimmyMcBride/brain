@@ -24,13 +24,15 @@ type PacketExplainRequest struct {
 }
 
 type PacketReference struct {
-	PacketHash    string    `json:"packet_hash"`
-	CompiledAt    time.Time `json:"compiled_at"`
-	TaskText      string    `json:"task_text"`
-	TaskSummary   string    `json:"task_summary"`
-	TaskSource    string    `json:"task_source"`
-	SessionID     string    `json:"session_id"`
-	SessionStatus string    `json:"session_status"`
+	PacketHash  string                      `json:"packet_hash"`
+	CompiledAt  time.Time                   `json:"compiled_at"`
+	TaskText    string                      `json:"task_text"`
+	TaskSummary string                      `json:"task_summary"`
+	TaskSource  string                      `json:"task_source"`
+	Budget      projectcontext.PacketBudget `json:"budget"`
+	projectcontext.PacketCacheMetadata
+	SessionID     string `json:"session_id"`
+	SessionStatus string `json:"session_status"`
 }
 
 type ItemUtilityDiagnostic struct {
@@ -108,12 +110,26 @@ type VerificationLinkStat struct {
 	SuccessCount int    `json:"success_count"`
 }
 
+type FreshPacketPressure struct {
+	FreshPacketsAnalyzed      int     `json:"fresh_packets_analyzed"`
+	FreshPacketsUnderPressure int     `json:"fresh_packets_under_pressure"`
+	MandatoryOverTarget       int     `json:"mandatory_over_target"`
+	PressureRate              float64 `json:"pressure_rate"`
+}
+
+type OmittedDocStat struct {
+	Path           string `json:"path"`
+	OmittedPackets int    `json:"omitted_packets"`
+}
+
 type UtilitySnapshot struct {
-	SessionsAnalyzed  int                    `json:"sessions_analyzed"`
-	PacketsAnalyzed   int                    `json:"packets_analyzed"`
-	ItemsAnalyzed     int                    `json:"items_analyzed"`
-	Items             []UtilityItemStat      `json:"items"`
-	VerificationLinks []VerificationLinkStat `json:"verification_links,omitempty"`
+	SessionsAnalyzed      int                    `json:"sessions_analyzed"`
+	PacketsAnalyzed       int                    `json:"packets_analyzed"`
+	ItemsAnalyzed         int                    `json:"items_analyzed"`
+	Items                 []UtilityItemStat      `json:"items"`
+	VerificationLinks     []VerificationLinkStat `json:"verification_links,omitempty"`
+	FreshPacketPressure   FreshPacketPressure    `json:"fresh_packet_pressure"`
+	FrequentlyOmittedDocs []OmittedDocStat       `json:"frequently_omitted_docs,omitempty"`
 }
 
 type ContextStatsRequest struct {
@@ -129,6 +145,8 @@ type ContextStats struct {
 	TopNoise                []UtilityItemStat      `json:"top_noise,omitempty"`
 	FrequentlyExpanded      []UtilityItemStat      `json:"frequently_expanded,omitempty"`
 	CommonVerificationLinks []VerificationLinkStat `json:"common_verification_links,omitempty"`
+	FreshPacketPressure     FreshPacketPressure    `json:"fresh_packet_pressure"`
+	FrequentlyOmittedDocs   []OmittedDocStat       `json:"frequently_omitted_docs,omitempty"`
 }
 
 type packetIncludedItem struct {
@@ -173,6 +191,8 @@ type telemetryAnalysis struct {
 	items            []UtilityItemStat
 	itemsByID        map[string]UtilityItemStat
 	verification     []VerificationLinkStat
+	freshPressure    FreshPacketPressure
+	omittedDocs      []OmittedDocStat
 }
 
 func (m *Manager) ExplainPacket(req PacketExplainRequest) (*PacketExplanation, error) {
@@ -225,11 +245,13 @@ func (m *Manager) BuildUtilitySnapshot(projectDir string) (*UtilitySnapshot, err
 		return nil, err
 	}
 	return &UtilitySnapshot{
-		SessionsAnalyzed:  analysis.sessionsAnalyzed,
-		PacketsAnalyzed:   len(analysis.packets),
-		ItemsAnalyzed:     len(analysis.items),
-		Items:             append([]UtilityItemStat(nil), analysis.items...),
-		VerificationLinks: append([]VerificationLinkStat(nil), analysis.verification...),
+		SessionsAnalyzed:      analysis.sessionsAnalyzed,
+		PacketsAnalyzed:       len(analysis.packets),
+		ItemsAnalyzed:         len(analysis.items),
+		Items:                 append([]UtilityItemStat(nil), analysis.items...),
+		VerificationLinks:     append([]VerificationLinkStat(nil), analysis.verification...),
+		FreshPacketPressure:   analysis.freshPressure,
+		FrequentlyOmittedDocs: append([]OmittedDocStat(nil), analysis.omittedDocs...),
 	}, nil
 }
 
@@ -268,6 +290,8 @@ func (m *Manager) ContextStats(req ContextStatsRequest) (*ContextStats, error) {
 		TopNoise:                trimUtilityItems(topNoise, limit),
 		FrequentlyExpanded:      trimUtilityItems(frequentlyExpanded, limit),
 		CommonVerificationLinks: trimVerificationLinks(snapshot.VerificationLinks, limit),
+		FreshPacketPressure:     snapshot.FreshPacketPressure,
+		FrequentlyOmittedDocs:   trimOmittedDocs(snapshot.FrequentlyOmittedDocs, limit),
 	}, nil
 }
 
@@ -295,10 +319,38 @@ func (m *Manager) buildTelemetryAnalysis(projectDir string) (*telemetryAnalysis,
 
 	itemAgg := map[string]*utilityAggregate{}
 	verifAgg := map[string]*verificationAggregate{}
+	omittedAgg := map[string]*OmittedDocStat{}
+	freshPressure := FreshPacketPressure{}
 	for _, packet := range packets {
 		successfulVerifications := countVerificationOutcomes(packet.Verification, true)
 		failedVerifications := countVerificationOutcomes(packet.Verification, false)
 		successfulClose := packet.SessionClose != nil && packet.SessionClose.Success
+		if packet.CacheStatus == projectcontext.PacketCacheStatusFresh {
+			freshPressure.FreshPacketsAnalyzed++
+			if packet.Budget.MandatoryOverTarget {
+				freshPressure.MandatoryOverTarget++
+			}
+			if packet.Budget.MandatoryOverTarget || packet.Budget.OmittedDueToBudget > 0 {
+				freshPressure.FreshPacketsUnderPressure++
+			}
+			seenPaths := map[string]struct{}{}
+			for _, item := range packet.Budget.OmittedCandidates {
+				path := strings.TrimSpace(item.Anchor.Path)
+				if !isMarkdownDocPath(path) {
+					continue
+				}
+				if _, exists := seenPaths[path]; exists {
+					continue
+				}
+				seenPaths[path] = struct{}{}
+				entry := omittedAgg[path]
+				if entry == nil {
+					entry = &OmittedDocStat{Path: path}
+					omittedAgg[path] = entry
+				}
+				entry.OmittedPackets++
+			}
+		}
 		for _, run := range packet.Verification {
 			entry := verifAgg[run.Command]
 			if entry == nil {
@@ -364,13 +416,40 @@ func (m *Manager) buildTelemetryAnalysis(projectDir string) (*telemetryAnalysis,
 		return verification[i].SuccessCount > verification[j].SuccessCount
 	})
 
+	omittedDocs := make([]OmittedDocStat, 0, len(omittedAgg))
+	for _, agg := range omittedAgg {
+		omittedDocs = append(omittedDocs, *agg)
+	}
+	sort.Slice(omittedDocs, func(i, j int) bool {
+		if omittedDocs[i].OmittedPackets == omittedDocs[j].OmittedPackets {
+			return omittedDocs[i].Path < omittedDocs[j].Path
+		}
+		return omittedDocs[i].OmittedPackets > omittedDocs[j].OmittedPackets
+	})
+	if freshPressure.FreshPacketsAnalyzed > 0 {
+		freshPressure.PressureRate = float64(freshPressure.FreshPacketsUnderPressure) / float64(freshPressure.FreshPacketsAnalyzed)
+	}
+
 	return &telemetryAnalysis{
 		sessionsAnalyzed: len(sessions),
 		packets:          packets,
 		items:            items,
 		itemsByID:        itemsByID,
 		verification:     verification,
+		freshPressure:    freshPressure,
+		omittedDocs:      omittedDocs,
 	}, nil
+}
+
+func trimOmittedDocs(items []OmittedDocStat, limit int) []OmittedDocStat {
+	if len(items) == 0 || limit <= 0 || len(items) <= limit {
+		return append([]OmittedDocStat(nil), items...)
+	}
+	return append([]OmittedDocStat(nil), items[:limit]...)
+}
+
+func isMarkdownDocPath(path string) bool {
+	return strings.HasSuffix(strings.ToLower(strings.TrimSpace(path)), ".md")
 }
 
 func loadTelemetrySessions(projectDir string) ([]*ActiveSession, error) {
@@ -454,11 +533,23 @@ func packetObservationsFromSession(active *ActiveSession) []packetObservation {
 	for _, record := range active.PacketRecords {
 		observation := packetObservation{
 			PacketReference: PacketReference{
-				PacketHash:    record.PacketHash,
-				CompiledAt:    record.CompiledAt.UTC(),
-				TaskText:      record.TaskText,
-				TaskSummary:   record.TaskSummary,
-				TaskSource:    record.TaskSource,
+				PacketHash:  record.PacketHash,
+				CompiledAt:  record.CompiledAt.UTC(),
+				TaskText:    record.TaskText,
+				TaskSummary: record.TaskSummary,
+				TaskSource:  record.TaskSource,
+				Budget:      record.Budget,
+				PacketCacheMetadata: projectcontext.PacketCacheMetadata{
+					CacheStatus:         record.CacheStatus,
+					Fingerprint:         record.Fingerprint,
+					ReusedFrom:          record.ReusedFrom,
+					DeltaFrom:           record.DeltaFrom,
+					ChangedSections:     append([]string(nil), record.ChangedSections...),
+					ChangedItemIDs:      append([]string(nil), record.ChangedItemIDs...),
+					InvalidationReasons: append([]string(nil), record.InvalidationReasons...),
+					FullPacketIncluded:  record.FullPacketIncluded,
+					FallbackReason:      record.FallbackReason,
+				},
 				SessionID:     active.ID,
 				SessionStatus: active.Status,
 			},

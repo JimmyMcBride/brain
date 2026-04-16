@@ -30,6 +30,8 @@ func addContextCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLo
 	var assembleLimit int
 	var assembleExplain bool
 	var compileTask string
+	var compileBudget string
+	var compileFresh bool
 	var explainPacket string
 	var explainLast bool
 	var statsLimit int
@@ -305,25 +307,83 @@ Use the other subcommands to inspect compatibility views or refresh the Brain-ma
 			}
 
 			manager := taskcontext.New(appCtx.Context)
-			packet, err := manager.Compile(taskcontext.Request{
+			compileRequest := taskcontext.Request{
 				ProjectDir:     projectRoot,
 				Task:           resolvedTask,
 				TaskSource:     taskSource,
+				Budget:         compileBudget,
 				SearchResults:  searchResults,
 				LivePacket:     livePacket,
 				BoundaryGraph:  boundaryGraph,
 				UtilitySignals: utilitySignalsFromSnapshot(utilitySnapshot),
-			})
+			}
+			fingerprintInputs, err := manager.BuildFingerprintInputs(compileRequest)
 			if err != nil {
 				return err
 			}
+			fingerprint := fingerprintInputs.Hash()
+			if active != nil && !compileFresh {
+				if reusable := latestMatchingPacketRecord(active.PacketRecords, fingerprint); reusable != nil && reusable.Packet != nil {
+					meta := projectcontext.PacketCacheMetadata{
+						CacheStatus:        projectcontext.PacketCacheStatusReused,
+						Fingerprint:        fingerprint,
+						ReusedFrom:         reusable.PacketHash,
+						FullPacketIncluded: false,
+					}
+					if err := appCtx.Session.RecordCompiledPacket(projectRoot, active.ID, reusable.Packet, fingerprintInputs, meta); err != nil {
+						return err
+					}
+					response := projectcontext.NewCompileResponse(reusable.Packet, meta)
+					return appCtx.Output.Print(response, func(w io.Writer) error {
+						return taskcontext.RenderCompileResponseHuman(w, response)
+					})
+				}
+			}
+
+			packet, err := manager.Compile(compileRequest)
+			if err != nil {
+				return err
+			}
+
+			meta := projectcontext.PacketCacheMetadata{
+				CacheStatus:        projectcontext.PacketCacheStatusFresh,
+				Fingerprint:        fingerprint,
+				FullPacketIncluded: true,
+			}
+			if compileFresh {
+				meta.FallbackReason = "fresh compile requested"
+			} else if active == nil {
+				meta.FallbackReason = "no active session; emitted a standalone full packet"
+			}
+			if active != nil && !compileFresh {
+				if previous := latestTaskPacketRecord(active.PacketRecords, packet.Task.Text); previous != nil {
+					if previous.Fingerprint == "" {
+						meta.FallbackReason = "prior packet lineage unavailable; emitted a standalone full packet"
+					} else if previous.Packet != nil {
+						meta.InvalidationReasons = fingerprintInputs.InvalidationReasons(previous.FingerprintInputs)
+						changedSections, changedItemIDs := taskcontext.PacketDiff(previous.Packet, packet)
+						if len(meta.InvalidationReasons) != 0 || len(changedSections) != 0 || len(changedItemIDs) != 0 {
+							meta.CacheStatus = projectcontext.PacketCacheStatusDelta
+							meta.DeltaFrom = previous.PacketHash
+							meta.ChangedSections = changedSections
+							meta.ChangedItemIDs = changedItemIDs
+							meta.FullPacketIncluded = false
+						}
+					} else {
+						meta.FallbackReason = "prior packet body unavailable; emitted a standalone full packet"
+					}
+				} else {
+					meta.FallbackReason = "no prior session packet available"
+				}
+			}
 			if active != nil {
-				if err := appCtx.Session.RecordCompiledPacket(projectRoot, active.ID, packet); err != nil {
+				if err := appCtx.Session.RecordCompiledPacket(projectRoot, active.ID, packet, fingerprintInputs, meta); err != nil {
 					return err
 				}
 			}
-			return appCtx.Output.Print(packet, func(w io.Writer) error {
-				return taskcontext.RenderHuman(w, packet)
+			response := projectcontext.NewCompileResponse(packet, meta)
+			return appCtx.Output.Print(response, func(w io.Writer) error {
+				return taskcontext.RenderCompileResponseHuman(w, response)
 			})
 		},
 	}
@@ -528,6 +588,8 @@ Use the other subcommands to inspect compatibility views or refresh the Brain-ma
 	assembleCmd.Flags().BoolVar(&assembleExplain, "explain", false, "include selection rationale and omitted context")
 	compileCmd.Flags().StringVar(&project, "project", "", "project root to compile context from")
 	compileCmd.Flags().StringVar(&compileTask, "task", "", "task text to compile context for; defaults to the active session task")
+	compileCmd.Flags().StringVar(&compileBudget, "budget", "", "packet budget preset or explicit token target; presets: small, default, large")
+	compileCmd.Flags().BoolVar(&compileFresh, "fresh", false, "bypass session-local packet reuse and emit a full standalone packet")
 	explainCmd.Flags().StringVar(&project, "project", "", "project root to inspect context telemetry from")
 	explainCmd.Flags().StringVar(&explainPacket, "packet", "", "specific packet hash to inspect; defaults to the latest packet")
 	explainCmd.Flags().BoolVar(&explainLast, "last", false, "inspect the latest packet explicitly")
