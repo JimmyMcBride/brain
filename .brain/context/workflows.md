@@ -37,8 +37,8 @@ Use this file for agent operating workflow inside the repo.
 - If `brain session finish` blocks, inspect the promotion suggestions or run `brain distill --session` to review promotable updates before forcing closeout.
 - If `skills/brain/` changed, reinstall the local Brain skill for Codex and OpenClaw with `brain skills install --scope local --agent codex --agent openclaw --project .`.
 - If the branch changed automatic project-upgrade behavior, validate the migration path from the branch-built binary against a representative older Brain repo with `go run . context migrate --project <repo>`.
-- When opening a PR, make the title and body release-note friendly because GitHub release notes are generated from merged PR metadata.
-- Summarize shipped behavior in the PR, not just implementation steps, so future changelogs stay human-readable.
+- When opening a PR, make the title and body release-note friendly because the release workflow now lifts the PR's `## Release Notes` section into the published GitHub release body, with `## User-Facing Impact` or `## Summary` as fallback.
+- Fill the `## Release Notes` section with 1-5 high-signal, user-visible bullets so future changelogs stay detailed without backfilling them by hand.
 - Finish with `brain session finish`.
 - If you must bypass enforcement, use `brain session finish --force --reason "..."` so the override is recorded.
 <!-- brain:end context-workflows -->

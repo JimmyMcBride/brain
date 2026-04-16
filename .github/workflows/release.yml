@@ -15,6 +15,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: read
 
 jobs:
   resolve:
@@ -104,6 +105,14 @@ jobs:
     needs: [resolve, build]
 
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          fetch-depth: 0
+
+      - name: Fetch tags
+        run: git fetch --force --tags origin
+
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -116,13 +125,178 @@ jobs:
           cd dist
           sha256sum brain_${{ needs.resolve.outputs.tag }}_*.* > "brain_${{ needs.resolve.outputs.tag }}_checksums.txt"
 
+      - name: Resolve previous tag
+        id: previous_tag
+        shell: bash
+        env:
+          TAG: ${{ needs.resolve.outputs.tag }}
+        run: |
+          set -euo pipefail
+          PREVIOUS_TAG="$(git tag --sort=-v:refname | awk -v tag="${TAG}" '$0==tag {found=1; next} found {print; exit}')"
+          echo "tag=${PREVIOUS_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Build release notes
+        id: notes
+        uses: actions/github-script@v7
+        env:
+          RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
+          RELEASE_SHA: ${{ needs.resolve.outputs.sha }}
+          PREVIOUS_TAG: ${{ steps.previous_tag.outputs.tag }}
+        with:
+          script: |
+            const fs = require("fs");
+            const path = require("path");
+
+            const tag = process.env.RELEASE_TAG;
+            const sha = process.env.RELEASE_SHA;
+            const previousTag = process.env.PREVIOUS_TAG || "";
+            const { owner, repo } = context.repo;
+
+            function normalize(text) {
+              return (text || "").replace(/\r\n/g, "\n").trim();
+            }
+
+            function escapeRegExp(text) {
+              return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            }
+
+            function extractSection(body, heading) {
+              const normalized = normalize(body);
+              if (!normalized) {
+                return "";
+              }
+              const lines = normalized.split("\n");
+              const headingMatcher = new RegExp(`^##\\s+${escapeRegExp(heading)}\\s*$`, "i");
+              let start = -1;
+              for (let i = 0; i < lines.length; i += 1) {
+                if (headingMatcher.test(lines[i].trim())) {
+                  start = i + 1;
+                  break;
+                }
+              }
+              if (start === -1) {
+                return "";
+              }
+              let end = lines.length;
+              for (let i = start; i < lines.length; i += 1) {
+                if (/^##\s+/.test(lines[i].trim())) {
+                  end = i;
+                  break;
+                }
+              }
+              return lines.slice(start, end).join("\n").trim();
+            }
+
+            function asBullets(text) {
+              const normalized = normalize(text);
+              if (!normalized) {
+                return [];
+              }
+              return normalized
+                .split("\n")
+                .map((line) => line.trim())
+                .filter(Boolean)
+                .map((line) => {
+                  if (/^[-*]\s+/.test(line)) {
+                    return line.replace(/^\*\s+/, "- ");
+                  }
+                  return `- ${line}`;
+                });
+            }
+
+            let pr = null;
+            try {
+              const response = await github.request("GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls", {
+                owner,
+                repo,
+                commit_sha: sha,
+                mediaType: {
+                  previews: ["groot"],
+                },
+              });
+              pr = response.data.find((candidate) => candidate.merged_at) || response.data[0] || null;
+            } catch (error) {
+              core.warning(`Unable to resolve pull request for ${sha}: ${error.message}`);
+            }
+
+            let summary = "";
+            let highlights = [];
+            let verification = [];
+            let capsulesDirection = "";
+
+            if (pr) {
+              summary = normalize(extractSection(pr.body, "Summary"));
+              highlights = asBullets(extractSection(pr.body, "Release Notes"));
+              if (highlights.length === 0) {
+                highlights = asBullets(extractSection(pr.body, "User-Facing Impact"));
+              }
+              if (highlights.length === 0) {
+                highlights = asBullets(extractSection(pr.body, "Summary"));
+              }
+              verification = asBullets(extractSection(pr.body, "Verification"));
+              capsulesDirection = normalize(extractSection(pr.body, "Capsules Direction"));
+            }
+
+            if (!summary) {
+              summary = `Release ${tag} for \`${sha.slice(0, 7)}\`.`;
+            }
+
+            if (highlights.length === 0 && previousTag) {
+              try {
+                const compare = await github.rest.repos.compareCommits({
+                  owner,
+                  repo,
+                  basehead: `${previousTag}...${sha}`,
+                });
+                highlights = compare.data.commits
+                  .map((commit) => commit.commit.message.split("\n")[0].trim())
+                  .filter(Boolean)
+                  .slice(0, 5)
+                  .map((line) => `- ${line}`);
+              } catch (error) {
+                core.warning(`Unable to build commit fallback changelog: ${error.message}`);
+              }
+            }
+
+            if (highlights.length === 0) {
+              highlights = [
+                "- Maintainer-facing release with no structured release notes captured for this tag.",
+              ];
+            }
+
+            const lines = [];
+            if (summary) {
+              lines.push("## Summary", "", summary, "");
+            }
+            if (highlights.length > 0) {
+              lines.push("## Highlights", "", ...highlights, "");
+            }
+            if (capsulesDirection) {
+              lines.push("## Capsules Direction", "", capsulesDirection, "");
+            }
+            if (pr) {
+              lines.push("## Pull Request", "", `- ${pr.title} ([#${pr.number}](${pr.html_url}))`, "");
+            }
+            if (verification.length > 0) {
+              lines.push("## Verification", "", ...verification, "");
+            }
+            if (previousTag) {
+              lines.push(`**Full Changelog**: https://github.com/${owner}/${repo}/compare/${previousTag}...${tag}`);
+            }
+
+            const body = `${lines.join("\n").replace(/\n{3,}/g, "\n\n").trim()}\n`;
+            fs.mkdirSync("dist", { recursive: true });
+            const notesPath = path.join("dist", "release-notes.md");
+            fs.writeFileSync(notesPath, body);
+            core.setOutput("path", notesPath);
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}
           name: ${{ needs.resolve.outputs.tag }}
           target_commitish: ${{ needs.resolve.outputs.sha }}
-          generate_release_notes: true
+          body_path: ${{ steps.notes.outputs.path }}
           files: |
             dist/brain_${{ needs.resolve.outputs.tag }}_*.tar.gz
             dist/brain_${{ needs.resolve.outputs.tag }}_*.zip

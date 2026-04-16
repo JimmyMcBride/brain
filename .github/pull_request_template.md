@@ -3,8 +3,9 @@
 - keep this focused on shipped behavior, not implementation mechanics
 
 ## Release Notes
+<!-- This section is promoted into the published GitHub release body when this PR ships. -->
 - list the 1-5 highest-signal user-visible changes
-- write these as human-readable bullets that can survive into GitHub-generated release notes
+- write these as human-readable bullets that can ship directly as the release changelog
 - if the PR is mainly a fix, say what was broken and what is now correct
 
 ## Verification

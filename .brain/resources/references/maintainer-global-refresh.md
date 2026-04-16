@@ -30,8 +30,8 @@ go run . skills install --scope local --agent codex --agent openclaw --project .
 
 7. Commit the branch changes.
 8. Open a PR into `main`.
-   - Write the PR title and body in release-note language because GitHub release notes are generated from merged PR metadata.
-   - Summarize shipped behavior in human-readable bullets, not just implementation steps or internal refactors.
+   - Write the PR title and body in release-note language because the release workflow publishes the PR's `## Release Notes` section as the release changelog, with `## User-Facing Impact` or `## Summary` as fallback.
+   - Fill `## Release Notes` with high-signal, human-readable bullets, not implementation steps or internal refactors.
 9. Review and merge the PR.
 10. Wait for the automatic stable release workflow to tag and publish the new version from that merge commit on `main`.
 11. Refresh the installed binary and global Codex skill:
