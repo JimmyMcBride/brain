@@ -197,6 +197,19 @@ func TestInstallDryRunDoesNotWrite(t *testing.T) {
 	}
 }
 
+func TestBundleSpecsWritesGitIgnoreFirst(t *testing.T) {
+	project := t.TempDir()
+	snapshot := Snapshot{ProjectDir: project}
+
+	specs := bundleSpecs(snapshot, "version: 1\n")
+	if len(specs) == 0 {
+		t.Fatal("expected managed specs")
+	}
+	if got := filepath.Base(specs[0].Path); got != ".gitignore" {
+		t.Fatalf("expected .gitignore to be synced first, got=%s", got)
+	}
+}
+
 func TestLoadReturnsDeterministicSourcesByLevel(t *testing.T) {
 	project := t.TempDir()
 	mustWriteFile(t, filepath.Join(project, "go.mod"), "module example.com/test\n\ngo 1.26\n")

@@ -59,6 +59,8 @@ This creates:
 - `.brain/policy.yaml`
 - `.brain/state/brain.sqlite3`
 
+Brain treats `.brain/session.json`, `.brain/sessions/`, `.brain/state/`, and `.brain/policy.override.yaml` as local runtime state. They should stay out of Git by default while the durable shared layer lives in markdown and docs.
+
 `brain init` is the clean bootstrap path.  
 `brain adopt` is the existing-repo path: it creates the local Brain workspace, adopts Brain-owned docs into the managed-block model, and preserves previous content under `Local Notes`.
 
@@ -198,6 +200,10 @@ These operate on Brain-managed note changes recorded in the local history log.
 
 ## Project Upgrades
 
-Use `brain doctor --project .` to inspect whether project migrations are `current`, `pending`, or `broken`.
+Use `brain doctor --project .` to inspect whether project migrations are `current`, `pending`, or `broken`. `doctor` may also report that explicit runtime-state cleanup is available without treating the repo as broken.
 
 Use `brain update --project .` to refresh the current Brain binary, refresh already-installed Brain skills, and apply pending project migrations for the current repo when appropriate.
+
+Use `brain context migrate --project .` when you want to run the project migration path explicitly with the current binary.
+
+Lazy preflight repair only applies auto-safe migrations. Git-index cleanup for ignored Brain runtime state is explicit-only, so it runs through `brain update --project .` or `brain context migrate --project .`, prints what it changed, and leaves the resulting diff for you to review and commit.

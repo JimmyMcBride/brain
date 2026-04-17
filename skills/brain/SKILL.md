@@ -53,6 +53,8 @@ Use these commands by default:
   - Validate the local workspace, sqlite state, project migration state, and embedder configuration.
 - `brain update --project .`
   - Update the Brain binary, refresh already-installed Brain skills, and apply pending project migrations for the current Brain repo.
+- `brain context migrate --project .`
+  - Run project migrations explicitly with the current binary when upgrade hygiene matters.
 - `brain read <path>`
   - Read a managed markdown note.
 - `brain edit <path> ...`
@@ -127,7 +129,9 @@ Use these commands by default:
 ## Upgrade Workflow
 
 - `brain update` refreshes already-installed global Brain skills, already-installed local Brain skills inside the current `--project`, and pending project migrations for the current Brain repo.
-- Other Brain repos repair local Brain skills and apply pending project migrations lazily the next time app-backed Brain commands run there.
+- Other Brain repos repair local Brain skills and apply only auto-safe project migrations lazily the next time app-backed Brain commands run there.
+- Brain treats `.brain/session.json`, `.brain/sessions/`, `.brain/state/`, and `.brain/policy.override.yaml` as local runtime state. The durable shared layer is the markdown/docs surface, not the raw runtime trace.
+- Explicit upgrade actions such as `brain update` and `brain context migrate` may refresh `.gitignore` and remove legacy tracked runtime-state files from the Git index while keeping them on disk. Review and commit that diff after the command reports it.
 - If automatic project migration fails, run `brain doctor --project .`; then `brain context refresh --project .`; run `brain adopt --project .` if existing local agent files still need their Brain-managed integration block refreshed or migrated.
 
 ## Retrieval Workflow

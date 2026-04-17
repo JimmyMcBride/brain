@@ -3,6 +3,7 @@ package projectcontext
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -144,11 +145,14 @@ func TestPlanProjectMigrationsUsesAppliedIDsInsteadOfVersionComparison(t *testin
 	if len(plan.AppliedMigrations) != 1 {
 		t.Fatalf("unexpected applied migrations: %+v", plan.AppliedMigrations)
 	}
-	if len(plan.PendingMigrations) != 1 {
-		t.Fatalf("expected one pending migration, got=%d", len(plan.PendingMigrations))
+	if len(plan.PendingMigrations) != 2 {
+		t.Fatalf("expected two pending migrations, got=%d", len(plan.PendingMigrations))
 	}
-	if plan.PendingMigrations[0].ID != "refresh-existing-agent-integrations-v1" {
-		t.Fatalf("unexpected pending migration: %+v", plan.PendingMigrations)
+	if len(plan.PendingAutomatic) != 1 || plan.PendingAutomatic[0].ID != "refresh-existing-agent-integrations-v1" {
+		t.Fatalf("unexpected automatic pending migrations: %+v", plan.PendingAutomatic)
+	}
+	if len(plan.PendingExplicit) != 1 || plan.PendingExplicit[0].ID != "ignore-local-runtime-state-v1" {
+		t.Fatalf("unexpected explicit pending migrations: %+v", plan.PendingExplicit)
 	}
 }
 
@@ -184,11 +188,14 @@ func TestSaveProjectMigrationStateWritesLedger(t *testing.T) {
 	if plan.AppliedMigrations[0].ID != "refresh-brain-managed-context-v1" {
 		t.Fatalf("unexpected applied migration: %+v", plan.AppliedMigrations[0])
 	}
-	if len(plan.PendingMigrations) != 1 {
-		t.Fatalf("expected one pending migration, got=%d", len(plan.PendingMigrations))
+	if len(plan.PendingMigrations) != 2 {
+		t.Fatalf("expected two pending migrations, got=%d", len(plan.PendingMigrations))
 	}
-	if plan.PendingMigrations[0].ID != "refresh-existing-agent-integrations-v1" {
-		t.Fatalf("unexpected pending migration: %+v", plan.PendingMigrations)
+	if len(plan.PendingAutomatic) != 1 || plan.PendingAutomatic[0].ID != "refresh-existing-agent-integrations-v1" {
+		t.Fatalf("unexpected automatic pending migrations: %+v", plan.PendingAutomatic)
+	}
+	if len(plan.PendingExplicit) != 1 || plan.PendingExplicit[0].ID != "ignore-local-runtime-state-v1" {
+		t.Fatalf("unexpected explicit pending migrations: %+v", plan.PendingExplicit)
 	}
 }
 
@@ -223,7 +230,7 @@ func TestApplyProjectMigrationsRefreshesManagedDocsAndLegacyAgentFiles(t *testin
 	if result.Status != "applied" {
 		t.Fatalf("unexpected result status: %s", result.Status)
 	}
-	if strings.Join(result.AppliedMigrationIDs, ",") != "refresh-brain-managed-context-v1,refresh-existing-agent-integrations-v1" {
+	if strings.Join(result.AppliedMigrationIDs, ",") != "refresh-brain-managed-context-v1,refresh-existing-agent-integrations-v1,ignore-local-runtime-state-v1" {
 		t.Fatalf("unexpected applied ids: %+v", result.AppliedMigrationIDs)
 	}
 
@@ -378,6 +385,133 @@ func TestAdoptInitializesProjectMigrationsAsCurrent(t *testing.T) {
 	}
 }
 
+func TestApplyAutomaticProjectMigrationsLeavesExplicitCleanupPending(t *testing.T) {
+	project := newInstalledBrainProject(t)
+	manager := New(t.TempDir())
+
+	staleAgents := "# Project Agent Contract\n\n<!-- brain:begin agents-contract -->\nstale\n<!-- brain:end agents-contract -->\n"
+	if err := os.WriteFile(filepath.Join(project, "AGENTS.md"), []byte(staleAgents), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := manager.ApplyAutomaticProjectMigrations(context.Background(), project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != "applied" {
+		t.Fatalf("unexpected result status: %s", result.Status)
+	}
+	if strings.Join(result.AppliedMigrationIDs, ",") != "refresh-brain-managed-context-v1,refresh-existing-agent-integrations-v1" {
+		t.Fatalf("unexpected applied ids: %+v", result.AppliedMigrationIDs)
+	}
+
+	plan, err := manager.PlanProjectMigrations(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Status != projectMigrationPlanCurrent {
+		t.Fatalf("expected current plan after automatic apply, got=%s", plan.Status)
+	}
+	if len(plan.PendingAutomatic) != 0 {
+		t.Fatalf("expected no automatic migrations pending, got=%+v", plan.PendingAutomatic)
+	}
+	if len(plan.PendingExplicit) != 1 || plan.PendingExplicit[0].ID != "ignore-local-runtime-state-v1" {
+		t.Fatalf("expected explicit cleanup migration to remain pending, got=%+v", plan.PendingExplicit)
+	}
+}
+
+func TestIgnoreLocalRuntimeStateMigrationUntracksFilesButKeepsThemOnDisk(t *testing.T) {
+	project := newInstalledBrainProject(t)
+	initGitProjectForMigrations(t, project)
+	manager := New(t.TempDir())
+
+	trackedPaths := []string{
+		filepath.Join(project, ".brain", "session.json"),
+		filepath.Join(project, ".brain", "sessions", "ledger.json"),
+		filepath.Join(project, ".brain", "state", "brain.sqlite3"),
+		filepath.Join(project, ".brain", "policy.override.yaml"),
+	}
+	for _, path := range trackedPaths {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("tracked\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runGitInProject(t, project, "add", "-f", ".brain/session.json", ".brain/sessions/ledger.json", ".brain/state/brain.sqlite3", ".brain/policy.override.yaml")
+	runGitInProject(t, project, "commit", "-q", "-m", "track runtime")
+
+	if err := os.Remove(projectMigrationLedgerPath(project)); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+
+	result, err := manager.ApplyProjectMigrations(context.Background(), project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != "applied" {
+		t.Fatalf("unexpected status: %s", result.Status)
+	}
+
+	var cleanup *ProjectMigrationResult
+	for i := range result.Migrations {
+		if result.Migrations[i].ID == "ignore-local-runtime-state-v1" {
+			cleanup = &result.Migrations[i]
+			break
+		}
+	}
+	if cleanup == nil {
+		t.Fatalf("expected cleanup migration result: %+v", result.Migrations)
+	}
+	if cleanup.Action != "updated" {
+		t.Fatalf("expected cleanup migration to update git tracking, got=%s", cleanup.Action)
+	}
+	if len(cleanup.Messages) == 0 || !strings.Contains(strings.Join(cleanup.Messages, "\n"), "Removed from Git tracking but kept on disk") {
+		t.Fatalf("expected cleanup messaging, got=%+v", cleanup.Messages)
+	}
+
+	for _, path := range trackedPaths {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("expected runtime file to remain on disk: %s err=%v", path, err)
+		}
+	}
+	ls := runGitOutput(t, project, "ls-files", "--cached", "--", ".brain/session.json", ".brain/sessions", ".brain/state", ".brain/policy.override.yaml")
+	if strings.TrimSpace(ls) != "" {
+		t.Fatalf("expected runtime files to be removed from git index, got:\n%s", ls)
+	}
+}
+
+func TestIgnoreLocalRuntimeStateMigrationReportsNonGitProjects(t *testing.T) {
+	project := newInstalledBrainProject(t)
+	manager := New(t.TempDir())
+
+	if err := os.Remove(projectMigrationLedgerPath(project)); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+
+	result, err := manager.ApplyProjectMigrations(context.Background(), project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cleanup *ProjectMigrationResult
+	for i := range result.Migrations {
+		if result.Migrations[i].ID == "ignore-local-runtime-state-v1" {
+			cleanup = &result.Migrations[i]
+			break
+		}
+	}
+	if cleanup == nil {
+		t.Fatalf("expected cleanup migration result: %+v", result.Migrations)
+	}
+	if cleanup.Action != "updated" && cleanup.Action != "unchanged" {
+		t.Fatalf("unexpected cleanup action: %s", cleanup.Action)
+	}
+	if !strings.Contains(strings.Join(cleanup.Messages, "\n"), "Skipped Git cleanup because this project is not inside a Git work tree.") {
+		t.Fatalf("expected non-git cleanup message, got=%+v", cleanup.Messages)
+	}
+}
+
 func newBrainProjectForMigrations(t *testing.T) string {
 	t.Helper()
 	project := t.TempDir()
@@ -404,4 +538,34 @@ func newInstalledBrainProject(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return project
+}
+
+func initGitProjectForMigrations(t *testing.T, project string) {
+	t.Helper()
+	runGitInProject(t, project, "init", "-q")
+	runGitInProject(t, project, "config", "user.email", "tester@example.com")
+	runGitInProject(t, project, "config", "user.name", "tester")
+	runGitInProject(t, project, "add", ".")
+	runGitInProject(t, project, "commit", "-q", "-m", "init")
+}
+
+func runGitInProject(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, string(output))
+	}
+}
+
+func runGitOutput(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, string(output))
+	}
+	return string(output)
 }
