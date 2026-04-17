@@ -1,8 +1,6 @@
 ---
-updated: "2026-04-16T04:52:53Z"
+updated: "2026-04-17T08:08:16Z"
 ---
-# Current State
-
 <!-- brain:begin context-current-state -->
 This file is a deterministic snapshot of the repository state at the last refresh.
 
@@ -32,6 +30,8 @@ This file is a deterministic snapshot of the repository state at the last refres
 ## Local Notes
 
 Add repo-specific notes here. `brain context refresh` preserves content outside managed blocks.
+
+- 2026-04-17: Brain now treats `.brain/session.json`, `.brain/sessions/`, `.brain/state/`, and `.brain/policy.override.yaml` as local runtime state that should stay out of Git by default. Project migrations now split auto-safe preflight repairs from explicit upgrade cleanup, so `brain update --project .` and `brain context migrate --project .` can refresh `.gitignore`, untrack legacy runtime artifacts from the Git index without deleting the working-tree copies, and report explicit cleanup as informational in `brain doctor`.
 
 - 2026-04-16: Removed the retired project-management surface from Brain. The dedicated commands, packages, templates, workspace directories, and checked-in notes for that surface are gone. Brain is now documented and implemented as local memory, compiled context, retrieval, session enforcement, and review-first session distillation.
 

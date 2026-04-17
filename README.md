@@ -71,8 +71,10 @@ my-project/
 - `docs/` is the human-readable project documentation layer.
 - `.brain/context/` is the generated modular context bundle.
 - `.brain/resources/` holds durable references, captures, and change history.
-- `.brain/sessions/` holds recorded session ledgers.
+- `.brain/sessions/` holds recorded session ledgers and is local runtime state.
 - `.brain/state/` holds SQLite, history logs, backups, and other local state.
+
+Brain ignores `.brain/session.json`, `.brain/sessions/`, `.brain/state/`, and `.brain/policy.override.yaml` from Git by default. The durable shared layer is the markdown/docs surface, not the raw runtime trace.
 
 ## Install
 
@@ -98,6 +100,8 @@ These installers verify published checksums, support `linux`, `darwin`, and `win
 Stable GitHub releases are published from `main`. Prefer PR merges as the normal path into `main`, then install from the latest release published there.
 
 If no GitHub release exists yet, the installer falls back to downloading the current `main` source archive from GitHub and building it locally with Go.
+
+When you upgrade an older Brain repo, `brain update --project .` or `brain context migrate --project .` may refresh `.gitignore` and remove legacy tracked runtime files from the Git index while keeping them on disk. Brain prints what changed so you can review and commit the diff yourself.
 
 ### Build from source
 
