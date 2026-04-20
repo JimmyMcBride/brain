@@ -29,6 +29,7 @@ go run . skills install --scope local --agent codex --agent openclaw --project .
 ```
 
 7. Commit the branch changes.
+   - Before you commit or switch away from the branch, run `git status --short` and resolve repo-owned leftovers. If `.brain/resources/changes/*`, `.brain/`, `docs/`, or contract files belong to the task, keep them in this branch and PR; otherwise review and intentionally remove them.
 8. Open a PR into `develop`.
    - Write the PR title and body in release-note language because the release workflow publishes the merged release PR's `## Release Notes` section as the release changelog, with `## User-Facing Impact` or `## Summary` as fallback.
    - Fill `## Release Notes` with high-signal, human-readable bullets, not implementation steps or internal refactors.
@@ -65,5 +66,6 @@ Windows PowerShell:
 - Never delete `develop`, `release/*`, or `main`.
 - Hotfixes may branch from active `release/vX.Y.Z` or from `main`, whichever best matches production, but the equivalent fix must always land back in `develop`.
 - Preserve release branches as historical snapshots for regression and release inspection.
+- Do not return to `develop`, `release/*`, or `main` with repo-owned proposal or context files still hanging out in the worktree.
 - Treat release-note-friendly PR copy as part of the definition of done for every PR.
 - Do not create a follow-up repo-memory commit just because you refreshed the global binary or skill. Otherwise the installed binary immediately lags `HEAD` again.
