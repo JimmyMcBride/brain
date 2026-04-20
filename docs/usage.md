@@ -100,6 +100,8 @@ brain distill --project . --session
 
 `brain distill --session` requires an active session and creates a proposal note under `.brain/resources/changes/` with source provenance, promotion-review diagnostics, and suggested markdown updates for review.
 
+Treat that proposal note as repo-owned worktree state: if it belongs to the active task, keep it in the same branch and PR; otherwise review it and intentionally remove it before returning to `develop`, `release/*`, or `main`.
+
 ## Context Management
 
 Compile task context first, then reach for the compatibility views only when you need them:

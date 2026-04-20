@@ -35,6 +35,7 @@ Use this file for agent operating workflow inside the repo.
 
 - Refresh or update durable notes for meaningful behavior, config, or architecture changes.
 - If `brain session finish` blocks, inspect the promotion suggestions or run `brain distill --session` to review promotable updates before forcing closeout.
+- Before switching away from a working branch or back to `develop`, run `git status --short` and resolve repo-owned leftovers. If `.brain/resources/changes/*`, `.brain/`, `docs/`, or contract files belong to the task, keep them in the same branch/PR; otherwise review and intentionally remove them instead of carrying them onto `develop`, `release/*`, or `main`.
 - If `skills/brain/` changed, reinstall the local Brain skill for Codex and OpenClaw with `brain skills install --scope local --agent codex --agent openclaw --project .`.
 - When opening a PR, make the title and body release-note friendly because GitHub release notes are generated from merged PR metadata.
 - Summarize shipped behavior in the PR, not just implementation steps, so future changelogs stay human-readable.
@@ -66,5 +67,6 @@ Maintainer gitflow:
 - For urgent production-only fixes, branch from the active `release/vX.Y.Z` branch or from `main`, then make sure the equivalent fix lands back in `develop`.
 - Preserve release branches as historical snapshots.
 - After every PR merge into `develop`, fetch latest remote state, check out updated `origin/develop`, and refresh Brain context. Refresh `.plan/` context too if a repo-local plan workspace exists.
+- Before returning to `develop`, resolve repo-owned `.brain/resources/changes/*`, `.brain/`, `docs/`, and contract-file leftovers on the feature branch. Merge them in the active PR if they belong to the task; otherwise review and intentionally remove them.
 - Cut `release/vX.Y.Z` from current `develop` when preparing an official release, then merge that release PR into `main` only when ready to publish.
 - Refresh the installed binary and global Codex Brain skill only after the release merge has published from `main`.

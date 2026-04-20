@@ -160,13 +160,16 @@ Use these commands by default:
 1. Run `brain distill --session` when a working session surfaced decisions, tradeoffs, bugs, or discoveries that should become durable memory.
 2. Review the proposal note under `.brain/resources/changes/`, including the promotion review section and the suggested targets that were actually classified as promotable.
 3. Apply the durable note updates with `brain edit` or by updating the target notes directly after review.
-4. Treat distill as a proposal generator, not as an auto-write path.
+4. If the proposal note belongs to the active task, keep it in the same feature branch and PR instead of leaving it behind on `develop` or `main`.
+5. If the proposal note does not belong to the active task, review it and intentionally remove it before switching back to `develop`, `release/*`, or `main`.
+6. Treat distill as a proposal generator, not as an auto-write path.
 
 ## Session Recovery
 
 - If `brain session finish` blocks, inspect the promotion suggestions in the closeout output first.
 - Run `brain distill --session` when you need the full promotion review note before deciding what to keep.
 - Review the proposal, update the durable notes that matter, then retry `brain session finish`.
+- Before switching branches or returning to a protected branch, run `git status --short` and resolve repo-owned leftovers such as `.brain/resources/changes/*`, `.brain/`, `docs/`, or contract files.
 - If the session changed no durable knowledge after review, use `brain session finish --force --reason "<why>"` explicitly instead of pretending there was a durable update.
 - Keep using `brain session run -- <command>` for required verification commands before closeout.
 
