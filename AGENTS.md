@@ -1,3 +1,6 @@
+---
+updated: "2026-04-20T05:35:38Z"
+---
 # Project Agent Contract
 
 <!-- brain:begin agents-contract -->
@@ -40,4 +43,10 @@ Read the linked context files before substantial work. Prefer the `brain` skill 
 
 ## Local Notes
 
-Add repo-specific notes here. `brain context refresh` preserves content outside managed blocks.
+- 2026-04-20: Gitflow source of truth for this project is `develop` -> `release/vX.Y.Z` -> `main`.
+- 2026-04-20: `develop`, `release/*`, and `main` are protected branches. Never push directly to them, never delete them, and land all changes through pull requests.
+- 2026-04-20: Normal feature and bug-fix work should usually start from the latest `develop` line and open PRs back into `develop`.
+- 2026-04-20: Official releases cut `release/vX.Y.Z` from `develop`, stabilize there, then merge `release/vX.Y.Z` into `main` to publish.
+- 2026-04-20: Release-branch fixes must land in `develop` first and then be cherry-picked into the active `release/vX.Y.Z` branch.
+- 2026-04-20: Production hotfixes may branch from the active `release/vX.Y.Z` branch or from `main`, whichever best matches production, but the equivalent fix must always end up in `develop`.
+- 2026-04-20: After every PR merge into `develop`, fetch latest remote state, check out the updated `origin/develop`, and refresh Brain project context so repo memory tracks latest `develop`. If a repo-local `.plan/` workspace exists later, refresh that context from latest `develop` too.

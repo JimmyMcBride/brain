@@ -1,3 +1,6 @@
+---
+updated: "2026-04-20T05:44:35Z"
+---
 # Project Overview
 
 <!-- brain:begin project-doc-overview -->
@@ -30,7 +33,8 @@ Current repository:
 
 - Local repo: `/home/jimmy/Projects/brain`
 - Remote: `https://github.com/JimmyMcBride/brain.git`
-- Branch: `main`
+- Active integration branch: `develop`
+- Production branch: `main`
 - Runtime: Go 1.26
 
 Current focus:
