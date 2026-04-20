@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-16T02:42:19Z"
+updated: "2026-04-20T05:36:15Z"
 ---
 # Project Workflows
 
@@ -55,11 +55,16 @@ Release/history references:
 - [.brain/resources/changes/session-enforcement-and-policy-engine.md](../.brain/resources/changes/session-enforcement-and-policy-engine.md)
 - [.brain/resources/references/maintainer-global-refresh.md](../.brain/resources/references/maintainer-global-refresh.md)
 
-Maintainer release flow:
+Maintainer gitflow:
 
-- Do product work on a branch.
-- Verify through `brain session run`.
-- Commit the branch.
-- Open and merge a PR to `main`.
-- Let the merge trigger the automatic release.
-- Refresh the installed binary and global Codex Brain skill only after that release exists.
+- Treat `develop` as the active long-lived integration branch.
+- Treat `release/vX.Y.Z` as the protected release stabilization branch cut from `develop`.
+- Treat `main` as the protected production branch; merging to `main` is the publish event.
+- Never push directly to `develop`, `release/*`, or `main`; use PRs for all protected-branch changes.
+- Start routine feature and bug-fix work from latest `develop` and open PRs back into `develop`.
+- When a release needs a fix, land it in `develop` first and then cherry-pick the exact commit into the active `release/vX.Y.Z` branch.
+- For urgent production-only fixes, branch from the active `release/vX.Y.Z` branch or from `main`, then make sure the equivalent fix lands back in `develop`.
+- Preserve release branches as historical snapshots.
+- After every PR merge into `develop`, fetch latest remote state, check out updated `origin/develop`, and refresh Brain context. Refresh `.plan/` context too if a repo-local plan workspace exists.
+- Cut `release/vX.Y.Z` from current `develop` when preparing an official release, then merge that release PR into `main` only when ready to publish.
+- Refresh the installed binary and global Codex Brain skill only after the release merge has published from `main`.

@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-16T02:42:19Z"
+updated: "2026-04-20T05:35:54Z"
 ---
 # Workflows
 
@@ -44,4 +44,7 @@ Use this file for agent operating workflow inside the repo.
 
 ## Local Notes
 
-Add repo-specific notes here. `brain context refresh` preserves content outside managed blocks.
+- 2026-04-20: Gitflow source of truth is `develop` for ongoing integration, `release/vX.Y.Z` for protected release stabilization, and `main` for protected production releases.
+- 2026-04-20: Never push directly to `develop`, `release/*`, or `main`; use pull requests for all protected-branch changes.
+- 2026-04-20: Release fixes go into `develop` first, then the exact commit is cherry-picked into the active `release/vX.Y.Z` branch.
+- 2026-04-20: After every PR merge into `develop`, fetch latest remote state, check out the updated `origin/develop`, and refresh repo context from latest `develop`. Refresh `.plan/` context too if that workspace exists in this repo later.

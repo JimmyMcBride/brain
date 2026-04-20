@@ -1,18 +1,18 @@
 ---
-title: "Maintainer Global Refresh"
-type: "reference"
 created: "2026-04-11T00:00:00Z"
-updated: "2026-04-11T00:00:00Z"
+title: Maintainer Global Refresh
+type: reference
+updated: "2026-04-20T05:36:34Z"
 ---
 # Maintainer Global Refresh
 
 Use this when a real product change should also update your installed `brain` binary and the global Codex `brain` skill.
 
-Default maintainer flow: work on a feature branch, open a PR, merge to `main`, wait for the automatic release, then refresh your local install.
+Default maintainer flow: work on a feature branch from the current `develop` line, merge routine work into `develop`, cut `release/vX.Y.Z` from `develop` for official releases, merge the release PR into `main`, wait for the automatic publish, then refresh your local install.
 
 ## Sequence
 
-1. Create or switch to a feature branch from `main`.
+1. Create or switch to a feature branch from latest `develop`.
 2. Finish the feature, bug fix, or doc change on that branch.
 3. Record any durable note updates in repo memory.
 4. Run required verification through `brain session run -- <command>`.
@@ -29,12 +29,17 @@ go run . skills install --scope local --agent codex --agent openclaw --project .
 ```
 
 7. Commit the branch changes.
-8. Open a PR into `main`.
-   - Write the PR title and body in release-note language because the release workflow publishes the PR's `## Release Notes` section as the release changelog, with `## User-Facing Impact` or `## Summary` as fallback.
+8. Open a PR into `develop`.
+   - Write the PR title and body in release-note language because the release workflow publishes the merged release PR's `## Release Notes` section as the release changelog, with `## User-Facing Impact` or `## Summary` as fallback.
    - Fill `## Release Notes` with high-signal, human-readable bullets, not implementation steps or internal refactors.
-9. Review and merge the PR.
-10. Wait for the automatic stable release workflow to tag and publish the new version from that merge commit on `main`.
-11. Refresh the installed binary and global Codex skill:
+9. Review and merge the PR into `develop`.
+10. Immediately fetch latest remote state, check out updated `origin/develop`, and refresh Brain project context so local reasoning matches newest `develop`. If a repo-local `.plan/` workspace exists, refresh that context too.
+11. When an official release is ready, create `release/vX.Y.Z` from current `develop`.
+12. If release stabilization needs a fix, land the fix in `develop` first and then cherry-pick the exact commit into the active `release/vX.Y.Z` branch.
+13. Open a PR from `release/vX.Y.Z` into `main`.
+14. Review and merge the release PR into `main` when ready to publish.
+15. Wait for the automatic stable release workflow to tag and publish the new version from that merge commit on `main`.
+16. Refresh the installed binary and global Codex skill:
 
 Unix shell:
 
@@ -48,15 +53,17 @@ Windows PowerShell:
 .\scripts\refresh-global-brain.ps1
 ```
 
-12. Verify:
+17. Verify:
    - Unix: `~/.local/bin/brain version` shows the pushed commit
    - Windows: `%LocalAppData%\Programs\brain\brain.exe version` shows the pushed commit
    - the installed global Codex `brain` skill matches `skills/brain/`
 
 ## Defaults
 
-- This flow refreshes only the global Codex `brain` skill.
-- It does not commit, push, or edit repo-tracked files.
-- Treat direct pushes to `main` as the exception, not the default. PR merge is the normal release boundary.
+- `develop`, `release/*`, and `main` are protected branches.
+- Never push directly to `develop`, `release/*`, or `main`.
+- Never delete `develop`, `release/*`, or `main`.
+- Hotfixes may branch from active `release/vX.Y.Z` or from `main`, whichever best matches production, but the equivalent fix must always land back in `develop`.
+- Preserve release branches as historical snapshots for regression and release inspection.
 - Treat release-note-friendly PR copy as part of the definition of done for every PR.
 - Do not create a follow-up repo-memory commit just because you refreshed the global binary or skill. Otherwise the installed binary immediately lags `HEAD` again.
