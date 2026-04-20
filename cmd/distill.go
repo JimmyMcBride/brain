@@ -9,6 +9,7 @@ import (
 
 func addDistillCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoader) {
 	var sessionScope bool
+	var dryRun bool
 	var limit int
 
 	distillCmd := &cobra.Command{
@@ -25,6 +26,21 @@ func addDistillCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLo
 			}
 			defer appCtx.Close()
 
+			if dryRun {
+				preview, err := appCtx.Distill.PreviewFromSession(cmd.Context(), limit)
+				if err != nil {
+					return err
+				}
+
+				return appCtx.Output.Print(preview, func(w io.Writer) error {
+					if _, err := fmt.Fprintf(w, "Preview path: %s\n\n", preview.Path); err != nil {
+						return err
+					}
+					_, err := io.WriteString(w, preview.Content)
+					return err
+				})
+			}
+
 			note, err := appCtx.Distill.FromSession(cmd.Context(), limit)
 			if err != nil {
 				return err
@@ -38,6 +54,7 @@ func addDistillCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLo
 	}
 
 	distillCmd.Flags().BoolVar(&sessionScope, "session", false, "distill from the active session")
+	distillCmd.Flags().BoolVar(&dryRun, "dry-run", false, "render the session distill proposal without writing a note")
 	distillCmd.Flags().IntVarP(&limit, "limit", "n", 6, "maximum related notes or recent history entries")
 
 	root.AddCommand(distillCmd)

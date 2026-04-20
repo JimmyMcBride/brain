@@ -1355,7 +1355,8 @@ func renderWorkflows(snapshot Snapshot) string {
 	b.WriteString("6. When the task is clean, commit it, push it, and only then move to the next task.\n\n")
 	b.WriteString("## Close-Out\n\n")
 	b.WriteString("- Refresh or update durable notes for meaningful behavior, config, or architecture changes.\n")
-	b.WriteString("- If `brain session finish` blocks, inspect the promotion suggestions or run `brain distill --session` to review promotable updates before forcing closeout.\n")
+	b.WriteString("- If `brain session finish` blocks, inspect the promotion suggestions first; run `brain distill --session --dry-run` only when you need the full review without creating a proposal note.\n")
+	b.WriteString("- Before switching away from a working branch or back to `develop`, run `git status --short` and resolve repo-owned leftovers. If `.brain/resources/changes/*`, `.brain/`, `docs/`, or contract files belong to the task, keep them in the same branch/PR; otherwise review and intentionally remove them instead of carrying them onto `develop`, `release/*`, or `main`.\n")
 	b.WriteString("- If `skills/brain/` changed, reinstall the local Brain skill for Codex and OpenClaw with `brain skills install --scope local --agent codex --agent openclaw --project .`.\n")
 	b.WriteString("- When opening a PR, make the title and body release-note friendly because GitHub release notes are generated from merged PR metadata.\n")
 	b.WriteString("- Summarize shipped behavior in the PR, not just implementation steps, so future changelogs stay human-readable.\n")
@@ -1430,7 +1431,7 @@ func renderAgentIntegration(agent string) string {
 	b.WriteString("- if no validated session is active, run `brain session start --task \"<task>\"`\n")
 	b.WriteString("- if a session is already active, run `brain session validate` before substantial work\n")
 	b.WriteString("- use `brain session run -- <command>` for required verification commands\n")
-	b.WriteString("- if finish blocks, review the promotion suggestions or run `brain distill --session`\n")
+	b.WriteString("- if finish blocks, review the promotion suggestions or run `brain distill --session --dry-run`\n")
 	b.WriteString("- finish with `brain session finish`\n")
 	return b.String()
 }

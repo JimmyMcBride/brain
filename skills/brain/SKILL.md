@@ -78,6 +78,7 @@ Use these commands by default:
 - `brain context stats`
   - Summarize likely signal, likely noise, repeated expansions, verification links, fresh-packet budget pressure, and recurring omitted markdown docs from local compiler telemetry.
 - `brain distill --session`
+- `brain distill --session --dry-run`
   - Create a session-scoped promotion-review proposal with source provenance, promotion diagnostics, and suggested durable note updates.
 - `brain context structure`
   - Inspect the derived structural repo map of boundaries, entrypoints, config surfaces, and test surfaces.
@@ -157,17 +158,19 @@ Use these commands by default:
 
 ## Distillation Workflow
 
-1. Run `brain distill --session` when a working session surfaced decisions, tradeoffs, bugs, or discoveries that should become durable memory.
-2. Review the proposal note under `.brain/resources/changes/`, including the promotion review section and the suggested targets that were actually classified as promotable.
-3. Apply the durable note updates with `brain edit` or by updating the target notes directly after review.
-4. If the proposal note belongs to the active task, keep it in the same feature branch and PR instead of leaving it behind on `develop` or `main`.
-5. If the proposal note does not belong to the active task, review it and intentionally remove it before switching back to `develop`, `release/*`, or `main`.
-6. Treat distill as a proposal generator, not as an auto-write path.
+1. Run `brain distill --session --dry-run` when you need the full promotion review during closeout without creating a repo-owned file.
+2. Run `brain distill --session` only when a working session surfaced decisions, tradeoffs, bugs, or discoveries that should become a tracked proposal note.
+3. Review the proposal note under `.brain/resources/changes/`, including the promotion review section and the suggested targets that were actually classified as promotable.
+4. Apply the durable note updates with `brain edit` or by updating the target notes directly after review.
+5. If the proposal note belongs to the active task, keep it in the same feature branch and PR instead of leaving it behind on `develop` or `main`.
+6. If the proposal note does not belong to the active task, review it and intentionally remove it before switching back to `develop`, `release/*`, or `main`.
+7. Treat distill as a proposal generator, not as an auto-write path.
 
 ## Session Recovery
 
 - If `brain session finish` blocks, inspect the promotion suggestions in the closeout output first.
-- Run `brain distill --session` when you need the full promotion review note before deciding what to keep.
+- Run `brain distill --session --dry-run` when you need the full promotion review before deciding what to keep.
+- Run `brain distill --session` only when you intentionally want a tracked proposal note to carry in the active branch or PR.
 - Review the proposal, update the durable notes that matter, then retry `brain session finish`.
 - Before switching branches or returning to a protected branch, run `git status --short` and resolve repo-owned leftovers such as `.brain/resources/changes/*`, `.brain/`, `docs/`, or contract files.
 - If the session changed no durable knowledge after review, use `brain session finish --force --reason "<why>"` explicitly instead of pretending there was a durable update.

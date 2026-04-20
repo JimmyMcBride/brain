@@ -96,7 +96,10 @@ Use distillation when active session work should become proposed durable memory 
 
 ```bash
 brain distill --project . --session
+brain distill --project . --session --dry-run
 ```
+
+`brain distill --session --dry-run` requires an active session and prints the full proposal review without creating a repo-owned file.
 
 `brain distill --session` requires an active session and creates a proposal note under `.brain/resources/changes/` with source provenance, promotion-review diagnostics, and suggested markdown updates for review.
 
@@ -187,7 +190,7 @@ brain session run --project . -- go build ./...
 brain session finish --project . --summary "auth flow tightened"
 ```
 
-If finish blocks because repo changes need durable memory updates, run `brain distill --project . --session`, review the proposal, apply the note updates that matter, and retry `brain session finish`.
+If finish blocks because repo changes need durable memory updates, inspect the promotion suggestions first. Run `brain distill --project . --session --dry-run` when you need the full review without creating a proposal note; use `brain distill --project . --session` only when you intentionally want a tracked proposal note, then apply the note updates that matter and retry `brain session finish`.
 
 ## History And Undo
 

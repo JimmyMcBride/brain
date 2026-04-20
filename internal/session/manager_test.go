@@ -741,11 +741,41 @@ func TestValidateFinishStillBlocksCommittedCodeOnlyPublishSession(t *testing.T) 
 	if result.MemorySatisfiedBy != "" {
 		t.Fatalf("expected no memory satisfaction source, got %q", result.MemorySatisfiedBy)
 	}
-	if !containsString(result.Remediation, "run `brain distill --session` to generate a session-scoped memory proposal") {
+	if !containsString(result.Remediation, "run `brain distill --session --dry-run` when you need the full session-scoped review without creating a proposal file") {
 		t.Fatalf("expected distill remediation, got %v", result.Remediation)
 	}
 	if len(result.PromotionSuggestions) != 0 {
 		t.Fatalf("expected no closeout suggestions without packet-backed evidence, got %#v", result.PromotionSuggestions)
+	}
+}
+
+func TestValidateFinishIgnoresHeadOnlyChangesWhenTreeIsIdentical(t *testing.T) {
+	verifyCmd := helperCommand("sleep-ms", "10", "verify")
+	project := makeSessionProject(t, sessionPolicyYAML(t, []string{strings.Join(verifyCmd, " ")}, true))
+	mustInitGitRepo(t, project)
+
+	if err := os.WriteFile(filepath.Join(project, "main.go"), []byte("package main\nfunc main() { println(\"published\") }\n"), 0o644); err != nil {
+		t.Fatalf("write code change: %v", err)
+	}
+	mustRunGit(t, project, "add", ".")
+	mustRunGit(t, project, "commit", "-m", "feature change")
+
+	manager := New(nil)
+	if _, err := manager.Start(context.Background(), StartRequest{ProjectDir: project, Task: "merge and sync"}); err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+
+	mustRunGit(t, project, "commit", "--allow-empty", "-m", "merge commit with identical tree")
+
+	result, err := manager.Validate(context.Background(), ValidateRequest{ProjectDir: project, Stage: "finish"})
+	if err != nil {
+		t.Fatalf("validate finish: %v", err)
+	}
+	if !result.OK {
+		t.Fatalf("expected finish validation ok for identical tree head move, got obligations=%v remediation=%v", result.Obligations, result.Remediation)
+	}
+	if result.RepoChanged {
+		t.Fatalf("expected identical tree head move not to count as repo change")
 	}
 }
 

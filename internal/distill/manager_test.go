@@ -23,6 +23,46 @@ func TestFromSessionRequiresActiveSession(t *testing.T) {
 	}
 }
 
+func TestPreviewFromSessionDoesNotWriteProposalNote(t *testing.T) {
+	manager, harness := newTestManager(t)
+	mustInitGitRepo(t, harness.root)
+
+	if _, err := harness.session.Start(context.Background(), session.StartRequest{
+		ProjectDir: harness.root,
+		Task:       "tighten session distill",
+	}); err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(harness.root, "main.go"), []byte("package main\nfunc main() { println(\"updated\") }\n"), 0o644); err != nil {
+		t.Fatalf("write code change: %v", err)
+	}
+	if _, err := harness.session.RunCommand(context.Background(), session.RunRequest{
+		ProjectDir:    harness.root,
+		Argv:          []string{"go", "version"},
+		CaptureOutput: true,
+	}, nil, nil); err != nil {
+		t.Fatalf("record command: %v", err)
+	}
+
+	preview, err := manager.PreviewFromSession(context.Background(), 6)
+	if err != nil {
+		t.Fatalf("preview distill session: %v", err)
+	}
+	if preview.Type != "distill_proposal" {
+		t.Fatalf("expected distill proposal preview, got %q", preview.Type)
+	}
+	if preview.Path != ".brain/resources/changes/tighten-session-distill-distill-proposal.md" {
+		t.Fatalf("unexpected preview path: %s", preview.Path)
+	}
+	if !strings.Contains(preview.Content, "## Source Provenance") || !strings.Contains(preview.Content, "go version") || !strings.Contains(preview.Content, "main.go") {
+		t.Fatalf("expected session-derived preview content:\n%s", preview.Content)
+	}
+	if _, err := os.Stat(filepath.Join(harness.root, filepath.FromSlash(preview.Path))); !os.IsNotExist(err) {
+		t.Fatalf("expected preview not to write proposal note, stat err=%v", err)
+	}
+}
+
 func TestFromSessionCreatesProposalWithoutEditingTargets(t *testing.T) {
 	manager, harness := newTestManager(t)
 	mustInitGitRepo(t, harness.root)
