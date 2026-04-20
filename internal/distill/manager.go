@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"brain/internal/history"
 	"brain/internal/notes"
@@ -21,6 +23,16 @@ type Manager struct {
 	session *session.Manager
 }
 
+var proposalSlugPattern = regexp.MustCompile(`[^a-z0-9]+`)
+
+type SessionProposalPreview struct {
+	Path     string         `json:"path"`
+	Title    string         `json:"title"`
+	Type     string         `json:"type"`
+	Metadata map[string]any `json:"metadata"`
+	Content  string         `json:"content"`
+}
+
 func New(notesManager *notes.Manager, historyLog *history.Logger, sessionManager *session.Manager) *Manager {
 	return &Manager{
 		notes:   notesManager,
@@ -30,6 +42,14 @@ func New(notesManager *notes.Manager, historyLog *history.Logger, sessionManager
 }
 
 func (m *Manager) FromSession(ctx context.Context, limit int) (*notes.Note, error) {
+	preview, err := m.PreviewFromSession(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+	return m.createProposal(preview.Title, preview.Metadata, preview.Content)
+}
+
+func (m *Manager) PreviewFromSession(ctx context.Context, limit int) (*SessionProposalPreview, error) {
 	projectDir := m.notes.WorkspaceAbs(".")
 	if limit <= 0 {
 		limit = 6
@@ -60,15 +80,22 @@ func (m *Manager) FromSession(ctx context.Context, limit int) (*notes.Note, erro
 		Assessments: review.Assessments,
 	})
 
-	promotableTargets := promotableProposalTargets(review.Assessments)
-	return m.createProposal(title, map[string]any{
+	metadata := map[string]any{
 		"type":                 "distill_proposal",
 		"distill_scope":        "session",
 		"source_session_id":    active.ID,
 		"source_task":          active.Task,
-		"proposed_targets":     promotableTargets,
+		"proposed_targets":     promotableProposalTargets(review.Assessments),
 		"promotion_categories": promotableCategories(review.Assessments),
-	}, body)
+	}
+
+	return &SessionProposalPreview{
+		Path:     proposalPath(title),
+		Title:    title,
+		Type:     "distill_proposal",
+		Metadata: metadata,
+		Content:  body,
+	}, nil
 }
 
 type sessionProposal struct {
@@ -233,6 +260,16 @@ func promotableCategories(assessments []promotion.Assessment) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func proposalPath(title string) string {
+	slug := strings.ToLower(strings.TrimSpace(title))
+	slug = proposalSlugPattern.ReplaceAllString(slug, "-")
+	slug = strings.Trim(slug, "-")
+	if slug == "" {
+		slug = time.Now().UTC().Format("20060102-150405")
+	}
+	return filepath.ToSlash(filepath.Join(".brain", "resources", "changes", slug+".md"))
 }
 
 func (m *Manager) createProposal(title string, metadata map[string]any, body string) (*notes.Note, error) {

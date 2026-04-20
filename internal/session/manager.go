@@ -574,8 +574,9 @@ func (m *Manager) evaluateFinish(ctx context.Context, policy *projectcontext.Pol
 		SessionID: active.ID,
 		Task:      active.Task,
 	}
+	changedFiles, _ := changedFilesSinceBaseline(ctx, active.ProjectDir, active.GitBaseline.Head)
+	result.RepoChanged = len(changedFiles) != 0
 	currentGit := snapshotGit(ctx, active.ProjectDir)
-	result.RepoChanged = repoChanged(active.GitBaseline, currentGit)
 
 	entries, err := m.historyAfterBaseline(active.HistoryBaseline)
 	if err != nil {
@@ -598,8 +599,9 @@ func (m *Manager) evaluateFinish(ctx context.Context, policy *projectcontext.Pol
 	if result.RepoChanged && policy.Closeout.RequireMemoryUpdateOnRepoChange && result.MemorySatisfiedBy == "" {
 		result.OK = false
 		result.Obligations = append(result.Obligations, "durable note update required for repo changes")
-		result.Remediation = append(result.Remediation, "run `brain distill --session` to generate a session-scoped memory proposal")
-		result.Remediation = append(result.Remediation, fmt.Sprintf("review the proposal, apply the durable note updates for %s, then retry `brain session finish`", policy.Project.Name))
+		result.Remediation = append(result.Remediation, "inspect the promotion suggestions in this closeout output first")
+		result.Remediation = append(result.Remediation, "run `brain distill --session --dry-run` when you need the full session-scoped review without creating a proposal file")
+		result.Remediation = append(result.Remediation, fmt.Sprintf("apply the durable note updates for %s, then retry `brain session finish`", policy.Project.Name))
 	} else if result.MemorySatisfiedBy == "git_committed_notes" {
 		result.Remediation = append(result.Remediation, "durable notes were already committed in the session commit range")
 	}
@@ -1146,24 +1148,6 @@ func runGit(ctx context.Context, dir string, args ...string) string {
 		return ""
 	}
 	return string(out)
-}
-
-func repoChanged(base, current GitSnapshot) bool {
-	if !base.Available || !current.Available {
-		return false
-	}
-	if base.Head != current.Head {
-		return true
-	}
-	if len(base.Status) != len(current.Status) {
-		return true
-	}
-	for i := range base.Status {
-		if base.Status[i] != current.Status[i] {
-			return true
-		}
-	}
-	return false
 }
 
 func worktreeClean(snapshot GitSnapshot) bool {

@@ -455,6 +455,61 @@ func TestCLIDistillSessionCreatesProposal(t *testing.T) {
 	}
 }
 
+func TestCLIDistillSessionDryRunDoesNotWriteProposal(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	initGitProject(t, env.project)
+
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "tighten session distill"))
+	if err := os.WriteFile(filepath.Join(env.project, "main.go"), []byte("package main\nfunc main() { println(\"changed\") }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "run", "--project", env.project, "--", "go", "version"))
+
+	output := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "distill", "--session", "--dry-run"))
+	if !strings.Contains(output, "Preview path: .brain/resources/changes/tighten-session-distill-distill-proposal.md") {
+		t.Fatalf("unexpected dry-run output:\n%s", output)
+	}
+	if !strings.Contains(output, "## Source Provenance") || !strings.Contains(output, "## Promotion Review") {
+		t.Fatalf("expected full preview content in dry-run output:\n%s", output)
+	}
+	if _, err := os.Stat(filepath.Join(env.project, ".brain", "resources", "changes", "tighten-session-distill-distill-proposal.md")); !os.IsNotExist(err) {
+		t.Fatalf("expected dry-run not to create proposal note, stat err=%v", err)
+	}
+}
+
+func TestCLIDistillSessionDryRunJSONIncludesPreviewMetadata(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	initGitProject(t, env.project)
+
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "tighten session distill"))
+	if err := os.WriteFile(filepath.Join(env.project, "main.go"), []byte("package main\nfunc main() { println(\"changed\") }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "run", "--project", env.project, "--", "go", "version"))
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "distill", "--session", "--dry-run"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, jsonOut)
+	}
+	if payload["path"] != ".brain/resources/changes/tighten-session-distill-distill-proposal.md" {
+		t.Fatalf("unexpected preview path in json payload: %#v", payload)
+	}
+	content, ok := payload["content"].(string)
+	if !ok || !strings.Contains(content, "## Source Provenance") {
+		t.Fatalf("expected preview content in json payload: %#v", payload)
+	}
+	metadata, ok := payload["metadata"].(map[string]any)
+	if !ok || metadata["source_task"] != "tighten session distill" {
+		t.Fatalf("expected preview metadata in json payload: %#v", payload)
+	}
+	if _, err := os.Stat(filepath.Join(env.project, ".brain", "resources", "changes", "tighten-session-distill-distill-proposal.md")); !os.IsNotExist(err) {
+		t.Fatalf("expected dry-run json not to create proposal note, stat err=%v", err)
+	}
+}
+
 func TestCLIDistillRequiresSessionFlag(t *testing.T) {
 	env := newCLIEnv(t)
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
@@ -1498,7 +1553,7 @@ func TestCLISessionWorkflow(t *testing.T) {
 	}
 
 	finishBlocked := env.run(t, "", "--config", env.config, "session", "finish", "--project", env.project, "--summary", "premature closeout")
-	if finishBlocked.err == nil || !strings.Contains(finishBlocked.stdout, "durable note update required for repo changes") || !strings.Contains(finishBlocked.stdout, "brain distill --session") {
+	if finishBlocked.err == nil || !strings.Contains(finishBlocked.stdout, "durable note update required for repo changes") || !strings.Contains(finishBlocked.stdout, "brain distill --session --dry-run") {
 		t.Fatalf("expected finish to block and suggest distill:\nstdout=%s\nstderr=%s", finishBlocked.stdout, finishBlocked.stderr)
 	}
 
