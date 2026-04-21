@@ -148,9 +148,14 @@ Use the other subcommands to inspect compatibility views or refresh the Brain-ma
 				if _, err := fmt.Fprintf(w, "migrations: %s\n", result.Status); err != nil {
 					return err
 				}
-				for _, applied := range result.AppliedMigrationIDs {
-					if _, err := fmt.Fprintf(w, "migration: %s\n", applied); err != nil {
+				for _, migration := range result.Migrations {
+					if _, err := fmt.Fprintf(w, "migration: %s\n", migration.ID); err != nil {
 						return err
+					}
+					for _, message := range migration.Messages {
+						if _, err := fmt.Fprintf(w, "message: %s\n", message); err != nil {
+							return err
+						}
 					}
 				}
 				return nil

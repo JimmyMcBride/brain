@@ -31,8 +31,9 @@ const (
 )
 
 type ProjectMigrationDefinition struct {
-	ID          string `json:"id"`
-	Description string `json:"description"`
+	ID           string `json:"id"`
+	Description  string `json:"description"`
+	ExplicitOnly bool   `json:"explicit_only,omitempty"`
 }
 
 type AppliedProjectMigration struct {
@@ -68,6 +69,8 @@ type ProjectMigrationPlan struct {
 	NeedsStateWrite   bool                         `json:"needs_state_write,omitempty"`
 	KnownMigrations   []ProjectMigrationDefinition `json:"known_migrations"`
 	PendingMigrations []ProjectMigrationDefinition `json:"pending_migrations,omitempty"`
+	PendingAutomatic  []ProjectMigrationDefinition `json:"pending_automatic_migrations,omitempty"`
+	PendingExplicit   []ProjectMigrationDefinition `json:"pending_explicit_migrations,omitempty"`
 	AppliedMigrations []AppliedProjectMigration    `json:"applied_migrations,omitempty"`
 	LastRun           *ProjectMigrationRun         `json:"last_run,omitempty"`
 }
@@ -77,6 +80,7 @@ type ProjectMigrationResult struct {
 	Description string   `json:"description"`
 	Action      string   `json:"action"`
 	Results     []Result `json:"results,omitempty"`
+	Messages    []string `json:"messages,omitempty"`
 }
 
 type ApplyProjectMigrationsResult struct {
@@ -97,6 +101,11 @@ var knownProjectMigrationDefinitions = []ProjectMigrationDefinition{
 		ID:          "refresh-existing-agent-integrations-v1",
 		Description: "Refresh or migrate existing Brain-managed agent integration blocks in local agent files",
 	},
+	{
+		ID:           "ignore-local-runtime-state-v1",
+		Description:  "Ignore local Brain runtime state in Git and untrack legacy runtime artifacts during explicit upgrades",
+		ExplicitOnly: true,
+	},
 }
 
 func KnownProjectMigrations() []ProjectMigrationDefinition {
@@ -106,6 +115,14 @@ func KnownProjectMigrations() []ProjectMigrationDefinition {
 }
 
 func (m *Manager) ApplyProjectMigrations(ctx context.Context, projectDir string) (*ApplyProjectMigrationsResult, error) {
+	return m.applyProjectMigrations(ctx, projectDir, true)
+}
+
+func (m *Manager) ApplyAutomaticProjectMigrations(ctx context.Context, projectDir string) (*ApplyProjectMigrationsResult, error) {
+	return m.applyProjectMigrations(ctx, projectDir, false)
+}
+
+func (m *Manager) applyProjectMigrations(ctx context.Context, projectDir string, includeExplicit bool) (*ApplyProjectMigrationsResult, error) {
 	plan, err := m.PlanProjectMigrations(projectDir)
 	if err != nil {
 		return nil, err
@@ -119,7 +136,11 @@ func (m *Manager) ApplyProjectMigrations(ctx context.Context, projectDir string)
 	if !plan.UsesBrain {
 		return result, nil
 	}
-	if len(plan.PendingMigrations) == 0 {
+	pending := plan.PendingAutomatic
+	if includeExplicit {
+		pending = plan.PendingMigrations
+	}
+	if len(pending) == 0 {
 		result.Status = "unchanged"
 		return result, nil
 	}
@@ -139,7 +160,7 @@ func (m *Manager) ApplyProjectMigrations(ctx context.Context, projectDir string)
 		}
 	}
 
-	for _, migration := range plan.PendingMigrations {
+	for _, migration := range pending {
 		plannedIDs = append(plannedIDs, migration.ID)
 		migrationResult, err := m.applyProjectMigration(ctx, plan.ProjectDir, migration)
 		if err != nil {
@@ -212,6 +233,11 @@ func (m *Manager) PlanProjectMigrations(projectDir string) (*ProjectMigrationPla
 			continue
 		}
 		plan.PendingMigrations = append(plan.PendingMigrations, migration)
+		if migration.ExplicitOnly {
+			plan.PendingExplicit = append(plan.PendingExplicit, migration)
+			continue
+		}
+		plan.PendingAutomatic = append(plan.PendingAutomatic, migration)
 	}
 
 	switch {
@@ -224,7 +250,7 @@ func (m *Manager) PlanProjectMigrations(projectDir string) (*ProjectMigrationPla
 		if msg := strings.TrimSpace(state.LastRun.Error); msg != "" {
 			plan.BrokenReason += ": " + msg
 		}
-	case len(plan.PendingMigrations) != 0:
+	case len(plan.PendingAutomatic) != 0:
 		plan.Status = projectMigrationPlanPending
 	default:
 		plan.Status = projectMigrationPlanCurrent
@@ -296,14 +322,22 @@ func (m *Manager) applyProjectMigration(ctx context.Context, projectDir string, 
 		results, err = m.syncManagedContextForMigration(ctx, projectDir)
 	case "refresh-existing-agent-integrations-v1":
 		results, err = m.syncAgentIntegrations(projectDir, nil, false, false)
+	case "ignore-local-runtime-state-v1":
+		migrationResult, migrationErr := m.ignoreLocalRuntimeState(ctx, projectDir)
+		result.Results = migrationResult.Results
+		result.Messages = migrationResult.Messages
+		result.Action = migrationResult.Action
+		err = migrationErr
 	default:
 		return result, fmt.Errorf("unknown project migration %q", migration.ID)
 	}
 	if err != nil {
 		return result, fmt.Errorf("apply project migration %s: %w", migration.ID, err)
 	}
-	result.Results = results
-	if migrationChanged(results) {
+	if migration.ID != "ignore-local-runtime-state-v1" {
+		result.Results = results
+	}
+	if migrationChanged(result.Results) || result.Action == "updated" {
 		result.Action = "updated"
 	}
 	return result, nil

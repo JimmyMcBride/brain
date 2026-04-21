@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"brain/internal/projectcontext"
 	"brain/internal/skills"
@@ -20,6 +21,7 @@ type skillRefreshResult struct {
 type projectMigrationStatusResult struct {
 	ProjectMigrationStatus   string   `json:"project_migration_status,omitempty"`
 	AppliedProjectMigrations []string `json:"applied_project_migrations,omitempty"`
+	ProjectMigrationMessages []string `json:"project_migration_messages,omitempty"`
 }
 
 var skillInstallRunner = runSkillInstall
@@ -106,7 +108,7 @@ func applyProjectMigrationsIfNeeded(projectPath string) error {
 	if !plan.UsesBrain || len(plan.PendingMigrations) == 0 {
 		return nil
 	}
-	if _, err := manager.ApplyProjectMigrations(context.Background(), projectPath); err != nil {
+	if _, err := manager.ApplyAutomaticProjectMigrations(context.Background(), projectPath); err != nil {
 		return fmt.Errorf("project migrations blocked for %s: %w. Remediation: from the project root run `brain doctor --project .`; then `brain context refresh --project .`; run `brain adopt --project .` if local agent files still need Brain integration", projectPath, err)
 	}
 	return nil
@@ -126,7 +128,25 @@ func summarizeProjectMigrationResult(result *projectcontext.ApplyProjectMigratio
 	return projectMigrationStatusResult{
 		ProjectMigrationStatus:   status,
 		AppliedProjectMigrations: append([]string(nil), result.AppliedMigrationIDs...),
+		ProjectMigrationMessages: summarizeProjectMigrationMessages(result.Migrations),
 	}
+}
+
+func summarizeProjectMigrationMessages(results []projectcontext.ProjectMigrationResult) []string {
+	var messages []string
+	for _, result := range results {
+		for _, message := range result.Messages {
+			message = strings.TrimSpace(message)
+			if message == "" {
+				continue
+			}
+			messages = append(messages, result.ID+": "+message)
+		}
+	}
+	if len(messages) == 0 {
+		return nil
+	}
+	return messages
 }
 
 func runSkillInstall(binaryPath, configPath, projectPath string, scope skills.Scope, agents []string) ([]skills.InstallResult, error) {

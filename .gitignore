@@ -7,6 +7,4 @@
 .brain/sessions/
 .brain/policy.override.yaml
 .brain/state/
-.codex/skills/
-.openclaw/skills/
 # brain:end gitignore-session
