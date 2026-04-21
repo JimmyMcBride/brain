@@ -63,6 +63,17 @@ func TestAssessSessionRejectsWhenEvidenceIsMissing(t *testing.T) {
 	}
 }
 
+func TestAssessSessionRejectsVerificationRecipeWithoutMeaningfulRepoChange(t *testing.T) {
+	assessments := AssessSession(SessionSignals{
+		Task:               "merge pr and sync develop",
+		SuccessfulCommands: []string{"go test ./...", "go build ./..."},
+	})
+
+	if containsPromotable(assessments, CategoryVerificationRecipe) {
+		t.Fatalf("did not expect verification recipe to be promotable without meaningful repo change: %#v", assessments)
+	}
+}
+
 func TestAssessSessionRejectsAlreadyCapturedDurableUpdates(t *testing.T) {
 	assessments := AssessSession(SessionSignals{
 		Task:               "tighten compiler docs",

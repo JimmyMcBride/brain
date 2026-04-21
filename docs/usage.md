@@ -96,15 +96,23 @@ Use distillation when active session work should become proposed durable memory 
 
 ```bash
 brain distill --project . --session
+brain distill --project . --session --dry-run
 ```
+
+`brain distill --session --dry-run` requires an active session and prints the full proposal review without creating a repo-owned file.
 
 `brain distill --session` requires an active session and creates a proposal note under `.brain/resources/changes/` with source provenance, promotion-review diagnostics, and suggested markdown updates for review.
 
+Treat that proposal note as repo-owned worktree state: if it belongs to the active task, keep it in the same branch and PR; otherwise review it and intentionally remove it before returning to `develop`, `release/*`, or `main`.
+
 ## Context Management
 
-Compile task context first, then reach for the compatibility views only when you need them:
+Start task work with `brain prep`, then reach for the lower-level compiler or compatibility views only when you need them:
 
 ```bash
+brain prep --project . --task "auth flow"
+brain prep --project . --task "auth flow" --budget small
+brain prep --project . --task "auth flow" --fresh
 brain context compile --project . --task "auth flow"
 brain context compile --project . --task "auth flow" --budget small
 brain context compile --project . --task "auth flow" --budget 1200
@@ -127,6 +135,16 @@ brain context load --project . --level 1
 brain context load --project . --level 2
 brain context load --project . --level 3 --query "auth flow"
 ```
+
+`brain prep` is the default startup path:
+
+- starts a validated session when none exists and requires `--task` in that case
+- reuses the active session when one already exists and validates it before compiling
+- accepts the same `--budget` and `--fresh` controls as `context compile`
+- errors instead of silently switching tasks when the requested `--task` does not match the active session
+- prints the compiled packet plus the short next-step guidance Brain expects agents to follow
+
+`context compile` remains the lower-level manual path when you need the packet compiler directly without the startup orchestration.
 
 `context compile` is the summary-first working-set compiler:
 
@@ -178,14 +196,15 @@ brain adopt --project . --agent codex
 Use sessions when the repo should require explicit verification and durable note updates.
 
 ```bash
-brain session start --project . --task "tighten auth flow"
-brain session validate --project .
+brain prep --project . --task "tighten auth flow"
 brain session run --project . -- go test ./...
 brain session run --project . -- go build ./...
 brain session finish --project . --summary "auth flow tightened"
 ```
 
-If finish blocks because repo changes need durable memory updates, run `brain distill --project . --session`, review the proposal, apply the note updates that matter, and retry `brain session finish`.
+`brain session validate`, `brain session start`, and `brain context compile` all still work directly, but `brain prep` is the normal first reflex because it validates or starts the session and compiles the startup packet in one step.
+
+If finish blocks because repo changes need durable memory updates, inspect the promotion suggestions first. Run `brain distill --project . --session --dry-run` when you need the full review without creating a proposal note; use `brain distill --project . --session` only when you intentionally want a tracked proposal note, then apply the note updates that matter and retry `brain session finish`.
 
 ## History And Undo
 

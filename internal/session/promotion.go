@@ -64,10 +64,11 @@ func (m *Manager) buildPromotionReview(ctx context.Context, policy *projectconte
 	changedFiles, diffSummary := changedFilesSinceBaseline(ctx, active.ProjectDir, active.GitBaseline.Head)
 	packetHashes, boundaries := packetSupportFromSession(active)
 	successfulCommands, failedCommands := commandSupport(active.CommandRuns)
+	repoChanged := len(changedFiles) != 0
 
 	signals := promotion.SessionSignals{
 		Task:                   active.Task,
-		RepoChanged:            len(changedFiles) != 0,
+		RepoChanged:            repoChanged,
 		ChangedFiles:           changedFiles,
 		ChangedBoundaries:      boundaries,
 		PacketHashes:           packetHashes,

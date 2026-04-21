@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-16T02:42:19Z"
+updated: "2026-04-20T05:35:54Z"
 ---
 # Workflows
 
@@ -8,10 +8,10 @@ Use this file for agent operating workflow inside the repo.
 
 ## Startup
 
-1. If no validated session is active, run `brain session start --task "<task>"`.
-2. If a session already exists, run `brain session validate`.
-3. Read `AGENTS.md`, `.brain/policy.yaml`, and the linked context files needed for the task.
-4. Run `brain context compile --task "<task>"` for the smallest justified working set.
+1. If no validated session is active, run `brain prep --task "<task>"`.
+2. If a session already exists, run `brain prep`.
+3. Read `AGENTS.md`, `.brain/policy.yaml`, and the linked context files still needed for the task.
+4. Use `brain context compile --task "<task>"` only when you need the lower-level packet compiler directly.
 5. If project memory still matters, run `brain find brain` or `brain search "brain <task>"`.
 
 ## During Work
@@ -34,7 +34,8 @@ Use this file for agent operating workflow inside the repo.
 ## Close-Out
 
 - Refresh or update durable notes for meaningful behavior, config, or architecture changes.
-- If `brain session finish` blocks, inspect the promotion suggestions or run `brain distill --session` to review promotable updates before forcing closeout.
+- If `brain session finish` blocks, inspect the promotion suggestions first; run `brain distill --session --dry-run` only when you need the full review without creating a proposal note.
+- Before switching away from a working branch or back to `develop`, run `git status --short` and resolve repo-owned leftovers. If `.brain/resources/changes/*`, `.brain/`, `docs/`, or contract files belong to the task, keep them in the same branch/PR; otherwise review and intentionally remove them instead of carrying them onto `develop`, `release/*`, or `main`.
 - If `skills/brain/` changed, reinstall the local Brain skill for Codex and OpenClaw with `brain skills install --scope local --agent codex --agent openclaw --project .`.
 - When opening a PR, make the title and body release-note friendly because GitHub release notes are generated from merged PR metadata.
 - Summarize shipped behavior in the PR, not just implementation steps, so future changelogs stay human-readable.
@@ -44,4 +45,8 @@ Use this file for agent operating workflow inside the repo.
 
 ## Local Notes
 
-Add repo-specific notes here. `brain context refresh` preserves content outside managed blocks.
+- 2026-04-20: Gitflow source of truth is `develop` for ongoing integration, `release/vX.Y.Z` for protected release stabilization, and `main` for protected production releases.
+- 2026-04-20: Never push directly to `develop`, `release/*`, or `main`; use pull requests for all protected-branch changes.
+- 2026-04-20: Release fixes go into `develop` first, then the exact commit is cherry-picked into the active `release/vX.Y.Z` branch.
+- 2026-04-20: After every PR merge into `develop`, fetch latest remote state, check out the updated `origin/develop`, and refresh repo context from latest `develop`. Refresh `.plan/` context too if that workspace exists in this repo later.
+- 2026-04-20: Do not carry repo-owned proposal or context files back onto `develop`. Resolve `.brain/resources/changes/*`, `.brain/`, `docs/`, and contract-file leftovers on the feature branch by merging them in the active PR or intentionally removing them after review.

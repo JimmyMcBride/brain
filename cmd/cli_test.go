@@ -455,6 +455,61 @@ func TestCLIDistillSessionCreatesProposal(t *testing.T) {
 	}
 }
 
+func TestCLIDistillSessionDryRunDoesNotWriteProposal(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	initGitProject(t, env.project)
+
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "tighten session distill"))
+	if err := os.WriteFile(filepath.Join(env.project, "main.go"), []byte("package main\nfunc main() { println(\"changed\") }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "run", "--project", env.project, "--", "go", "version"))
+
+	output := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "distill", "--session", "--dry-run"))
+	if !strings.Contains(output, "Preview path: .brain/resources/changes/tighten-session-distill-distill-proposal.md") {
+		t.Fatalf("unexpected dry-run output:\n%s", output)
+	}
+	if !strings.Contains(output, "## Source Provenance") || !strings.Contains(output, "## Promotion Review") {
+		t.Fatalf("expected full preview content in dry-run output:\n%s", output)
+	}
+	if _, err := os.Stat(filepath.Join(env.project, ".brain", "resources", "changes", "tighten-session-distill-distill-proposal.md")); !os.IsNotExist(err) {
+		t.Fatalf("expected dry-run not to create proposal note, stat err=%v", err)
+	}
+}
+
+func TestCLIDistillSessionDryRunJSONIncludesPreviewMetadata(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	initGitProject(t, env.project)
+
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "tighten session distill"))
+	if err := os.WriteFile(filepath.Join(env.project, "main.go"), []byte("package main\nfunc main() { println(\"changed\") }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "run", "--project", env.project, "--", "go", "version"))
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "distill", "--session", "--dry-run"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse json output: %v\n%s", err, jsonOut)
+	}
+	if payload["path"] != ".brain/resources/changes/tighten-session-distill-distill-proposal.md" {
+		t.Fatalf("unexpected preview path in json payload: %#v", payload)
+	}
+	content, ok := payload["content"].(string)
+	if !ok || !strings.Contains(content, "## Source Provenance") {
+		t.Fatalf("expected preview content in json payload: %#v", payload)
+	}
+	metadata, ok := payload["metadata"].(map[string]any)
+	if !ok || metadata["source_task"] != "tighten session distill" {
+		t.Fatalf("expected preview metadata in json payload: %#v", payload)
+	}
+	if _, err := os.Stat(filepath.Join(env.project, ".brain", "resources", "changes", "tighten-session-distill-distill-proposal.md")); !os.IsNotExist(err) {
+		t.Fatalf("expected dry-run json not to create proposal note, stat err=%v", err)
+	}
+}
+
 func TestCLIDistillRequiresSessionFlag(t *testing.T) {
 	env := newCLIEnv(t)
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
@@ -1227,6 +1282,127 @@ func TestCLIContextCompileUsesActiveSessionTask(t *testing.T) {
 	}
 }
 
+func TestCLIPrepStartsSessionAndCompilesPacket(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	initGitProject(t, env.project)
+
+	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "prep", "--task", "brain prep startup"))
+	for _, section := range []string{"## Brain Prep", "## Compiled Context Packet", "## Next Steps"} {
+		if !strings.Contains(human, section) {
+			t.Fatalf("expected section %q in prep output:\n%s", section, human)
+		}
+	}
+	if !strings.Contains(human, "- Session: `started`") {
+		t.Fatalf("expected prep to report a started session:\n%s", human)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(env.project, ".brain", "session.json"))
+	if err != nil {
+		t.Fatalf("read active session: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("parse active session: %v\n%s", err, raw)
+	}
+	packetRecords := payload["packet_records"].([]any)
+	if len(packetRecords) != 1 {
+		t.Fatalf("expected prep to record one compiled packet, got %#v", payload)
+	}
+}
+
+func TestCLIPrepRequiresTaskWithoutActiveSession(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+
+	result := env.run(t, "", "--config", env.config, "--project", env.project, "prep")
+	if result.err == nil {
+		t.Fatalf("expected prep without task to fail, stdout:\n%s", result.stdout)
+	}
+	if !strings.Contains(result.err.Error(), "prep requires --task when no active session exists") {
+		t.Fatalf("unexpected prep error: %v", result.err)
+	}
+}
+
+func TestCLIPrepUsesActiveSessionTask(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	initGitProject(t, env.project)
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "prep active session"))
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "prep"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse prep payload: %v\n%s", err, jsonOut)
+	}
+	if payload["session_action"] != "reused" || payload["validation_ran"] != true {
+		t.Fatalf("expected prep to reuse and validate active session: %#v", payload)
+	}
+	sessionPayload := payload["session"].(map[string]any)
+	if sessionPayload["task"] != "prep active session" {
+		t.Fatalf("expected prep to use active session task: %#v", payload)
+	}
+	packet := payload["packet"].(map[string]any)
+	task := packet["task"].(map[string]any)
+	if task["text"] != "prep active session" || task["source"] != "session" {
+		t.Fatalf("expected packet task to come from session: %#v", payload)
+	}
+}
+
+func TestCLIPrepAllowsMatchingTaskOnActiveSession(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	initGitProject(t, env.project)
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "prep explicit match"))
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "prep", "--task", "prep explicit match"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse prep payload: %v\n%s", err, jsonOut)
+	}
+	packet := payload["packet"].(map[string]any)
+	task := packet["task"].(map[string]any)
+	if task["source"] != "flag" {
+		t.Fatalf("expected explicit matching task to stay flag-sourced: %#v", payload)
+	}
+}
+
+func TestCLIPrepRejectsDifferentActiveSessionTask(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	initGitProject(t, env.project)
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "prep session task"))
+
+	result := env.run(t, "", "--config", env.config, "--project", env.project, "prep", "--task", "other task")
+	if result.err == nil {
+		t.Fatalf("expected mismatched prep task to fail, stdout:\n%s", result.stdout)
+	}
+	if !strings.Contains(result.err.Error(), `does not match active session task "prep session task"`) {
+		t.Fatalf("unexpected mismatch error: %v", result.err)
+	}
+}
+
+func TestCLIPrepPassesCompileFlagsThrough(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	initGitProject(t, env.project)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "prep", "--task", "prep passthrough"))
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "prep", "--budget", "small", "--fresh"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse prep payload: %v\n%s", err, jsonOut)
+	}
+	packet := payload["packet"].(map[string]any)
+	if packet["cache_status"] != "fresh" || packet["full_packet_included"] != true {
+		t.Fatalf("expected prep --fresh to force full fresh packet: %#v", payload)
+	}
+	budget := packet["budget"].(map[string]any)
+	if budget["preset"] != "small" {
+		t.Fatalf("expected prep budget preset passthrough: %#v", payload)
+	}
+}
+
 func TestCLIContextCompileReusesLatestMatchingSessionPacket(t *testing.T) {
 	env := newCLIEnv(t)
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
@@ -1498,7 +1674,7 @@ func TestCLISessionWorkflow(t *testing.T) {
 	}
 
 	finishBlocked := env.run(t, "", "--config", env.config, "session", "finish", "--project", env.project, "--summary", "premature closeout")
-	if finishBlocked.err == nil || !strings.Contains(finishBlocked.stdout, "durable note update required for repo changes") || !strings.Contains(finishBlocked.stdout, "brain distill --session") {
+	if finishBlocked.err == nil || !strings.Contains(finishBlocked.stdout, "durable note update required for repo changes") || !strings.Contains(finishBlocked.stdout, "brain distill --session --dry-run") {
 		t.Fatalf("expected finish to block and suggest distill:\nstdout=%s\nstderr=%s", finishBlocked.stdout, finishBlocked.stderr)
 	}
 
@@ -1834,8 +2010,35 @@ func TestCLILocalProjectPreflightAppliesPendingMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(agentsBody), "brain context compile") || !strings.Contains(string(agentsBody), "keep me") {
+	if !strings.Contains(string(agentsBody), "brain prep") || !strings.Contains(string(agentsBody), "keep me") {
 		t.Fatalf("expected preflight migration to refresh AGENTS.md:\n%s", string(agentsBody))
+	}
+}
+
+func TestCLIPrepRunsMigrationPreflight(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	initGitProject(t, env.project)
+
+	staleAgents := "# Project Agent Contract\n\n<!-- brain:begin agents-contract -->\nstale\n<!-- brain:end agents-contract -->\n\n## Local Notes\n\nkeep me\n"
+	if err := os.WriteFile(filepath.Join(env.project, "AGENTS.md"), []byte(staleAgents), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ledgerPath := filepath.Join(env.project, ".brain", "state", "project-migrations.json")
+	if err := os.Remove(ledgerPath); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "prep", "--task", "prep preflight"))
+	if _, err := os.Stat(ledgerPath); err != nil {
+		t.Fatalf("expected migration ledger to be written during prep preflight: %v", err)
+	}
+	agentsBody, err := os.ReadFile(filepath.Join(env.project, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(agentsBody), "brain prep") || !strings.Contains(string(agentsBody), "keep me") {
+		t.Fatalf("expected prep preflight migration to refresh AGENTS.md:\n%s", string(agentsBody))
 	}
 }
 
