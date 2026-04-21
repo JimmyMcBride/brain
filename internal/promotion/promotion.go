@@ -27,6 +27,7 @@ const (
 )
 
 type Support struct {
+	RepoChanged        bool     `json:"repo_changed,omitempty"`
 	PacketHashes       []string `json:"packet_hashes,omitempty"`
 	ChangedFiles       []string `json:"changed_files,omitempty"`
 	ChangedBoundaries  []string `json:"changed_boundaries,omitempty"`
@@ -110,6 +111,7 @@ func BuildSessionCandidates(signals SessionSignals) []Candidate {
 		changeSlug = "session"
 	}
 	supportBase := Support{
+		RepoChanged:        signals.RepoChanged,
 		PacketHashes:       dedupeStrings(signals.PacketHashes),
 		ChangedFiles:       dedupeStrings(signals.ChangedFiles),
 		ChangedBoundaries:  dedupeStrings(signals.ChangedBoundaries),
@@ -211,9 +213,13 @@ func Assess(candidate Candidate) Assessment {
 			assessment.ReasonRejected = "no successful verification commands were recorded"
 			return assessment
 		}
+		if !candidate.Support.RepoChanged || (len(candidate.Support.ChangedFiles) == 0 && len(candidate.Support.ChangedBoundaries) == 0 && len(candidate.Support.PacketHashes) == 0) {
+			assessment.ReasonRejected = "successful verification commands were recorded without meaningful repo change evidence"
+			return assessment
+		}
 		if len(candidate.Support.PacketHashes) == 0 {
 			assessment.Decision = DecisionPromotable
-			assessment.ReasonPromotable = "successful verification commands were recorded, but packet linkage was not captured"
+			assessment.ReasonPromotable = "successful verification commands were recorded for repo changes, but packet linkage was not captured"
 			return assessment
 		}
 		assessment.Decision = DecisionPromotable

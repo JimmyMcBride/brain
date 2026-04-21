@@ -111,10 +111,11 @@ Expected order:
 
 When a repo uses sessions, the skill should steer agents toward:
 
-- `brain session start`
-- `brain session validate`
+- `brain prep --task "..."`
+- `brain prep`
 - `brain session run -- <command>`
 - `brain session finish`
+- `brain session start` or `brain context compile` only when the lower-level manual path is actually needed
 
 If finish blocks, the skill should steer agents toward the closeout promotion suggestions first and then to `brain distill --session` for the full promotion review note.
 

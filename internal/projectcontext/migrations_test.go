@@ -238,7 +238,7 @@ func TestApplyProjectMigrationsRefreshesManagedDocsAndLegacyAgentFiles(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(agentsBody), "brain context compile") || !strings.Contains(string(agentsBody), "keep me") {
+	if !strings.Contains(string(agentsBody), "brain prep") || !strings.Contains(string(agentsBody), "keep me") {
 		t.Fatalf("managed context was not refreshed correctly:\n%s", string(agentsBody))
 	}
 

@@ -19,8 +19,8 @@ If the current repository has Brain context, use the repo-local Brain docs first
 1. Read `AGENTS.md` at the repo root.
 2. Read `.brain/policy.yaml`.
 3. Read the linked `.brain/context/*.md` files needed for the task.
-4. If no validated session is active, run `brain session start --task "<task>"`.
-5. If a session is already active, run `brain session validate`.
+4. If no validated session is active, run `brain prep --task "<task>"`.
+5. If a session is already active, run `brain prep`.
 6. Use the `brain` CLI for durable project-memory operations.
 7. Fall back to this generic skill only when repo-local context is absent.
 
@@ -69,17 +69,24 @@ Use these commands by default:
   - Show lexical and semantic score contributions plus the retrieval source classification for each result.
 - `brain search --inject "query"`
   - Return ranked results plus an agent-ready `## Relevant Context` block that can be reused directly.
+- `brain prep --task "..."`
+  - Start or reuse the validated session and compile the default startup packet in one step.
+- `brain prep --task "..." --budget small`
+  - Ask for a leaner startup packet while keeping the same startup orchestration.
+- `brain prep --task "..." --fresh`
+  - Bypass session-local packet reuse when you want the startup path to force a standalone full packet.
 - `brain context compile --task "..."`
-  - Compile the smallest summary-first working-set packet Brain can justify for the task, including anchors, provenance, nearby tests, verification hints, and budget diagnostics.
+  - Compile the smallest summary-first working-set packet Brain can justify for the task when you need the lower-level compiler directly.
 - `brain context compile --task "..." --budget small`
-  - Ask for a leaner startup packet with a named preset or an explicit integer token target.
+  - Ask for a leaner lower-level compile packet with a named preset or an explicit integer token target.
 - `brain context compile --task "..." --fresh`
-  - Bypass session-local packet reuse and force a standalone full packet when debugging or inspecting packet contents.
+  - Bypass session-local packet reuse and force a standalone full packet when debugging or inspecting lower-level packet contents.
 - `brain context explain --last`
   - Inspect the latest recorded compiled packet, including cache status, reuse or delta lineage, later expansions, and downstream session outcomes.
 - `brain context stats`
   - Summarize likely signal, likely noise, repeated expansions, verification links, fresh-packet budget pressure, and recurring omitted markdown docs from local compiler telemetry.
 - `brain distill --session`
+- `brain distill --session --dry-run`
   - Create a session-scoped promotion-review proposal with source provenance, promotion diagnostics, and suggested durable note updates.
 - `brain context structure`
   - Inspect the derived structural repo map of boundaries, entrypoints, config surfaces, and test surfaces.
@@ -147,30 +154,36 @@ Use these commands by default:
 
 ## Context Workflow
 
-1. `brain context compile --task "<task>"` for the smallest justified startup packet.
-2. Add `--budget small|default|large|<integer>` when you need a tighter or wider packet and want Brain to explain budget pressure explicitly.
-3. Expect compile to reuse the latest matching packet inside the active session when relevant compile inputs are unchanged, and to emit a compact delta when the task is stable but the packet changed.
-4. Add `--fresh` when you need to bypass that session-local reuse or delta behavior and force a standalone full packet.
-5. `brain context explain --last` when you need to inspect why the latest packet looked the way it did, whether Brain reused or delta-linked it, which items were expanded later, or which downstream verification and closeout outcomes were recorded.
-6. `brain context stats` when you are tuning compiler behavior and want a compact view of likely signal, likely noise, repeated expansions, verification-link patterns, fresh-packet budget pressure, and recurring omitted docs from local telemetry.
-7. `brain context structure` when you need repo boundaries, entrypoints, config surfaces, or test surfaces before deeper retrieval.
-8. `brain context live --task "<task>"` when you need current session, changed-file, touched-boundary, nearby-test, verification-recipe, or policy signals, not just compiled startup context.
-9. `brain context assemble --task "<task>"` when you need the broader typed packet instead of the compiler-first working set.
-10. `brain context assemble --explain` when you need to inspect why Brain chose its broader packet and what it left nearby.
-11. `brain context load --level ...` only when you need the older static-bundle compatibility view.
+1. `brain prep --task "<task>"` for the default startup path.
+2. Run `brain prep` with no `--task` when a validated session is already active and you want Brain to reuse that task.
+3. Add `--budget small|default|large|<integer>` when you need a tighter or wider startup packet and want Brain to explain budget pressure explicitly.
+4. Add `--fresh` when you need to bypass session-local reuse or delta behavior and force a standalone full packet.
+5. Use `brain context compile --task "<task>"` when you need the lower-level compiler directly without the startup orchestration.
+6. `brain context explain --last` when you need to inspect why the latest packet looked the way it did, whether Brain reused or delta-linked it, which items were expanded later, or which downstream verification and closeout outcomes were recorded.
+7. `brain context stats` when you are tuning compiler behavior and want a compact view of likely signal, likely noise, repeated expansions, verification-link patterns, fresh-packet budget pressure, and recurring omitted docs from local telemetry.
+8. `brain context structure` when you need repo boundaries, entrypoints, config surfaces, or test surfaces before deeper retrieval.
+9. `brain context live --task "<task>"` when you need current session, changed-file, touched-boundary, nearby-test, verification-recipe, or policy signals, not just compiled startup context.
+10. `brain context assemble --task "<task>"` when you need the broader typed packet instead of the compiler-first working set.
+11. `brain context assemble --explain` when you need to inspect why Brain chose its broader packet and what it left nearby.
+12. `brain context load --level ...` only when you need the older static-bundle compatibility view.
 
 ## Distillation Workflow
 
-1. Run `brain distill --session` when a working session surfaced decisions, tradeoffs, bugs, or discoveries that should become durable memory.
-2. Review the proposal note under `.brain/resources/changes/`, including the promotion review section and the suggested targets that were actually classified as promotable.
-3. Apply the durable note updates with `brain edit` or by updating the target notes directly after review.
-4. Treat distill as a proposal generator, not as an auto-write path.
+1. Run `brain distill --session --dry-run` when you need the full promotion review during closeout without creating a repo-owned file.
+2. Run `brain distill --session` only when a working session surfaced decisions, tradeoffs, bugs, or discoveries that should become a tracked proposal note.
+3. Review the proposal note under `.brain/resources/changes/`, including the promotion review section and the suggested targets that were actually classified as promotable.
+4. Apply the durable note updates with `brain edit` or by updating the target notes directly after review.
+5. If the proposal note belongs to the active task, keep it in the same feature branch and PR instead of leaving it behind on `develop` or `main`.
+6. If the proposal note does not belong to the active task, review it and intentionally remove it before switching back to `develop`, `release/*`, or `main`.
+7. Treat distill as a proposal generator, not as an auto-write path.
 
 ## Session Recovery
 
 - If `brain session finish` blocks, inspect the promotion suggestions in the closeout output first.
-- Run `brain distill --session` when you need the full promotion review note before deciding what to keep.
+- Run `brain distill --session --dry-run` when you need the full promotion review before deciding what to keep.
+- Run `brain distill --session` only when you intentionally want a tracked proposal note to carry in the active branch or PR.
 - Review the proposal, update the durable notes that matter, then retry `brain session finish`.
+- Before switching branches or returning to a protected branch, run `git status --short` and resolve repo-owned leftovers such as `.brain/resources/changes/*`, `.brain/`, `docs/`, or contract files.
 - If the session changed no durable knowledge after review, use `brain session finish --force --reason "<why>"` explicitly instead of pretending there was a durable update.
 - Keep using `brain session run -- <command>` for required verification commands before closeout.
 
