@@ -144,6 +144,11 @@ func addUpdateCommand(root *cobra.Command, flags *rootFlagsState, _ appLoader) {
 								return err
 							}
 						}
+						for _, message := range out.ProjectMigrationMessages {
+							if _, err := fmt.Fprintf(w, "message: %s\n", message); err != nil {
+								return err
+							}
+						}
 					}
 				}
 				return nil

@@ -121,7 +121,11 @@ func projectMigrationDoctorCheck(projectDir string) map[string]any {
 	case "not_brain_project":
 		return map[string]any{"name": "project_migrations", "ok": true, "details": "not a Brain project"}
 	case "current":
-		return map[string]any{"name": "project_migrations", "ok": true, "details": "current"}
+		details := "current"
+		if pending := projectMigrationPendingSummary(plan.PendingExplicit); pending != "" {
+			details += "; explicit cleanup available: " + pending
+		}
+		return map[string]any{"name": "project_migrations", "ok": true, "details": details}
 	case "pending":
 		return map[string]any{"name": "project_migrations", "ok": false, "details": "pending (" + projectMigrationPendingSummary(plan.PendingMigrations) + ")"}
 	case "broken":

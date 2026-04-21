@@ -355,6 +355,14 @@ func agentInstructionFile(projectDir, agent string) string {
 func bundleSpecs(snapshot Snapshot, policyBody string) []fileSpec {
 	specs := []fileSpec{
 		{
+			Path:          filepath.Join(snapshot.ProjectDir, ".gitignore"),
+			Kind:          "ignore",
+			BlockID:       "gitignore-session",
+			Body:          renderGitIgnore(),
+			Style:         "textblock",
+			CommentPrefix: "# ",
+		},
+		{
 			Path:      filepath.Join(snapshot.ProjectDir, "AGENTS.md"),
 			Kind:      "contract",
 			Title:     "Project Agent Contract",
@@ -449,14 +457,6 @@ func bundleSpecs(snapshot Snapshot, policyBody string) []fileSpec {
 			Kind:  "policy",
 			Body:  policyBody,
 			Style: "wholefile",
-		},
-		{
-			Path:          filepath.Join(snapshot.ProjectDir, ".gitignore"),
-			Kind:          "ignore",
-			BlockID:       "gitignore-session",
-			Body:          renderGitIgnore(),
-			Style:         "textblock",
-			CommentPrefix: "# ",
 		},
 	}
 	return specs
@@ -1437,12 +1437,5 @@ func renderAgentIntegration(agent string) string {
 }
 
 func renderGitIgnore() string {
-	return strings.TrimSpace(`
-.brain/session.json
-.brain/sessions/
-.brain/policy.override.yaml
-.brain/state/
-.codex/skills/
-.openclaw/skills/
-`) + "\n"
+	return strings.Join(localRuntimeIgnoreEntries, "\n") + "\n"
 }

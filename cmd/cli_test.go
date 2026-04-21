@@ -1865,6 +1865,12 @@ func TestCLIUpdateRefreshesInstalledSkills(t *testing.T) {
 			ProjectDir:          projectPath,
 			Status:              "applied",
 			AppliedMigrationIDs: []string{"refresh-brain-managed-context-v1", "refresh-existing-agent-integrations-v1"},
+			Migrations: []projectcontext.ProjectMigrationResult{
+				{
+					ID:       "ignore-local-runtime-state-v1",
+					Messages: []string{"Brain local runtime state is now ignored by default."},
+				},
+			},
 		}, nil
 	}
 
@@ -1874,6 +1880,9 @@ func TestCLIUpdateRefreshesInstalledSkills(t *testing.T) {
 	}
 	if !strings.Contains(output, "project migrations: applied") || !strings.Contains(output, "migration: refresh-brain-managed-context-v1") {
 		t.Fatalf("expected project migration output:\n%s", output)
+	}
+	if !strings.Contains(output, "message: ignore-local-runtime-state-v1: Brain local runtime state is now ignored by default.") {
+		t.Fatalf("expected project migration message output:\n%s", output)
 	}
 	if len(calls) != 2 || calls[0] != "global:codex" || calls[1] != "local:copilot" {
 		t.Fatalf("unexpected refresh calls: %v", calls)
@@ -1914,12 +1923,21 @@ func TestCLIUpdateJSONIncludesProjectMigrationStatus(t *testing.T) {
 			ProjectDir:          projectPath,
 			Status:              "applied",
 			AppliedMigrationIDs: []string{"refresh-brain-managed-context-v1"},
+			Migrations: []projectcontext.ProjectMigrationResult{
+				{
+					ID:       "ignore-local-runtime-state-v1",
+					Messages: []string{"Review and commit the resulting .gitignore and index cleanup diff."},
+				},
+			},
 		}, nil
 	}
 
 	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "update"))
 	if !strings.Contains(jsonOut, "\"project_migration_status\": \"applied\"") || !strings.Contains(jsonOut, "\"applied_project_migrations\": [") {
 		t.Fatalf("expected project migration fields in json output:\n%s", jsonOut)
+	}
+	if !strings.Contains(jsonOut, "\"project_migration_messages\": [") {
+		t.Fatalf("expected project migration messages in json output:\n%s", jsonOut)
 	}
 }
 
@@ -2107,7 +2125,7 @@ func TestCLIDoctorReportsProjectMigrationStatus(t *testing.T) {
 	}
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "find", "overview"))
 	currentAfterRepair := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "doctor"))
-	if !strings.Contains(currentAfterRepair, "project_migrations: ok (current)") {
+	if !strings.Contains(currentAfterRepair, "project_migrations: ok (current; explicit cleanup available: ignore-local-runtime-state-v1)") {
 		t.Fatalf("expected current project migrations in doctor output:\n%s", currentAfterRepair)
 	}
 
@@ -2117,6 +2135,70 @@ func TestCLIDoctorReportsProjectMigrationStatus(t *testing.T) {
 	broken := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "doctor"))
 	if !strings.Contains(broken, "project_migrations: fail (broken") {
 		t.Fatalf("expected broken project migrations in doctor output:\n%s", broken)
+	}
+}
+
+func TestCLIPreflightDoesNotRunExplicitGitCleanupMigration(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	initGitProject(t, env.project)
+
+	runtimePaths := []string{
+		filepath.Join(env.project, ".brain", "session.json"),
+		filepath.Join(env.project, ".brain", "sessions", "ledger.json"),
+		filepath.Join(env.project, ".brain", "state", "history.jsonl"),
+	}
+	for _, path := range runtimePaths {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("tracked\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runGitCommand(t, env.project, "add", "-f", ".brain/session.json", ".brain/sessions/ledger.json", ".brain/state/history.jsonl")
+
+	ledgerPath := filepath.Join(env.project, ".brain", "state", "project-migrations.json")
+	if err := os.Remove(ledgerPath); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "find", "overview"))
+	tracked := gitOutput(t, env.project, "ls-files", "--cached", "--", ".brain/session.json", ".brain/sessions", ".brain/state")
+	if !strings.Contains(tracked, ".brain/session.json") || !strings.Contains(tracked, ".brain/state/history.jsonl") {
+		t.Fatalf("expected explicit cleanup migration to stay pending during preflight, got:\n%s", tracked)
+	}
+}
+
+func TestCLIContextMigrateReportsExplicitGitCleanup(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	initGitProject(t, env.project)
+
+	sessionPath := filepath.Join(env.project, ".brain", "session.json")
+	if err := os.WriteFile(sessionPath, []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitCommand(t, env.project, "add", "-f", ".brain/session.json")
+
+	ledgerPath := filepath.Join(env.project, ".brain", "state", "project-migrations.json")
+	if err := os.Remove(ledgerPath); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+
+	output := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "migrate"))
+	if !strings.Contains(output, "migration: ignore-local-runtime-state-v1") {
+		t.Fatalf("expected explicit cleanup migration in output:\n%s", output)
+	}
+	if !strings.Contains(output, "message: Removed from Git tracking but kept on disk") {
+		t.Fatalf("expected cleanup message in output:\n%s", output)
+	}
+	tracked := gitOutput(t, env.project, "ls-files", "--cached", "--", ".brain/session.json")
+	if strings.TrimSpace(tracked) != "" {
+		t.Fatalf("expected session file to be removed from git index, got:\n%s", tracked)
+	}
+	if _, err := os.Stat(sessionPath); err != nil {
+		t.Fatalf("expected session file to remain on disk: %v", err)
 	}
 }
 
@@ -2166,4 +2248,15 @@ func runGitCommand(t *testing.T, dir string, args ...string) {
 	if err != nil {
 		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, string(output))
 	}
+}
+
+func gitOutput(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, string(output))
+	}
+	return string(output)
 }
