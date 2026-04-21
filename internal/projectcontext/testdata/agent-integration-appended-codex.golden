@@ -14,10 +14,10 @@ Read these when Brain context is relevant:
 - `.brain/context/current-state.md`
 
 When working with Brain-managed repos:
-- start with `brain context compile --task "<task>"` for the smallest justified packet
+- start with `brain prep --task "<task>"` when no validated session is active
+- if a validated session already exists, run `brain prep`
+- use `brain context compile --task "<task>"` when you need the lower-level packet compiler directly
 - use the `brain` CLI for project-local memory and context workflows
-- if no validated session is active, run `brain session start --task "<task>"`
-- if a session is already active, run `brain session validate` before substantial work
 - use `brain session run -- <command>` for required verification commands
 - if finish blocks, review the promotion suggestions or run `brain distill --session --dry-run`
 - finish with `brain session finish`
