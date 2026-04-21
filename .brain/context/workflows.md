@@ -8,10 +8,10 @@ Use this file for agent operating workflow inside the repo.
 
 ## Startup
 
-1. If no validated session is active, run `brain session start --task "<task>"`.
-2. If a session already exists, run `brain session validate`.
-3. Read `AGENTS.md`, `.brain/policy.yaml`, and the linked context files needed for the task.
-4. Run `brain context compile --task "<task>"` for the smallest justified working set.
+1. If no validated session is active, run `brain prep --task "<task>"`.
+2. If a session already exists, run `brain prep`.
+3. Read `AGENTS.md`, `.brain/policy.yaml`, and the linked context files still needed for the task.
+4. Use `brain context compile --task "<task>"` only when you need the lower-level packet compiler directly.
 5. If project memory still matters, run `brain find brain` or `brain search "brain <task>"`.
 
 ## During Work

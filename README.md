@@ -153,9 +153,8 @@ In any project directory:
 brain init --project .
 brain doctor --project .
 brain context install --project .
-brain search --project . "architecture"
-brain context compile --project . --task "auth flow"
-brain session start --project . --task "tighten auth flow"
+brain prep --project . --task "tighten auth flow"
+brain search --project . "tighten auth flow"
 brain session run --project . -- go test ./...
 brain session finish --project . --summary "auth flow tightened"
 ```
@@ -180,6 +179,7 @@ If you already use separate delivery tools, Brain is designed to complement them
 - `brain init`: bootstrap a project-local Brain workspace
 - `brain adopt`: adopt an existing repo into the Brain-managed context model
 - `brain doctor`: validate local Brain setup
+- `brain prep`: start or reuse a session and compile the first task packet
 - `brain read`, `brain edit`: inspect and update managed markdown
 - `brain find`, `brain search`: project-local retrieval
 - `brain context ...`: install, refresh, compile, inspect, and analyze task context

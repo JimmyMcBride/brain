@@ -29,6 +29,7 @@ func TestGeneratedDocumentGoldens(t *testing.T) {
 		{"overview.golden", ".brain/context/overview.md"},
 		{"current-state.golden", ".brain/context/current-state.md"},
 		{"policy.golden", ".brain/policy.yaml"},
+		{"project-workflows.golden", "docs/project-workflows.md"},
 		{"gitignore.golden", ".gitignore"},
 	}
 

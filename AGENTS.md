@@ -31,10 +31,10 @@ Read the linked context files before substantial work. Prefer the `brain` skill 
 
 ## Required Workflow
 
-1. If no validated session is active, run `brain session start --task "<task>"`.
-2. If a session is already active, run `brain session validate` before substantial work.
-3. Read this file and the linked context files needed for the task.
-4. Compile the smallest justified working set with `brain context compile --task "<task>"`.
+1. If no validated session is active, run `brain prep --task "<task>"`.
+2. If a session is already active, run `brain prep`.
+3. Read this file and the linked context files still needed for the task.
+4. Use `brain context compile --task "<task>"` only when you need the lower-level packet compiler directly.
 5. Retrieve project memory with `brain find brain` or `brain search "brain <task>"` when the compiled packet is not enough.
 6. Use `brain edit` for durable context updates to AGENTS.md, docs, or .brain notes.
 7. Use `brain session run -- <command>` for required verification commands.
