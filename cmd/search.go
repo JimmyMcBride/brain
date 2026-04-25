@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"brain/internal/search"
+	"brain/internal/session"
 
 	"github.com/spf13/cobra"
 )
@@ -39,6 +40,9 @@ func addSearchCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoa
 			if explain {
 				results, err := appCtx.Search.SearchWithExplainOptions(cmd.Context(), args[0], limit, searchOpts)
 				if err != nil {
+					return err
+				}
+				if err := appCtx.Session.RecordPostPacketSearch(flags.projectPath, postPacketSearchInput(args[0], limit, explain, inject, results)); err != nil {
 					return err
 				}
 				if inject {
@@ -92,6 +96,9 @@ func addSearchCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoa
 
 			results, err := appCtx.Search.SearchWithOptions(cmd.Context(), args[0], limit, searchOpts)
 			if err != nil {
+				return err
+			}
+			if err := appCtx.Session.RecordPostPacketSearch(flags.projectPath, postPacketSearchInput(args[0], limit, explain, inject, results)); err != nil {
 				return err
 			}
 			if inject {
@@ -207,4 +214,25 @@ func addSearchCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLoa
 
 	searchCmd.AddCommand(statusCmd)
 	root.AddCommand(searchCmd)
+}
+
+func postPacketSearchInput(query string, limit int, explain, inject bool, results []search.Result) session.PostPacketSearchInput {
+	top := make([]session.PostPacketSearchResult, 0, min(len(results), 5))
+	for i, result := range results {
+		if i >= 5 {
+			break
+		}
+		top = append(top, session.PostPacketSearchResult{
+			Path:    result.NotePath,
+			Heading: result.Heading,
+		})
+	}
+	return session.PostPacketSearchInput{
+		Query:       query,
+		Limit:       limit,
+		ResultCount: len(results),
+		Explain:     explain,
+		Inject:      inject,
+		TopResults:  top,
+	}
 }

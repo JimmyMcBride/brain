@@ -146,6 +146,49 @@ func RenderPacketExplanationHuman(w io.Writer, explanation *PacketExplanation) e
 			}
 		}
 	}
+	if len(explanation.Downstream.PostPacketSearches) == 0 {
+		if _, err := io.WriteString(w, "- Post-packet searches: none recorded.\n"); err != nil {
+			return err
+		}
+	} else {
+		for _, search := range explanation.Downstream.PostPacketSearches {
+			modes := []string{}
+			if search.Explain {
+				modes = append(modes, "explain")
+			}
+			if search.Inject {
+				modes = append(modes, "inject")
+			}
+			modeLabel := ""
+			if len(modes) != 0 {
+				modeLabel = " [" + strings.Join(modes, ", ") + "]"
+			}
+			if _, err := fmt.Fprintf(w, "- Post-packet search%s: `%s` results=%d limit=%d\n", modeLabel, search.Query, search.ResultCount, search.Limit); err != nil {
+				return err
+			}
+			if len(search.TopResultPaths) != 0 {
+				if _, err := fmt.Fprintf(w, "  Top results: %s\n", strings.Join(search.TopResultPaths, ", ")); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	if len(explanation.Downstream.ContextAccesses) == 0 {
+		if _, err := io.WriteString(w, "- Context access: none recorded.\n"); err != nil {
+			return err
+		}
+	} else {
+		for _, access := range explanation.Downstream.ContextAccesses {
+			if _, err := fmt.Fprintf(w, "- Context access [%s/%s]: `%s`\n", access.Method, access.CommandFamily, access.Command); err != nil {
+				return err
+			}
+			if len(access.Paths) != 0 {
+				if _, err := fmt.Fprintf(w, "  Paths: %s\n", strings.Join(access.Paths, ", ")); err != nil {
+					return err
+				}
+			}
+		}
+	}
 	if explanation.Downstream.SessionClose == nil {
 		if _, err := io.WriteString(w, "- Session closeout: session is still active or no closeout event was recorded.\n"); err != nil {
 			return err
@@ -253,6 +296,140 @@ func RenderContextStatsHuman(w io.Writer, stats *ContextStats) error {
 	return nil
 }
 
+func RenderContextEffectivenessHuman(w io.Writer, effectiveness *ContextEffectiveness) error {
+	if effectiveness == nil {
+		return errors.New("context effectiveness report is required")
+	}
+	if _, err := fmt.Fprintf(
+		w,
+		"## Context Effectiveness\n\n- Sessions analyzed: %d\n- Packets analyzed: %d\n- Items analyzed: %d\n\n",
+		effectiveness.SessionsAnalyzed,
+		effectiveness.PacketsAnalyzed,
+		effectiveness.ItemsAnalyzed,
+	); err != nil {
+		return err
+	}
+	if err := renderPacketUse(w, effectiveness.PacketUse); err != nil {
+		return err
+	}
+	if err := renderCacheAndBudget(w, effectiveness.Cache, effectiveness.Budget); err != nil {
+		return err
+	}
+	if err := renderOutcomeSummary(w, effectiveness.Outcomes); err != nil {
+		return err
+	}
+	if err := renderUtilityGroup(w, "Likely Signal", effectiveness.TopSignal); err != nil {
+		return err
+	}
+	if err := renderUtilityGroup(w, "Likely Noise", effectiveness.TopNoise); err != nil {
+		return err
+	}
+	if err := renderOmittedDocs(w, "Likely Misses", effectiveness.FrequentlyOmittedDocs); err != nil {
+		return err
+	}
+	if err := renderStringList(w, "Telemetry Gaps", effectiveness.TelemetryGaps); err != nil {
+		return err
+	}
+	return renderStringList(w, "Recommendations", effectiveness.Recommendations)
+}
+
+func renderPacketUse(w io.Writer, summary PacketUseSummary) error {
+	if _, err := io.WriteString(w, "## Packet Use\n\n"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(
+		w,
+		"- Sessions with packets: %d\n- Single-packet sessions: %d\n- Multi-packet sessions: %d\n- Average packets per session: %.2f\n- Max packets in one session: %d\n",
+		summary.SessionsWithPackets,
+		summary.SinglePacketSessions,
+		summary.MultiPacketSessions,
+		summary.AveragePacketsPerSession,
+		summary.MaxPacketsInSession,
+	); err != nil {
+		return err
+	}
+	if !summary.FirstPacketAt.IsZero() && !summary.LastPacketAt.IsZero() {
+		if _, err := fmt.Fprintf(w, "- Window: %s to %s\n", summary.FirstPacketAt.Format(timeLayout), summary.LastPacketAt.Format(timeLayout)); err != nil {
+			return err
+		}
+	}
+	_, err := io.WriteString(w, "\n")
+	return err
+}
+
+func renderCacheAndBudget(w io.Writer, cache PacketCacheSummary, budget PacketBudgetSummary) error {
+	if _, err := io.WriteString(w, "## Cache And Budget\n\n"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(
+		w,
+		"- Fresh packets: %d\n- Reused packets: %d\n- Delta packets: %d\n- Unknown cache status: %d\n- Full packets: %d\n- Compact packets: %d\n",
+		cache.FreshPackets,
+		cache.ReusedPackets,
+		cache.DeltaPackets,
+		cache.UnknownPackets,
+		cache.FullPackets,
+		cache.CompactPackets,
+	); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(
+		w,
+		"- Full packet average target: %d tokens\n- Full packet average used: %d tokens\n- Full packet average remaining: %d tokens\n- Full packet average omitted candidates: %.2f\n- Fresh packets under pressure: %d\n- Mandatory over target: %d\n- Pressure rate: %.1f%%\n\n",
+		budget.AverageFullTarget,
+		budget.AverageFullUsed,
+		budget.AverageFullRemaining,
+		budget.AverageFullOmitted,
+		budget.FreshPacketsUnderPressure,
+		budget.MandatoryOverTarget,
+		budget.PressureRate*100,
+	); err != nil {
+		return err
+	}
+	return nil
+}
+
+func renderOutcomeSummary(w io.Writer, outcomes PacketOutcomeSummary) error {
+	if _, err := io.WriteString(w, "## Outcomes\n\n"); err != nil {
+		return err
+	}
+	_, err := fmt.Fprintf(
+		w,
+		"- Packets with expansions: %d\n- Expansion events: %d\n- Packets with post-packet search: %d\n- Post-packet search events: %d\n- Packets with context access: %d\n- Context access events: %d\n- Omitted docs accessed after omission: %d\n- Packets with successful verification: %d\n- Successful verification events: %d\n- Failed verification events: %d\n- Packets with durable updates: %d\n- Durable update events: %d\n- Successful session closes: %d\n\n",
+		outcomes.PacketsWithExpansions,
+		outcomes.ExpansionEvents,
+		outcomes.PacketsWithPostPacketSearch,
+		outcomes.PostPacketSearchEvents,
+		outcomes.PacketsWithContextAccess,
+		outcomes.ContextAccessEvents,
+		outcomes.OmittedDocsAccessedAfterOmission,
+		outcomes.PacketsWithSuccessfulVerification,
+		outcomes.SuccessfulVerificationEvents,
+		outcomes.FailedVerificationEvents,
+		outcomes.PacketsWithDurableUpdates,
+		outcomes.DurableUpdateEvents,
+		outcomes.SuccessfulSessionCloses,
+	)
+	return err
+}
+
+func renderStringList(w io.Writer, title string, items []string) error {
+	if _, err := fmt.Fprintf(w, "## %s\n\n", title); err != nil {
+		return err
+	}
+	if len(items) == 0 {
+		_, err := io.WriteString(w, "- None.\n\n")
+		return err
+	}
+	for _, item := range items {
+		if _, err := fmt.Fprintf(w, "- %s\n", item); err != nil {
+			return err
+		}
+	}
+	_, err := io.WriteString(w, "\n")
+	return err
+}
+
 func renderUtilityGroup(w io.Writer, title string, items []UtilityItemStat) error {
 	if _, err := fmt.Fprintf(w, "## %s\n\n", title); err != nil {
 		return err
@@ -312,7 +489,11 @@ func renderOmittedDocs(w io.Writer, title string, items []OmittedDocStat) error 
 		return err
 	}
 	for _, item := range items {
-		if _, err := fmt.Fprintf(w, "- `%s`: omitted in %d fresh packet(s)\n", item.Path, item.OmittedPackets); err != nil {
+		extra := ""
+		if item.AccessedAfterOmitted > 0 {
+			extra = fmt.Sprintf(", accessed after omission in %d packet(s)", item.AccessedAfterOmitted)
+		}
+		if _, err := fmt.Fprintf(w, "- `%s`: omitted in %d fresh packet(s)%s\n", item.Path, item.OmittedPackets, extra); err != nil {
 			return err
 		}
 	}

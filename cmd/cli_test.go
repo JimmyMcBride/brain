@@ -1659,6 +1659,85 @@ Compiler telemetry signal note for stats output.
 	}
 }
 
+func TestCLIContextEffectivenessReportsPacketUseAndGaps(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	writeCLIFile(t, filepath.Join(env.project, ".brain", "resources", "references", "effectiveness-signal.md"), `---
+title: Effectiveness Signal
+type: resource
+updated: 2026-04-25T00:00:00Z
+---
+# Effectiveness Signal
+
+## Notes
+
+Effectiveness signal note for context packet reporting.
+`)
+	initGitProject(t, env.project)
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "start", "--project", env.project, "--task", "effectiveness signal"))
+
+	compiledJSON := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "compile"))
+	var compiled map[string]any
+	if err := json.Unmarshal([]byte(compiledJSON), &compiled); err != nil {
+		t.Fatalf("parse compile payload: %v\n%s", err, compiledJSON)
+	}
+	workingSet := compiled["working_set"].(map[string]any)
+	notes := workingSet["notes"].([]any)
+	if len(notes) == 0 {
+		t.Fatalf("expected compile packet to include at least one note: %#v", compiled)
+	}
+	firstNote := notes[0].(map[string]any)
+	anchor := firstNote["anchor"].(map[string]any)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "read", anchor["path"].(string)))
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "search", "effectiveness signal"))
+	if runtime.GOOS == "windows" {
+		requireOK(t, env.run(t, "", "--config", env.config, "session", "run", "--project", env.project, "--", "git", "grep", "Effectiveness", "--", ".brain/resources/references/effectiveness-signal.md"))
+	} else {
+		requireOK(t, env.run(t, "", "--config", env.config, "session", "run", "--project", env.project, "--", "cat", ".brain/resources/references/effectiveness-signal.md"))
+	}
+	requireOK(t, env.run(t, "", "--config", env.config, "session", "run", "--project", env.project, "--", "go", "version"))
+
+	human := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "effectiveness", "--limit", "3"))
+	for _, section := range []string{"## Context Effectiveness", "## Packet Use", "## Cache And Budget", "## Outcomes", "## Telemetry Gaps", "## Recommendations"} {
+		if !strings.Contains(human, section) {
+			t.Fatalf("expected section %q in effectiveness output:\n%s", section, human)
+		}
+	}
+	if !strings.Contains(human, "Packets with successful verification:") {
+		t.Fatalf("expected verification outcome summary:\n%s", human)
+	}
+	if !strings.Contains(human, "Post-packet search events:") || !strings.Contains(human, "Context access events:") {
+		t.Fatalf("expected search and context-access outcome summary:\n%s", human)
+	}
+	if !strings.Contains(human, "Raw shell, editor, and agent file reads outside Brain remain invisible.") {
+		t.Fatalf("expected telemetry caveat:\n%s", human)
+	}
+	explainHuman := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "explain", "--last"))
+	if !strings.Contains(explainHuman, "Post-packet search") || !strings.Contains(explainHuman, "Context access") {
+		t.Fatalf("expected explain output to render downstream search/access outcomes:\n%s", explainHuman)
+	}
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "effectiveness", "--limit", "3"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse effectiveness payload: %v\n%s", err, jsonOut)
+	}
+	packetUse, ok := payload["packet_use"].(map[string]any)
+	if !ok || packetUse["packets_analyzed"].(float64) == 0 {
+		t.Fatalf("expected packet use summary in payload: %#v", payload)
+	}
+	outcomes, ok := payload["outcomes"].(map[string]any)
+	if !ok || outcomes["successful_verification_events"].(float64) == 0 {
+		t.Fatalf("expected outcome summary in payload: %#v", payload)
+	}
+	if outcomes["post_packet_search_events"].(float64) == 0 || outcomes["context_access_events"].(float64) == 0 {
+		t.Fatalf("expected search and context-access counts in payload: %#v", outcomes)
+	}
+	if len(payload["telemetry_gaps"].([]any)) == 0 || len(payload["recommendations"].([]any)) == 0 {
+		t.Fatalf("expected telemetry gaps and recommendations in payload: %#v", payload)
+	}
+}
+
 func TestCLISessionWorkflow(t *testing.T) {
 	env := newCLIEnv(t)
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))

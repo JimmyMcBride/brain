@@ -85,6 +85,8 @@ Use these commands by default:
   - Inspect the latest recorded compiled packet, including cache status, reuse or delta lineage, later expansions, and downstream session outcomes.
 - `brain context stats`
   - Summarize likely signal, likely noise, repeated expansions, verification links, fresh-packet budget pressure, and recurring omitted markdown docs from local compiler telemetry.
+- `brain context effectiveness`
+  - Assess packet usage, cache behavior, budget pressure, outcome links, likely misses, telemetry gaps, and recommended packet-shaping follow-ups.
 - `brain distill --session`
 - `brain distill --session --dry-run`
   - Create a session-scoped promotion-review proposal with source provenance, promotion diagnostics, and suggested durable note updates.
@@ -161,11 +163,12 @@ Use these commands by default:
 5. Use `brain context compile --task "<task>"` when you need the lower-level compiler directly without the startup orchestration.
 6. `brain context explain --last` when you need to inspect why the latest packet looked the way it did, whether Brain reused or delta-linked it, which items were expanded later, or which downstream verification and closeout outcomes were recorded.
 7. `brain context stats` when you are tuning compiler behavior and want a compact view of likely signal, likely noise, repeated expansions, verification-link patterns, fresh-packet budget pressure, and recurring omitted docs from local telemetry.
-8. `brain context structure` when you need repo boundaries, entrypoints, config surfaces, or test surfaces before deeper retrieval.
-9. `brain context live --task "<task>"` when you need current session, changed-file, touched-boundary, nearby-test, verification-recipe, or policy signals, not just compiled startup context.
-10. `brain context assemble --task "<task>"` when you need the broader typed packet instead of the compiler-first working set.
-11. `brain context assemble --explain` when you need to inspect why Brain chose its broader packet and what it left nearby.
-12. `brain context load --level ...` only when you need the older static-bundle compatibility view.
+8. `brain context effectiveness` when you need a higher-level read on whether packet telemetry suggests useful context, likely misses, low-signal includes, telemetry gaps, or concrete packet-shaping follow-ups.
+9. `brain context structure` when you need repo boundaries, entrypoints, config surfaces, or test surfaces before deeper retrieval.
+10. `brain context live --task "<task>"` when you need current session, changed-file, touched-boundary, nearby-test, verification-recipe, or policy signals, not just compiled startup context.
+11. `brain context assemble --task "<task>"` when you need the broader typed packet instead of the compiler-first working set.
+12. `brain context assemble --explain` when you need to inspect why Brain chose its broader packet and what it left nearby.
+13. `brain context load --level ...` only when you need the older static-bundle compatibility view.
 
 ## Distillation Workflow
 

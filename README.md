@@ -186,7 +186,7 @@ If you already use separate delivery tools, Brain is designed to complement them
 - `brain prep`: start or reuse a session and compile the first task packet
 - `brain read`, `brain edit`: inspect and update managed markdown
 - `brain find`, `brain search`: project-local retrieval
-- `brain context ...`: install, refresh, compile, inspect, and analyze task context
+- `brain context ...`: install, refresh, compile, inspect, and analyze task context, including packet effectiveness
 - `brain distill --session`: create a reviewed distillation proposal from active session work
 - `brain session ...`: enforce workflow and verification rules
 - `brain skills ...`: install the Brain skill for agent runtimes

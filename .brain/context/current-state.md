@@ -29,6 +29,8 @@ This file is a deterministic snapshot of the repository state at the last refres
 
 ## Local Notes
 
+- 2026-04-25: Added `brain context effectiveness` as the first context-effectiveness reporting surface. It summarizes recorded packet usage, cache behavior, budget pressure, outcome links, likely misses from repeated omissions, known telemetry gaps, and recommended packet-shaping follow-ups before Brain adds guide-packet behavior or new telemetry.
+- 2026-04-25: Added post-packet search and Brain-routed context-access telemetry. `brain search` now records compact post-packet search outcomes, `brain session run` classifies direct read/search-like commands, and context effectiveness/explain reports can surface omitted markdown docs that were later accessed.
 - 2026-04-20: Added `brain prep` as the default Brain-first startup path. It validates or starts the session and compiles the startup packet in one step, while `brain context compile` remains the lower-level manual path.
 - 2026-04-20: Gitflow operating source of truth now treats `develop` as the active long-lived integration branch, `release/vX.Y.Z` as the protected release stabilization branch, and `main` as the protected production branch. Merge to `main` remains the publish event.
 - 2026-04-20: After every PR merge into `develop`, fetch latest remote state, check out updated `origin/develop`, and refresh Brain context so project memory tracks latest `develop`. Refresh `.plan/` context too if a repo-local plan workspace exists later.
