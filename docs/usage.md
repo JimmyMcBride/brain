@@ -161,12 +161,12 @@ brain context load --project . --level 3 --query "auth flow"
 - reports target, used, remaining, reserve, omitted-candidate budget diagnostics, and reuse or delta lineage in compile output and `context explain`
 - records full packet bodies plus lineage metadata into the active session when a session is present, but still works normally without a session
 
-`context explain` and `context stats` are analysis surfaces for the compiler:
+`context explain`, `context stats`, and `context effectiveness` are analysis surfaces for the compiler:
 
-- `context explain --last` inspects the latest recorded packet, including cache status, reuse or delta lineage, invalidation reasons, included items, later expansions, and downstream outcomes such as verification runs, durable updates, and closeout status
+- `context explain --last` inspects the latest recorded packet, including cache status, reuse or delta lineage, invalidation reasons, included items, later expansions, post-packet searches, Brain-routed context access, and downstream outcomes such as verification runs, durable updates, and closeout status
 - `context explain --packet <hash>` lets you inspect an older packet when you need to debug a specific compile result
 - `context stats` summarizes likely signal items, likely noise items, repeated expansion patterns, common verification links, fresh-packet budget-pressure frequency, and recurring omitted markdown docs from local compiler telemetry
-- `context effectiveness` turns packet telemetry into a higher-level report on packet usage, cache behavior, budget pressure, outcome links, likely misses, telemetry gaps, and recommended packet-shaping follow-ups
+- `context effectiveness` turns packet telemetry into a higher-level report on packet usage, cache behavior, budget pressure, post-packet searches, Brain-routed context reads/searches, likely misses from omitted docs later accessed, telemetry gaps, and recommended packet-shaping follow-ups
 
 `context structure` is the structural repo inspection surface:
 

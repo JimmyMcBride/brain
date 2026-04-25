@@ -64,6 +64,8 @@ const (
 	PacketTelemetryEventVerification  PacketTelemetryEventType = "verification_recorded"
 	PacketTelemetryEventDurableUpdate PacketTelemetryEventType = "durable_update_recorded"
 	PacketTelemetryEventSessionClosed PacketTelemetryEventType = "session_closed"
+	PacketTelemetryEventSearch        PacketTelemetryEventType = "post_packet_search"
+	PacketTelemetryEventContextAccess PacketTelemetryEventType = "context_access_recorded"
 	packetTelemetryVersion                                     = 1
 	maxSessionPacketRecords                                    = 64
 	maxSessionTelemetryEvents                                  = 256
@@ -163,6 +165,27 @@ type RunResult struct {
 	Stdout    string `json:"stdout,omitempty"`
 	Stderr    string `json:"stderr,omitempty"`
 	Recorded  bool   `json:"recorded"`
+}
+
+type PostPacketSearchResult struct {
+	Path    string `json:"path"`
+	Heading string `json:"heading,omitempty"`
+}
+
+type PostPacketSearchInput struct {
+	Query       string                   `json:"query"`
+	Limit       int                      `json:"limit"`
+	ResultCount int                      `json:"result_count"`
+	Explain     bool                     `json:"explain"`
+	Inject      bool                     `json:"inject"`
+	TopResults  []PostPacketSearchResult `json:"top_results,omitempty"`
+}
+
+type ContextAccessInput struct {
+	Method        string   `json:"method"`
+	CommandFamily string   `json:"command_family"`
+	Command       string   `json:"command"`
+	Paths         []string `json:"paths"`
 }
 
 type ValidationResult struct {
@@ -489,6 +512,7 @@ func (m *Manager) RunCommand(ctx context.Context, req RunRequest, stdout, stderr
 		Command:   strings.Join(req.Argv, " "),
 		ExitCode:  exitCode,
 	}
+	contextAccess := classifyContextAccess(projectDir, record.Argv, record.Command)
 
 	result := &RunResult{
 		SessionID: active.ID,
@@ -499,7 +523,7 @@ func (m *Manager) RunCommand(ctx context.Context, req RunRequest, stdout, stderr
 		result.Stdout = outBuf.String()
 		result.Stderr = errBuf.String()
 	}
-	if err := appendCommandRun(activePath, active.ID, record); err != nil {
+	if err := appendCommandRun(activePath, active.ID, record, contextAccess); err != nil {
 		result.Recorded = false
 		return result, err
 	}
@@ -538,6 +562,32 @@ func (m *Manager) RecordPacketExpansion(projectDir, path string) error {
 	}
 	activePath := filepath.Join(projectDir, filepath.FromSlash(policy.Session.ActiveFile))
 	return appendExpansionEvent(activePath, filepath.ToSlash(strings.TrimSpace(path)))
+}
+
+func (m *Manager) RecordPostPacketSearch(projectDir string, input PostPacketSearchInput) error {
+	projectDir, err := filepath.Abs(defaultProjectDir(projectDir))
+	if err != nil {
+		return err
+	}
+	policy, _, _, err := projectcontext.LoadPolicy(projectDir)
+	if err != nil {
+		return err
+	}
+	activePath := filepath.Join(projectDir, filepath.FromSlash(policy.Session.ActiveFile))
+	return appendPostPacketSearchEvent(activePath, input)
+}
+
+func (m *Manager) RecordContextAccess(projectDir string, input ContextAccessInput) error {
+	projectDir, err := filepath.Abs(defaultProjectDir(projectDir))
+	if err != nil {
+		return err
+	}
+	policy, _, _, err := projectcontext.LoadPolicy(projectDir)
+	if err != nil {
+		return err
+	}
+	activePath := filepath.Join(projectDir, filepath.FromSlash(policy.Session.ActiveFile))
+	return appendContextAccessEvent(activePath, input)
 }
 
 func (m *Manager) preflightChecks(ctx context.Context, projectDir, configPath string, policy *projectcontext.Policy) ([]Check, error) {
@@ -726,7 +776,7 @@ func loadActiveSessionForRecording(path string) (*ActiveSession, error) {
 	return active, nil
 }
 
-func appendCommandRun(path, sessionID string, record CommandRun) error {
+func appendCommandRun(path, sessionID string, record CommandRun, contextAccess *ContextAccessInput) error {
 	return withSessionLock(path, func() error {
 		active, err := loadActiveSession(path)
 		if err != nil {
@@ -747,6 +797,9 @@ func appendCommandRun(path, sessionID string, record CommandRun) error {
 			Command:    record.Command,
 			Success:    boolPtr(record.ExitCode == 0),
 		})
+		if contextAccess != nil {
+			appendContextAccessTelemetry(active, *contextAccess, record.EndedAt)
+		}
 		return saveActiveSession(path, active)
 	})
 }
@@ -809,6 +862,86 @@ func appendExpansionEvent(path, anchorPath string) error {
 		})
 		return saveActiveSession(path, active)
 	})
+}
+
+func appendPostPacketSearchEvent(path string, input PostPacketSearchInput) error {
+	return withSessionLock(path, func() error {
+		active, err := loadActiveSession(path)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return nil
+			}
+			return err
+		}
+		if active.Status != "active" {
+			return nil
+		}
+		ts := time.Now().UTC()
+		packetHash := latestPacketHashBefore(active, ts)
+		if packetHash == "" {
+			return nil
+		}
+		paths, headings := topSearchMetadata(input.TopResults)
+		appendTelemetryEvent(active, PacketTelemetryEvent{
+			Type:       PacketTelemetryEventSearch,
+			Timestamp:  ts,
+			SessionID:  active.ID,
+			PacketHash: packetHash,
+			Command:    "brain search",
+			Metadata: map[string]any{
+				"query":               strings.TrimSpace(input.Query),
+				"limit":               input.Limit,
+				"result_count":        input.ResultCount,
+				"explain":             input.Explain,
+				"inject":              input.Inject,
+				"top_result_paths":    paths,
+				"top_result_headings": headings,
+			},
+		})
+		return saveActiveSession(path, active)
+	})
+}
+
+func appendContextAccessEvent(path string, input ContextAccessInput) error {
+	return withSessionLock(path, func() error {
+		active, err := loadActiveSession(path)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return nil
+			}
+			return err
+		}
+		if active.Status != "active" {
+			return nil
+		}
+		if err := appendContextAccessTelemetry(active, input, time.Now().UTC()); err != nil {
+			return err
+		}
+		return saveActiveSession(path, active)
+	})
+}
+
+func appendContextAccessTelemetry(active *ActiveSession, input ContextAccessInput, ts time.Time) error {
+	if active == nil || len(input.Paths) == 0 {
+		return nil
+	}
+	packetHash := latestPacketHashBefore(active, ts)
+	if packetHash == "" {
+		return nil
+	}
+	appendTelemetryEvent(active, PacketTelemetryEvent{
+		Type:       PacketTelemetryEventContextAccess,
+		Timestamp:  ts.UTC(),
+		SessionID:  active.ID,
+		PacketHash: packetHash,
+		Command:    strings.TrimSpace(input.Command),
+		Metadata: map[string]any{
+			"method":         strings.TrimSpace(input.Method),
+			"command_family": strings.TrimSpace(input.CommandFamily),
+			"paths":          append([]string(nil), input.Paths...),
+		},
+	})
+	return nil
 }
 
 func packetRecordFromCompiledPacket(packet *projectcontext.CompiledPacket, fingerprintInputs projectcontext.PacketFingerprintInputs, meta projectcontext.PacketCacheMetadata) PacketRecord {
@@ -967,6 +1100,188 @@ func trimTelemetryEvents(active *ActiveSession) {
 		return
 	}
 	active.TelemetryEvents = append([]PacketTelemetryEvent(nil), active.TelemetryEvents[len(active.TelemetryEvents)-maxSessionTelemetryEvents:]...)
+}
+
+func classifyContextAccess(projectDir string, argv []string, command string) *ContextAccessInput {
+	if len(argv) == 0 {
+		return nil
+	}
+	family, method, pathArgs := classifyContextCommand(argv)
+	if family == "" {
+		return nil
+	}
+	paths := resolveContextAccessPaths(projectDir, pathArgs)
+	if len(paths) == 0 {
+		return nil
+	}
+	return &ContextAccessInput{
+		Method:        method,
+		CommandFamily: family,
+		Command:       command,
+		Paths:         paths,
+	}
+}
+
+func classifyContextCommand(argv []string) (string, string, []string) {
+	if len(argv) == 0 {
+		return "", "", nil
+	}
+	name := commandBase(argv[0])
+	readCommands := map[string]struct{}{
+		"cat":  {},
+		"sed":  {},
+		"head": {},
+		"tail": {},
+		"nl":   {},
+		"less": {},
+		"more": {},
+	}
+	if _, ok := readCommands[name]; ok {
+		return name, "file_read", argv[1:]
+	}
+	switch name {
+	case "rg", "grep":
+		return name, "shell_search", searchCommandPathArgs(argv[1:])
+	case "git":
+		if len(argv) >= 2 && argv[1] == "grep" {
+			return "git grep", "shell_search", searchCommandPathArgs(argv[2:])
+		}
+	}
+	return "", "", nil
+}
+
+func searchCommandPathArgs(args []string) []string {
+	if len(args) == 0 {
+		return nil
+	}
+	patternValueFlags := map[string]struct{}{
+		"-e":       {},
+		"--regexp": {},
+		"-f":       {},
+		"--file":   {},
+	}
+	optionValueFlags := map[string]struct{}{
+		"-g":           {},
+		"--glob":       {},
+		"-t":           {},
+		"--type":       {},
+		"-T":           {},
+		"--type-not":   {},
+		"--type-add":   {},
+		"--type-clear": {},
+	}
+	paths := []string{}
+	patternSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		if arg == "" {
+			continue
+		}
+		if arg == "--" {
+			paths = append(paths, args[i+1:]...)
+			break
+		}
+		if _, consumes := patternValueFlags[arg]; consumes {
+			if i+1 < len(args) {
+				i++
+			}
+			patternSeen = true
+			continue
+		}
+		if _, consumes := optionValueFlags[arg]; consumes {
+			if i+1 < len(args) {
+				i++
+			}
+			continue
+		}
+		if strings.HasPrefix(arg, "-") {
+			continue
+		}
+		if !patternSeen {
+			patternSeen = true
+			continue
+		}
+		paths = append(paths, arg)
+	}
+	return paths
+}
+
+func commandBase(command string) string {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return ""
+	}
+	base := filepath.Base(command)
+	base = strings.TrimSuffix(base, ".exe")
+	base = strings.TrimSuffix(base, ".cmd")
+	base = strings.TrimSuffix(base, ".bat")
+	return strings.ToLower(base)
+}
+
+func resolveContextAccessPaths(projectDir string, args []string) []string {
+	projectDir, err := filepath.Abs(defaultProjectDir(projectDir))
+	if err != nil {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	out := []string{}
+	for _, arg := range args {
+		rel, ok := resolveContextAccessPath(projectDir, arg)
+		if !ok {
+			continue
+		}
+		if _, exists := seen[rel]; exists {
+			continue
+		}
+		seen[rel] = struct{}{}
+		out = append(out, rel)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func resolveContextAccessPath(projectDir, arg string) (string, bool) {
+	arg = strings.TrimSpace(arg)
+	if arg == "" || arg == "--" || strings.HasPrefix(arg, "-") {
+		return "", false
+	}
+	if strings.ContainsAny(arg, "*?[]") {
+		return "", false
+	}
+	candidate := arg
+	if !filepath.IsAbs(candidate) {
+		candidate = filepath.Join(projectDir, candidate)
+	}
+	abs, err := filepath.Abs(candidate)
+	if err != nil {
+		return "", false
+	}
+	if _, err := os.Stat(abs); err != nil {
+		return "", false
+	}
+	rel, err := filepath.Rel(projectDir, abs)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return filepath.ToSlash(rel), true
+}
+
+func topSearchMetadata(results []PostPacketSearchResult) ([]string, []string) {
+	limit := len(results)
+	if limit > 5 {
+		limit = 5
+	}
+	paths := make([]string, 0, limit)
+	headings := make([]string, 0, limit)
+	for i := 0; i < limit; i++ {
+		path := strings.TrimSpace(results[i].Path)
+		if path == "" {
+			continue
+		}
+		paths = append(paths, filepath.ToSlash(path))
+		headings = append(headings, strings.TrimSpace(results[i].Heading))
+	}
+	return paths, headings
 }
 
 func latestPacketHashBefore(active *ActiveSession, ts time.Time) string {

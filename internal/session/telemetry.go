@@ -76,6 +76,25 @@ type PacketDurableUpdate struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
+type PacketPostPacketSearch struct {
+	Query             string    `json:"query"`
+	Limit             int       `json:"limit"`
+	ResultCount       int       `json:"result_count"`
+	Explain           bool      `json:"explain"`
+	Inject            bool      `json:"inject"`
+	TopResultPaths    []string  `json:"top_result_paths,omitempty"`
+	TopResultHeadings []string  `json:"top_result_headings,omitempty"`
+	Timestamp         time.Time `json:"timestamp"`
+}
+
+type PacketContextAccess struct {
+	Method        string    `json:"method"`
+	CommandFamily string    `json:"command_family"`
+	Command       string    `json:"command"`
+	Paths         []string  `json:"paths"`
+	Timestamp     time.Time `json:"timestamp"`
+}
+
 type PacketSessionClose struct {
 	Status            string    `json:"status"`
 	Success           bool      `json:"success"`
@@ -85,9 +104,11 @@ type PacketSessionClose struct {
 }
 
 type PacketDownstreamOutcomes struct {
-	VerificationRuns []PacketVerificationOutcome `json:"verification_runs,omitempty"`
-	DurableUpdates   []PacketDurableUpdate       `json:"durable_updates,omitempty"`
-	SessionClose     *PacketSessionClose         `json:"session_close,omitempty"`
+	VerificationRuns   []PacketVerificationOutcome `json:"verification_runs,omitempty"`
+	DurableUpdates     []PacketDurableUpdate       `json:"durable_updates,omitempty"`
+	PostPacketSearches []PacketPostPacketSearch    `json:"post_packet_searches,omitempty"`
+	ContextAccesses    []PacketContextAccess       `json:"context_accesses,omitempty"`
+	SessionClose       *PacketSessionClose         `json:"session_close,omitempty"`
 }
 
 type PacketExplanation struct {
@@ -118,8 +139,9 @@ type FreshPacketPressure struct {
 }
 
 type OmittedDocStat struct {
-	Path           string `json:"path"`
-	OmittedPackets int    `json:"omitted_packets"`
+	Path                 string `json:"path"`
+	OmittedPackets       int    `json:"omitted_packets"`
+	AccessedAfterOmitted int    `json:"accessed_after_omitted,omitempty"`
 }
 
 type UtilitySnapshot struct {
@@ -188,6 +210,11 @@ type PacketBudgetSummary struct {
 type PacketOutcomeSummary struct {
 	PacketsWithExpansions             int `json:"packets_with_expansions"`
 	ExpansionEvents                   int `json:"expansion_events"`
+	PacketsWithPostPacketSearch       int `json:"packets_with_post_packet_search"`
+	PostPacketSearchEvents            int `json:"post_packet_search_events"`
+	PacketsWithContextAccess          int `json:"packets_with_context_access"`
+	ContextAccessEvents               int `json:"context_access_events"`
+	OmittedDocsAccessedAfterOmission  int `json:"omitted_docs_accessed_after_omission"`
 	PacketsWithSuccessfulVerification int `json:"packets_with_successful_verification"`
 	SuccessfulVerificationEvents      int `json:"successful_verification_events"`
 	FailedVerificationEvents          int `json:"failed_verification_events"`
@@ -220,11 +247,13 @@ type packetIncludedItem struct {
 
 type packetObservation struct {
 	PacketReference
-	IncludedItems []packetIncludedItem
-	Expanded      map[string]int
-	Verification  []PacketVerificationOutcome
-	Durable       []PacketDurableUpdate
-	SessionClose  *PacketSessionClose
+	IncludedItems    []packetIncludedItem
+	Expanded         map[string]int
+	Verification     []PacketVerificationOutcome
+	Durable          []PacketDurableUpdate
+	PostPacketSearch []PacketPostPacketSearch
+	ContextAccess    []PacketContextAccess
+	SessionClose     *PacketSessionClose
 }
 
 type utilityAggregate struct {
@@ -278,9 +307,11 @@ func (m *Manager) ExplainPacket(req PacketExplainRequest) (*PacketExplanation, e
 		IncludedItems: make([]ExplainedPacketItem, 0, len(target.IncludedItems)),
 		ExpandedLater: expandedItemsForPacket(*target),
 		Downstream: PacketDownstreamOutcomes{
-			VerificationRuns: append([]PacketVerificationOutcome(nil), target.Verification...),
-			DurableUpdates:   append([]PacketDurableUpdate(nil), target.Durable...),
-			SessionClose:     target.SessionClose,
+			VerificationRuns:   append([]PacketVerificationOutcome(nil), target.Verification...),
+			DurableUpdates:     append([]PacketDurableUpdate(nil), target.Durable...),
+			PostPacketSearches: append([]PacketPostPacketSearch(nil), target.PostPacketSearch...),
+			ContextAccesses:    append([]PacketContextAccess(nil), target.ContextAccess...),
+			SessionClose:       target.SessionClose,
 		},
 	}
 	for _, item := range target.IncludedItems {
@@ -460,6 +491,12 @@ func (m *Manager) buildTelemetryAnalysis(projectDir string) (*telemetryAnalysis,
 					omittedAgg[path] = entry
 				}
 				entry.OmittedPackets++
+			}
+			accessedOmissions := omittedDocsAccessedByPacket(seenPaths, packet.ContextAccess)
+			for path := range accessedOmissions {
+				if entry := omittedAgg[path]; entry != nil {
+					entry.AccessedAfterOmitted++
+				}
 			}
 		}
 		for _, run := range packet.Verification {
@@ -641,6 +678,48 @@ func summarizePacketBudget(packets []packetObservation, pressure FreshPacketPres
 	return summary
 }
 
+func omittedMarkdownPaths(items []projectcontext.BudgetOmittedItem) map[string]struct{} {
+	paths := map[string]struct{}{}
+	for _, item := range items {
+		path := strings.TrimSpace(item.Anchor.Path)
+		if !isMarkdownDocPath(path) {
+			continue
+		}
+		paths[path] = struct{}{}
+	}
+	return paths
+}
+
+func omittedDocsAccessedByPacket(omitted map[string]struct{}, accesses []PacketContextAccess) map[string]struct{} {
+	matches := map[string]struct{}{}
+	if len(omitted) == 0 || len(accesses) == 0 {
+		return matches
+	}
+	for omittedPath := range omitted {
+		for _, access := range accesses {
+			for _, accessedPath := range access.Paths {
+				if contextAccessMatchesOmitted(accessedPath, omittedPath) {
+					matches[omittedPath] = struct{}{}
+					break
+				}
+			}
+			if _, matched := matches[omittedPath]; matched {
+				break
+			}
+		}
+	}
+	return matches
+}
+
+func contextAccessMatchesOmitted(accessedPath, omittedPath string) bool {
+	accessedPath = strings.Trim(filepath.ToSlash(strings.TrimSpace(accessedPath)), "/")
+	omittedPath = strings.Trim(filepath.ToSlash(strings.TrimSpace(omittedPath)), "/")
+	if accessedPath == "" || omittedPath == "" {
+		return false
+	}
+	return accessedPath == omittedPath || strings.HasPrefix(omittedPath, accessedPath+"/")
+}
+
 func summarizePacketOutcomes(packets []packetObservation) PacketOutcomeSummary {
 	summary := PacketOutcomeSummary{}
 	for _, packet := range packets {
@@ -652,6 +731,15 @@ func summarizePacketOutcomes(packets []packetObservation) PacketOutcomeSummary {
 			summary.PacketsWithExpansions++
 			summary.ExpansionEvents += expansions
 		}
+		if len(packet.PostPacketSearch) > 0 {
+			summary.PacketsWithPostPacketSearch++
+			summary.PostPacketSearchEvents += len(packet.PostPacketSearch)
+		}
+		if len(packet.ContextAccess) > 0 {
+			summary.PacketsWithContextAccess++
+			summary.ContextAccessEvents += len(packet.ContextAccess)
+		}
+		summary.OmittedDocsAccessedAfterOmission += len(omittedDocsAccessedByPacket(omittedMarkdownPaths(packet.Budget.OmittedCandidates), packet.ContextAccess))
 		successes := countVerificationOutcomes(packet.Verification, true)
 		failures := countVerificationOutcomes(packet.Verification, false)
 		if successes > 0 {
@@ -684,8 +772,11 @@ func contextEffectivenessRecommendations(effectiveness *ContextEffectiveness) []
 	if len(effectiveness.TopNoise) > 0 {
 		recommendations = append(recommendations, "Review likely-noise includes and suppress or narrow selection rules that repeatedly add context with no recorded downstream signal.")
 	}
-	if effectiveness.Outcomes.ExpansionEvents == 0 || effectiveness.Outcomes.ExpansionEvents*10 < effectiveness.PacketsAnalyzed {
-		recommendations = append(recommendations, "Do not treat low expansion counts as proof packets are sufficient yet; add telemetry for post-packet search and non-`brain read` context access.")
+	if effectiveness.Outcomes.OmittedDocsAccessedAfterOmission > 0 {
+		recommendations = append(recommendations, "Prioritize omitted docs that were later accessed during the same packet window; those are concrete packet miss candidates.")
+	}
+	if effectiveness.Outcomes.ExpansionEvents+effectiveness.Outcomes.ContextAccessEvents == 0 || (effectiveness.Outcomes.ExpansionEvents+effectiveness.Outcomes.ContextAccessEvents)*10 < effectiveness.PacketsAnalyzed {
+		recommendations = append(recommendations, "Do not treat low expansion and context-access counts as proof packets are sufficient yet; raw shell, editor, and agent reads outside Brain remain invisible.")
 	}
 	if effectiveness.Outcomes.SuccessfulVerificationEvents == 0 {
 		recommendations = append(recommendations, "Run verification through `brain session run -- <command>` so packet usefulness can be linked to execution outcomes.")
@@ -701,8 +792,9 @@ func contextEffectivenessRecommendations(effectiveness *ContextEffectiveness) []
 
 func contextTelemetryGaps(effectiveness *ContextEffectiveness) []string {
 	gaps := []string{
-		"Expansion telemetry currently records matching `brain read` calls; raw shell, editor, and agent file reads are invisible.",
-		"Post-packet search, user correction, and human quality rating signals are not recorded yet.",
+		"Expansion telemetry records matching `brain read` calls, and context-access telemetry records only read-like commands routed through `brain session run`.",
+		"Raw shell, editor, and agent file reads outside Brain remain invisible.",
+		"User correction and human quality rating signals are not recorded yet.",
 		"Verification and durable-update links are useful correlation signals, not proof that packet contents caused better output.",
 	}
 	if effectiveness != nil && effectiveness.Cache.UnknownPackets > 0 {
@@ -864,6 +956,25 @@ func packetObservationsFromSession(active *ActiveSession) []packetObservation {
 				File:      event.File,
 				Operation: event.Operation,
 				Timestamp: event.Timestamp.UTC(),
+			})
+		case PacketTelemetryEventSearch:
+			packets[index].PostPacketSearch = append(packets[index].PostPacketSearch, PacketPostPacketSearch{
+				Query:             metadataString(event.Metadata, "query"),
+				Limit:             intMetadata(event.Metadata, "limit"),
+				ResultCount:       intMetadata(event.Metadata, "result_count"),
+				Explain:           boolMetadata(event.Metadata, "explain"),
+				Inject:            boolMetadata(event.Metadata, "inject"),
+				TopResultPaths:    stringSliceMetadata(event.Metadata, "top_result_paths"),
+				TopResultHeadings: stringSliceMetadata(event.Metadata, "top_result_headings"),
+				Timestamp:         event.Timestamp.UTC(),
+			})
+		case PacketTelemetryEventContextAccess:
+			packets[index].ContextAccess = append(packets[index].ContextAccess, PacketContextAccess{
+				Method:        metadataString(event.Metadata, "method"),
+				CommandFamily: metadataString(event.Metadata, "command_family"),
+				Command:       event.Command,
+				Paths:         stringSliceMetadata(event.Metadata, "paths"),
+				Timestamp:     event.Timestamp.UTC(),
 			})
 		case PacketTelemetryEventSessionClosed:
 			closeEvent := &PacketSessionClose{
@@ -1081,6 +1192,35 @@ func stringMetadata(meta map[string]any, key string) (string, bool) {
 	return text, ok
 }
 
+func metadataString(meta map[string]any, key string) string {
+	value, _ := stringMetadata(meta, key)
+	return value
+}
+
+func intMetadata(meta map[string]any, key string) int {
+	if len(meta) == 0 {
+		return 0
+	}
+	switch value := meta[key].(type) {
+	case int:
+		return value
+	case int64:
+		return int(value)
+	case float64:
+		return int(value)
+	default:
+		return 0
+	}
+}
+
+func boolMetadata(meta map[string]any, key string) bool {
+	if len(meta) == 0 {
+		return false
+	}
+	value, ok := meta[key].(bool)
+	return ok && value
+}
+
 func stringSliceMetadata(meta map[string]any, key string) []string {
 	if len(meta) == 0 {
 		return nil
@@ -1089,19 +1229,29 @@ func stringSliceMetadata(meta map[string]any, key string) []string {
 	if !ok {
 		return nil
 	}
-	raw, ok := value.([]any)
-	if !ok {
+	switch raw := value.(type) {
+	case []string:
+		out := make([]string, 0, len(raw))
+		for _, item := range raw {
+			if strings.TrimSpace(item) == "" {
+				continue
+			}
+			out = append(out, item)
+		}
+		return out
+	case []any:
+		out := make([]string, 0, len(raw))
+		for _, item := range raw {
+			text, ok := item.(string)
+			if !ok || strings.TrimSpace(text) == "" {
+				continue
+			}
+			out = append(out, text)
+		}
+		return out
+	default:
 		return nil
 	}
-	out := make([]string, 0, len(raw))
-	for _, item := range raw {
-		text, ok := item.(string)
-		if !ok || strings.TrimSpace(text) == "" {
-			continue
-		}
-		out = append(out, text)
-	}
-	return out
 }
 
 func maxTime(a, b time.Time) time.Time {

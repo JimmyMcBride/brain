@@ -351,6 +351,24 @@ func TestPacketTelemetryLinksCompileExpandVerificationAndCloseout(t *testing.T) 
 	if err := manager.RecordPacketExpansion(project, "docs/compiler.md"); err != nil {
 		t.Fatalf("record expansion: %v", err)
 	}
+	if err := manager.RecordPostPacketSearch(project, PostPacketSearchInput{
+		Query:       "compiler notes",
+		Limit:       5,
+		ResultCount: 1,
+		Explain:     true,
+		Inject:      true,
+		TopResults:  []PostPacketSearchResult{{Path: "docs/compiler.md", Heading: "Notes"}},
+	}); err != nil {
+		t.Fatalf("record post-packet search: %v", err)
+	}
+	if err := manager.RecordContextAccess(project, ContextAccessInput{
+		Method:        "file_read",
+		CommandFamily: "cat",
+		Command:       "cat docs/compiler.md",
+		Paths:         []string{"docs/compiler.md"},
+	}); err != nil {
+		t.Fatalf("record context access: %v", err)
+	}
 	if _, err := manager.RunCommand(context.Background(), RunRequest{
 		ProjectDir:    project,
 		Argv:          verifyCmd,
@@ -394,6 +412,12 @@ func TestPacketTelemetryLinksCompileExpandVerificationAndCloseout(t *testing.T) 
 	if !hasTelemetryEvent(ledger.TelemetryEvents, PacketTelemetryEventExpanded, packet.Hash(), "note:abc123", "docs/compiler.md", "") {
 		t.Fatalf("expected expanded telemetry event: %#v", ledger.TelemetryEvents)
 	}
+	if !hasTelemetryEvent(ledger.TelemetryEvents, PacketTelemetryEventSearch, packet.Hash(), "", "", "brain search") {
+		t.Fatalf("expected post-packet search telemetry event: %#v", ledger.TelemetryEvents)
+	}
+	if !hasTelemetryEvent(ledger.TelemetryEvents, PacketTelemetryEventContextAccess, packet.Hash(), "", "", "cat docs/compiler.md") {
+		t.Fatalf("expected context access telemetry event: %#v", ledger.TelemetryEvents)
+	}
 	if !hasTelemetryEvent(ledger.TelemetryEvents, PacketTelemetryEventVerification, packet.Hash(), "", "", strings.Join(verifyCmd, " ")) {
 		t.Fatalf("expected verification telemetry event: %#v", ledger.TelemetryEvents)
 	}
@@ -402,6 +426,83 @@ func TestPacketTelemetryLinksCompileExpandVerificationAndCloseout(t *testing.T) 
 	}
 	if !hasTelemetryEvent(ledger.TelemetryEvents, PacketTelemetryEventSessionClosed, packet.Hash(), "", "", "") {
 		t.Fatalf("expected session closed telemetry event: %#v", ledger.TelemetryEvents)
+	}
+}
+
+func TestPacketSearchAndContextAccessNoopBeforeFirstPacket(t *testing.T) {
+	project := makeSessionProject(t, sessionPolicyYAML(t, nil, false))
+	manager := New(nil)
+	if err := manager.RecordPostPacketSearch(project, PostPacketSearchInput{Query: "missing", Limit: 5}); err != nil {
+		t.Fatalf("record search without active session: %v", err)
+	}
+	if err := manager.RecordContextAccess(project, ContextAccessInput{
+		Method:        "file_read",
+		CommandFamily: "cat",
+		Command:       "cat docs/compiler.md",
+		Paths:         []string{"docs/compiler.md"},
+	}); err != nil {
+		t.Fatalf("record access without active session: %v", err)
+	}
+	if _, err := manager.Start(context.Background(), StartRequest{ProjectDir: project, Task: "no packet telemetry"}); err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+	if err := manager.RecordPostPacketSearch(project, PostPacketSearchInput{Query: "missing", Limit: 5}); err != nil {
+		t.Fatalf("record search without packet: %v", err)
+	}
+	if err := manager.RecordContextAccess(project, ContextAccessInput{
+		Method:        "file_read",
+		CommandFamily: "cat",
+		Command:       "cat docs/compiler.md",
+		Paths:         []string{"docs/compiler.md"},
+	}); err != nil {
+		t.Fatalf("record access without packet: %v", err)
+	}
+	active, err := loadActiveSession(filepath.Join(project, ".brain", "session.json"))
+	if err != nil {
+		t.Fatalf("load active session: %v", err)
+	}
+	if len(active.TelemetryEvents) != 0 {
+		t.Fatalf("expected no telemetry before first packet, got %#v", active.TelemetryEvents)
+	}
+}
+
+func TestClassifyContextAccessDirectReadAndSearch(t *testing.T) {
+	project := makeSessionProject(t, sessionPolicyYAML(t, nil, false))
+	if err := os.WriteFile(filepath.Join(project, "docs", "compiler.md"), []byte("# Compiler\n"), 0o644); err != nil {
+		t.Fatalf("write compiler doc: %v", err)
+	}
+
+	read := classifyContextAccess(project, []string{"cat", "docs/compiler.md"}, "cat docs/compiler.md")
+	if read == nil {
+		t.Fatal("expected cat command to classify as context access")
+	}
+	if read.Method != "file_read" || read.CommandFamily != "cat" || !reflect.DeepEqual(read.Paths, []string{"docs/compiler.md"}) {
+		t.Fatalf("unexpected cat context access classification: %#v", read)
+	}
+
+	search := classifyContextAccess(project, []string{"git", "grep", "Compiler", "--", "docs"}, "git grep Compiler -- docs")
+	if search == nil {
+		t.Fatal("expected git grep command to classify as context access")
+	}
+	if search.Method != "shell_search" || search.CommandFamily != "git grep" || !reflect.DeepEqual(search.Paths, []string{"docs"}) {
+		t.Fatalf("unexpected git grep context access classification: %#v", search)
+	}
+
+	pathLikePattern := classifyContextAccess(project, []string{"rg", "docs", "README.md"}, "rg docs README.md")
+	if pathLikePattern == nil {
+		t.Fatal("expected rg command with explicit path to classify as context access")
+	}
+	if !reflect.DeepEqual(pathLikePattern.Paths, []string{"README.md"}) {
+		t.Fatalf("expected search pattern that looks like a path to be skipped, got %#v", pathLikePattern)
+	}
+
+	outsidePath := filepath.Join(filepath.Dir(project), "outside.md")
+	if err := os.WriteFile(outsidePath, []byte("# Outside\n"), 0o644); err != nil {
+		t.Fatalf("write outside doc: %v", err)
+	}
+	outside := classifyContextAccess(project, []string{"cat", outsidePath}, "cat outside.md")
+	if outside != nil {
+		t.Fatalf("expected outside path to be ignored, got %#v", outside)
 	}
 }
 
@@ -695,6 +796,22 @@ func TestContextEffectivenessSummarizesPacketUseAndRecommendations(t *testing.T)
 	if err := manager.RecordPacketExpansion(project, "docs/compiler.md"); err != nil {
 		t.Fatalf("record expansion: %v", err)
 	}
+	if err := manager.RecordPostPacketSearch(project, PostPacketSearchInput{
+		Query:       "guide packet notes",
+		Limit:       10,
+		ResultCount: 1,
+		TopResults:  []PostPacketSearchResult{{Path: "docs/guide.md", Heading: "Notes"}},
+	}); err != nil {
+		t.Fatalf("record post-packet search: %v", err)
+	}
+	if err := manager.RecordContextAccess(project, ContextAccessInput{
+		Method:        "file_read",
+		CommandFamily: "cat",
+		Command:       "cat docs/guide.md",
+		Paths:         []string{"docs/guide.md"},
+	}); err != nil {
+		t.Fatalf("record context access: %v", err)
+	}
 	if _, err := manager.RunCommand(context.Background(), RunRequest{
 		ProjectDir:    project,
 		Argv:          verifyCmd,
@@ -727,13 +844,13 @@ func TestContextEffectivenessSummarizesPacketUseAndRecommendations(t *testing.T)
 	if report.Budget.FullPacketsAnalyzed != 1 || report.Budget.FreshPacketsUnderPressure != 1 || report.Budget.PressureRate != 1 {
 		t.Fatalf("unexpected budget summary: %#v", report.Budget)
 	}
-	if report.Outcomes.ExpansionEvents != 1 || report.Outcomes.SuccessfulVerificationEvents != 1 {
+	if report.Outcomes.ExpansionEvents != 1 || report.Outcomes.PostPacketSearchEvents != 1 || report.Outcomes.ContextAccessEvents != 1 || report.Outcomes.OmittedDocsAccessedAfterOmission != 1 || report.Outcomes.SuccessfulVerificationEvents != 1 {
 		t.Fatalf("unexpected outcome summary: %#v", report.Outcomes)
 	}
-	if len(report.FrequentlyOmittedDocs) != 1 || report.FrequentlyOmittedDocs[0].Path != "docs/guide.md" {
+	if len(report.FrequentlyOmittedDocs) != 1 || report.FrequentlyOmittedDocs[0].Path != "docs/guide.md" || report.FrequentlyOmittedDocs[0].AccessedAfterOmitted != 1 {
 		t.Fatalf("expected omitted guide doc in likely misses: %#v", report.FrequentlyOmittedDocs)
 	}
-	if len(report.TelemetryGaps) == 0 || !containsString(report.TelemetryGaps, "Post-packet search, user correction, and human quality rating signals are not recorded yet.") {
+	if len(report.TelemetryGaps) == 0 || !containsString(report.TelemetryGaps, "Raw shell, editor, and agent file reads outside Brain remain invisible.") {
 		t.Fatalf("expected explicit telemetry gaps: %#v", report.TelemetryGaps)
 	}
 	if len(report.Recommendations) == 0 || !strings.Contains(report.Recommendations[0], "budget pressure") {
