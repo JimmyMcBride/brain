@@ -668,6 +668,79 @@ func TestContextStatsSummarizesFreshPacketPressureAndOmittedDocs(t *testing.T) {
 	}
 }
 
+func TestContextEffectivenessSummarizesPacketUseAndRecommendations(t *testing.T) {
+	verifyCmd := helperCommand("sleep-ms", "10", "verify")
+	project := makeSessionProject(t, sessionPolicyYAML(t, []string{strings.Join(verifyCmd, " ")}, false))
+	manager := New(nil)
+	started, err := manager.Start(context.Background(), StartRequest{ProjectDir: project, Task: "effectiveness telemetry"})
+	if err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+
+	first := makeCompiledPacket("effectiveness telemetry", "session")
+	first.Budget.OmittedDueToBudget = 1
+	first.Budget.OmittedCandidates = []projectcontext.BudgetOmittedItem{
+		{
+			ID:              "note:guide",
+			Section:         "working_set.notes",
+			Title:           "Guide Packet Notes",
+			Anchor:          projectcontext.ContextAnchor{Path: "docs/guide.md", Section: "Notes"},
+			EstimatedTokens: 42,
+			Reason:          "fresh packet budget pressure",
+		},
+	}
+	if err := recordCompiledPacketForTest(manager, project, started.Session.ID, first); err != nil {
+		t.Fatalf("record first packet: %v", err)
+	}
+	if err := manager.RecordPacketExpansion(project, "docs/compiler.md"); err != nil {
+		t.Fatalf("record expansion: %v", err)
+	}
+	if _, err := manager.RunCommand(context.Background(), RunRequest{
+		ProjectDir:    project,
+		Argv:          verifyCmd,
+		CaptureOutput: true,
+	}, nil, nil); err != nil {
+		t.Fatalf("run verification: %v", err)
+	}
+
+	reused := makeCompiledPacket("effectiveness telemetry", "session")
+	reusedInputs := packetFingerprintInputsForTest(reused)
+	if err := manager.RecordCompiledPacket(project, started.Session.ID, reused, reusedInputs, projectcontext.PacketCacheMetadata{
+		CacheStatus:        projectcontext.PacketCacheStatusReused,
+		Fingerprint:        reusedInputs.Hash(),
+		ReusedFrom:         first.Hash(),
+		FullPacketIncluded: false,
+	}); err != nil {
+		t.Fatalf("record reused packet: %v", err)
+	}
+
+	report, err := manager.ContextEffectiveness(ContextEffectivenessRequest{ProjectDir: project, Limit: 2})
+	if err != nil {
+		t.Fatalf("context effectiveness: %v", err)
+	}
+	if report.PacketUse.SessionsWithPackets != 1 || report.PacketUse.MultiPacketSessions != 1 || report.PacketUse.MaxPacketsInSession != 2 {
+		t.Fatalf("unexpected packet use summary: %#v", report.PacketUse)
+	}
+	if report.Cache.FreshPackets != 1 || report.Cache.ReusedPackets != 1 || report.Cache.FullPackets != 1 || report.Cache.CompactPackets != 1 {
+		t.Fatalf("unexpected cache summary: %#v", report.Cache)
+	}
+	if report.Budget.FullPacketsAnalyzed != 1 || report.Budget.FreshPacketsUnderPressure != 1 || report.Budget.PressureRate != 1 {
+		t.Fatalf("unexpected budget summary: %#v", report.Budget)
+	}
+	if report.Outcomes.ExpansionEvents != 1 || report.Outcomes.SuccessfulVerificationEvents != 1 {
+		t.Fatalf("unexpected outcome summary: %#v", report.Outcomes)
+	}
+	if len(report.FrequentlyOmittedDocs) != 1 || report.FrequentlyOmittedDocs[0].Path != "docs/guide.md" {
+		t.Fatalf("expected omitted guide doc in likely misses: %#v", report.FrequentlyOmittedDocs)
+	}
+	if len(report.TelemetryGaps) == 0 || !containsString(report.TelemetryGaps, "Post-packet search, user correction, and human quality rating signals are not recorded yet.") {
+		t.Fatalf("expected explicit telemetry gaps: %#v", report.TelemetryGaps)
+	}
+	if len(report.Recommendations) == 0 || !strings.Contains(report.Recommendations[0], "budget pressure") {
+		t.Fatalf("expected budget-pressure recommendation: %#v", report.Recommendations)
+	}
+}
+
 func TestValidateFinishUsesCommittedDurableNotesFromSessionCommitRange(t *testing.T) {
 	verifyCmd := helperCommand("sleep-ms", "10", "verify")
 	project := makeSessionProject(t, sessionPolicyYAML(t, []string{strings.Join(verifyCmd, " ")}, true))

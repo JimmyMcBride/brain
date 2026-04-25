@@ -35,6 +35,7 @@ func addContextCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLo
 	var explainPacket string
 	var explainLast bool
 	var statsLimit int
+	var effectivenessLimit int
 	var structurePath string
 	var liveTask string
 	var liveExplain bool
@@ -347,6 +348,30 @@ Use the other subcommands to inspect compatibility views or refresh the Brain-ma
 		},
 	}
 
+	effectivenessCmd := &cobra.Command{
+		Use:   "effectiveness",
+		Short: "Assess whether recorded context packets are helping agent work",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			projectRoot := contextProjectPath(project, flags.projectPath)
+			appCtx, err := loadApp(projectRoot)
+			if err != nil {
+				return err
+			}
+			defer appCtx.Close()
+
+			report, err := appCtx.Session.ContextEffectiveness(session.ContextEffectivenessRequest{
+				ProjectDir: projectRoot,
+				Limit:      effectivenessLimit,
+			})
+			if err != nil {
+				return err
+			}
+			return appCtx.Output.Print(report, func(w io.Writer) error {
+				return session.RenderContextEffectivenessHuman(w, report)
+			})
+		},
+	}
+
 	structureCmd := &cobra.Command{
 		Use:   "structure",
 		Short: "Inspect structural repo context",
@@ -505,6 +530,8 @@ Use the other subcommands to inspect compatibility views or refresh the Brain-ma
 	explainCmd.Flags().BoolVar(&explainLast, "last", false, "inspect the latest packet explicitly")
 	statsCmd.Flags().StringVar(&project, "project", "", "project root to inspect context telemetry from")
 	statsCmd.Flags().IntVar(&statsLimit, "limit", 5, "maximum number of entries to show per stats section")
+	effectivenessCmd.Flags().StringVar(&project, "project", "", "project root to inspect context telemetry from")
+	effectivenessCmd.Flags().IntVar(&effectivenessLimit, "limit", 5, "maximum number of entries to show per report section")
 	structureCmd.Flags().StringVar(&project, "project", "", "project root to inspect structure from")
 	structureCmd.Flags().StringVar(&structurePath, "path", "", "subtree path filter for structural context")
 	structureStatusCmd.Flags().StringVar(&project, "project", "", "project root to inspect structure from")
@@ -513,7 +540,7 @@ Use the other subcommands to inspect compatibility views or refresh the Brain-ma
 	liveCmd.Flags().BoolVar(&liveExplain, "explain", false, "include rationale and missing-signal detail")
 
 	structureCmd.AddCommand(structureStatusCmd)
-	contextCmd.AddCommand(installCmd, refreshCmd, loadCmd, migrateCmd, assembleCmd, compileCmd, explainCmd, statsCmd, structureCmd, liveCmd)
+	contextCmd.AddCommand(installCmd, refreshCmd, loadCmd, migrateCmd, assembleCmd, compileCmd, explainCmd, statsCmd, effectivenessCmd, structureCmd, liveCmd)
 	root.AddCommand(contextCmd)
 }
 

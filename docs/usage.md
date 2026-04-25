@@ -121,6 +121,7 @@ brain context compile --project . --task "auth flow" --budget 1200
 brain context compile --project . --task "auth flow" --fresh
 brain context explain --project . --last
 brain context stats --project .
+brain context effectiveness --project .
 brain context install --project .
 brain context refresh --project .
 brain context refresh --project . --agent claude
@@ -165,6 +166,7 @@ brain context load --project . --level 3 --query "auth flow"
 - `context explain --last` inspects the latest recorded packet, including cache status, reuse or delta lineage, invalidation reasons, included items, later expansions, and downstream outcomes such as verification runs, durable updates, and closeout status
 - `context explain --packet <hash>` lets you inspect an older packet when you need to debug a specific compile result
 - `context stats` summarizes likely signal items, likely noise items, repeated expansion patterns, common verification links, fresh-packet budget-pressure frequency, and recurring omitted markdown docs from local compiler telemetry
+- `context effectiveness` turns packet telemetry into a higher-level report on packet usage, cache behavior, budget pressure, outcome links, likely misses, telemetry gaps, and recommended packet-shaping follow-ups
 
 `context structure` is the structural repo inspection surface:
 

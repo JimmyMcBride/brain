@@ -149,6 +149,68 @@ type ContextStats struct {
 	FrequentlyOmittedDocs   []OmittedDocStat       `json:"frequently_omitted_docs"`
 }
 
+type ContextEffectivenessRequest struct {
+	ProjectDir string
+	Limit      int
+}
+
+type PacketUseSummary struct {
+	SessionsWithPackets      int       `json:"sessions_with_packets"`
+	PacketsAnalyzed          int       `json:"packets_analyzed"`
+	SinglePacketSessions     int       `json:"single_packet_sessions"`
+	MultiPacketSessions      int       `json:"multi_packet_sessions"`
+	AveragePacketsPerSession float64   `json:"average_packets_per_session"`
+	MaxPacketsInSession      int       `json:"max_packets_in_session"`
+	FirstPacketAt            time.Time `json:"first_packet_at"`
+	LastPacketAt             time.Time `json:"last_packet_at"`
+}
+
+type PacketCacheSummary struct {
+	FreshPackets   int `json:"fresh_packets"`
+	ReusedPackets  int `json:"reused_packets"`
+	DeltaPackets   int `json:"delta_packets"`
+	UnknownPackets int `json:"unknown_packets"`
+	FullPackets    int `json:"full_packets"`
+	CompactPackets int `json:"compact_packets"`
+}
+
+type PacketBudgetSummary struct {
+	FullPacketsAnalyzed       int     `json:"full_packets_analyzed"`
+	AverageFullTarget         int     `json:"average_full_target"`
+	AverageFullUsed           int     `json:"average_full_used"`
+	AverageFullRemaining      int     `json:"average_full_remaining"`
+	AverageFullOmitted        float64 `json:"average_full_omitted"`
+	FreshPacketsUnderPressure int     `json:"fresh_packets_under_pressure"`
+	MandatoryOverTarget       int     `json:"mandatory_over_target"`
+	PressureRate              float64 `json:"pressure_rate"`
+}
+
+type PacketOutcomeSummary struct {
+	PacketsWithExpansions             int `json:"packets_with_expansions"`
+	ExpansionEvents                   int `json:"expansion_events"`
+	PacketsWithSuccessfulVerification int `json:"packets_with_successful_verification"`
+	SuccessfulVerificationEvents      int `json:"successful_verification_events"`
+	FailedVerificationEvents          int `json:"failed_verification_events"`
+	PacketsWithDurableUpdates         int `json:"packets_with_durable_updates"`
+	DurableUpdateEvents               int `json:"durable_update_events"`
+	SuccessfulSessionCloses           int `json:"successful_session_closes"`
+}
+
+type ContextEffectiveness struct {
+	SessionsAnalyzed      int                  `json:"sessions_analyzed"`
+	PacketsAnalyzed       int                  `json:"packets_analyzed"`
+	ItemsAnalyzed         int                  `json:"items_analyzed"`
+	PacketUse             PacketUseSummary     `json:"packet_use"`
+	Cache                 PacketCacheSummary   `json:"cache"`
+	Budget                PacketBudgetSummary  `json:"budget"`
+	Outcomes              PacketOutcomeSummary `json:"outcomes"`
+	TopSignal             []UtilityItemStat    `json:"top_signal,omitempty"`
+	TopNoise              []UtilityItemStat    `json:"top_noise,omitempty"`
+	FrequentlyOmittedDocs []OmittedDocStat     `json:"frequently_omitted_docs,omitempty"`
+	TelemetryGaps         []string             `json:"telemetry_gaps,omitempty"`
+	Recommendations       []string             `json:"recommendations,omitempty"`
+}
+
 type packetIncludedItem struct {
 	ItemID  string
 	Section string
@@ -295,6 +357,55 @@ func (m *Manager) ContextStats(req ContextStatsRequest) (*ContextStats, error) {
 	}, nil
 }
 
+func (m *Manager) ContextEffectiveness(req ContextEffectivenessRequest) (*ContextEffectiveness, error) {
+	projectDir, err := filepath.Abs(defaultProjectDir(req.ProjectDir))
+	if err != nil {
+		return nil, err
+	}
+	analysis, err := m.buildTelemetryAnalysis(projectDir)
+	if err != nil {
+		return nil, err
+	}
+	if len(analysis.packets) == 0 {
+		return nil, errors.New("no compiled context packets recorded yet")
+	}
+	limit := normalizedTelemetryLimit(req.Limit)
+	topSignal := filterUtilityItems(analysis.items, func(item UtilityItemStat) bool {
+		return item.LikelyUtility == "likely_signal"
+	})
+	topNoise := filterUtilityItems(analysis.items, func(item UtilityItemStat) bool {
+		return item.LikelyUtility == "likely_noise"
+	})
+	sort.Slice(topSignal, func(i, j int) bool { return utilitySignalLess(topSignal[i], topSignal[j]) })
+	sort.Slice(topNoise, func(i, j int) bool { return utilityNoiseLess(topNoise[i], topNoise[j]) })
+
+	effectiveness := &ContextEffectiveness{
+		SessionsAnalyzed:      analysis.sessionsAnalyzed,
+		PacketsAnalyzed:       len(analysis.packets),
+		ItemsAnalyzed:         len(analysis.items),
+		PacketUse:             summarizePacketUse(analysis.packets, analysis.sessionsAnalyzed),
+		Cache:                 summarizePacketCache(analysis.packets),
+		Budget:                summarizePacketBudget(analysis.packets, analysis.freshPressure),
+		Outcomes:              summarizePacketOutcomes(analysis.packets),
+		TopSignal:             trimUtilityItems(topSignal, limit),
+		TopNoise:              trimUtilityItems(topNoise, limit),
+		FrequentlyOmittedDocs: trimOmittedDocs(analysis.omittedDocs, limit),
+	}
+	effectiveness.TelemetryGaps = contextTelemetryGaps(effectiveness)
+	effectiveness.Recommendations = contextEffectivenessRecommendations(effectiveness)
+	return effectiveness, nil
+}
+
+func normalizedTelemetryLimit(limit int) int {
+	if limit <= 0 {
+		return 5
+	}
+	if limit > 10 {
+		return 10
+	}
+	return limit
+}
+
 func (m *Manager) buildTelemetryAnalysis(projectDir string) (*telemetryAnalysis, error) {
 	sessions, err := loadTelemetrySessions(projectDir)
 	if err != nil {
@@ -439,6 +550,165 @@ func (m *Manager) buildTelemetryAnalysis(projectDir string) (*telemetryAnalysis,
 		freshPressure:    freshPressure,
 		omittedDocs:      omittedDocs,
 	}, nil
+}
+
+func summarizePacketUse(packets []packetObservation, sessionsAnalyzed int) PacketUseSummary {
+	summary := PacketUseSummary{
+		SessionsWithPackets: sessionsAnalyzed,
+		PacketsAnalyzed:     len(packets),
+	}
+	if len(packets) == 0 {
+		return summary
+	}
+	bySession := map[string]int{}
+	for _, packet := range packets {
+		bySession[packet.SessionID]++
+		if summary.FirstPacketAt.IsZero() || packet.CompiledAt.Before(summary.FirstPacketAt) {
+			summary.FirstPacketAt = packet.CompiledAt
+		}
+		if summary.LastPacketAt.IsZero() || packet.CompiledAt.After(summary.LastPacketAt) {
+			summary.LastPacketAt = packet.CompiledAt
+		}
+	}
+	for _, count := range bySession {
+		if count == 1 {
+			summary.SinglePacketSessions++
+		}
+		if count > 1 {
+			summary.MultiPacketSessions++
+		}
+		if count > summary.MaxPacketsInSession {
+			summary.MaxPacketsInSession = count
+		}
+	}
+	if len(bySession) > 0 {
+		summary.AveragePacketsPerSession = float64(len(packets)) / float64(len(bySession))
+	}
+	return summary
+}
+
+func summarizePacketCache(packets []packetObservation) PacketCacheSummary {
+	summary := PacketCacheSummary{}
+	for _, packet := range packets {
+		switch packet.CacheStatus {
+		case projectcontext.PacketCacheStatusFresh:
+			summary.FreshPackets++
+		case projectcontext.PacketCacheStatusReused:
+			summary.ReusedPackets++
+		case projectcontext.PacketCacheStatusDelta:
+			summary.DeltaPackets++
+		default:
+			summary.UnknownPackets++
+		}
+		if packet.FullPacketIncluded {
+			summary.FullPackets++
+		} else {
+			summary.CompactPackets++
+		}
+	}
+	return summary
+}
+
+func summarizePacketBudget(packets []packetObservation, pressure FreshPacketPressure) PacketBudgetSummary {
+	summary := PacketBudgetSummary{
+		FreshPacketsUnderPressure: pressure.FreshPacketsUnderPressure,
+		MandatoryOverTarget:       pressure.MandatoryOverTarget,
+		PressureRate:              pressure.PressureRate,
+	}
+	fullPackets := 0
+	targetTotal := 0
+	usedTotal := 0
+	remainingTotal := 0
+	omittedTotal := 0
+	for _, packet := range packets {
+		if !packet.FullPacketIncluded {
+			continue
+		}
+		fullPackets++
+		targetTotal += packet.Budget.Target
+		usedTotal += packet.Budget.Used
+		remainingTotal += packet.Budget.Remaining
+		omittedTotal += packet.Budget.OmittedDueToBudget
+	}
+	summary.FullPacketsAnalyzed = fullPackets
+	if fullPackets == 0 {
+		return summary
+	}
+	summary.AverageFullTarget = targetTotal / fullPackets
+	summary.AverageFullUsed = usedTotal / fullPackets
+	summary.AverageFullRemaining = remainingTotal / fullPackets
+	summary.AverageFullOmitted = float64(omittedTotal) / float64(fullPackets)
+	return summary
+}
+
+func summarizePacketOutcomes(packets []packetObservation) PacketOutcomeSummary {
+	summary := PacketOutcomeSummary{}
+	for _, packet := range packets {
+		expansions := 0
+		for _, count := range packet.Expanded {
+			expansions += count
+		}
+		if expansions > 0 {
+			summary.PacketsWithExpansions++
+			summary.ExpansionEvents += expansions
+		}
+		successes := countVerificationOutcomes(packet.Verification, true)
+		failures := countVerificationOutcomes(packet.Verification, false)
+		if successes > 0 {
+			summary.PacketsWithSuccessfulVerification++
+			summary.SuccessfulVerificationEvents += successes
+		}
+		summary.FailedVerificationEvents += failures
+		if len(packet.Durable) > 0 {
+			summary.PacketsWithDurableUpdates++
+			summary.DurableUpdateEvents += len(packet.Durable)
+		}
+		if packet.SessionClose != nil && packet.SessionClose.Success {
+			summary.SuccessfulSessionCloses++
+		}
+	}
+	return summary
+}
+
+func contextEffectivenessRecommendations(effectiveness *ContextEffectiveness) []string {
+	if effectiveness == nil {
+		return nil
+	}
+	recommendations := []string{}
+	if effectiveness.Budget.PressureRate >= 0.5 {
+		recommendations = append(recommendations, "Fresh packets are frequently under budget pressure; inspect repeated omissions and consider tighter summaries or capsule-style source summaries before raising defaults.")
+	}
+	if len(effectiveness.FrequentlyOmittedDocs) > 0 {
+		recommendations = append(recommendations, fmt.Sprintf("Start packet-shaping review with `%s`, the most frequently omitted markdown source.", effectiveness.FrequentlyOmittedDocs[0].Path))
+	}
+	if len(effectiveness.TopNoise) > 0 {
+		recommendations = append(recommendations, "Review likely-noise includes and suppress or narrow selection rules that repeatedly add context with no recorded downstream signal.")
+	}
+	if effectiveness.Outcomes.ExpansionEvents == 0 || effectiveness.Outcomes.ExpansionEvents*10 < effectiveness.PacketsAnalyzed {
+		recommendations = append(recommendations, "Do not treat low expansion counts as proof packets are sufficient yet; add telemetry for post-packet search and non-`brain read` context access.")
+	}
+	if effectiveness.Outcomes.SuccessfulVerificationEvents == 0 {
+		recommendations = append(recommendations, "Run verification through `brain session run -- <command>` so packet usefulness can be linked to execution outcomes.")
+	}
+	if effectiveness.Outcomes.DurableUpdateEvents == 0 {
+		recommendations = append(recommendations, "Record durable note updates during packet-backed work so Brain can link context packets to memory quality.")
+	}
+	if len(recommendations) == 0 {
+		recommendations = append(recommendations, "Current packet telemetry has no obvious pressure or noise signal; next improvement should add stronger quality feedback instead of changing selection heuristics.")
+	}
+	return recommendations
+}
+
+func contextTelemetryGaps(effectiveness *ContextEffectiveness) []string {
+	gaps := []string{
+		"Expansion telemetry currently records matching `brain read` calls; raw shell, editor, and agent file reads are invisible.",
+		"Post-packet search, user correction, and human quality rating signals are not recorded yet.",
+		"Verification and durable-update links are useful correlation signals, not proof that packet contents caused better output.",
+	}
+	if effectiveness != nil && effectiveness.Cache.UnknownPackets > 0 {
+		gaps = append(gaps, "Some older packet records lack cache status; compact legacy packets may predate reuse and delta metadata.")
+	}
+	return gaps
 }
 
 func trimOmittedDocs(items []OmittedDocStat, limit int) []OmittedDocStat {
