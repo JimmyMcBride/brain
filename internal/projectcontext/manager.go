@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 const localNotesSection = "## Local Notes\n\nAdd repo-specific notes here. `brain context refresh` preserves content outside managed blocks.\n"
@@ -1469,7 +1471,11 @@ func sentenceCase(value string) string {
 	if value == "" {
 		return value
 	}
-	return strings.ToUpper(value[:1]) + value[1:]
+	first, size := utf8.DecodeRuneInString(value)
+	if first == utf8.RuneError && size == 0 {
+		return value
+	}
+	return string(unicode.ToUpper(first)) + value[size:]
 }
 
 func renderGitIgnore() string {
