@@ -48,6 +48,12 @@ func TestResolveAgentsRejectsUnsupportedAgent(t *testing.T) {
 	}
 }
 
+func TestSentenceCaseHandlesMultiByteFirstRune(t *testing.T) {
+	if got := sentenceCase("éclair workflow"); got != "Éclair workflow" {
+		t.Fatalf("unexpected sentence case: %q", got)
+	}
+}
+
 func TestDiscoverAgentIntegrationTargetsDefaultToExistingFiles(t *testing.T) {
 	project := t.TempDir()
 	mustWriteFile(t, filepath.Join(project, ".codex", "AGENTS.md"), "# Codex\n")
