@@ -186,13 +186,16 @@ func TestCLIAdoptExistingRepoPreservesManagedFiles(t *testing.T) {
 	if !strings.Contains(adoptOutput, "adopted") || !strings.Contains(adoptOutput, "AGENTS.md") {
 		t.Fatalf("unexpected adopt output:\n%s", adoptOutput)
 	}
+	if !strings.Contains(adoptOutput, "Next for AI agent:") || !strings.Contains(adoptOutput, "scan repo structure") {
+		t.Fatalf("expected post-adopt AI agent guidance in output:\n%s", adoptOutput)
+	}
 
 	agentsRaw, err := os.ReadFile(filepath.Join(env.project, "AGENTS.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	agents := string(agentsRaw)
-	if !strings.Contains(agents, "<!-- brain:begin agents-contract -->") || !strings.Contains(agents, "Manual contract") {
+	if !strings.Contains(agents, "<!-- brain:begin agents-contract -->") || !strings.Contains(agents, "Manual contract") || !strings.Contains(agents, "## Post-Adoption Enrichment") {
 		t.Fatalf("unexpected adopted AGENTS.md:\n%s", agents)
 	}
 
@@ -224,6 +227,9 @@ func TestCLIAdoptDryRunDoesNotWrite(t *testing.T) {
 	if !strings.Contains(output, "Adoption plan:") || !strings.Contains(output, "adopted") {
 		t.Fatalf("unexpected dry-run output:\n%s", output)
 	}
+	if strings.Contains(output, "Next for AI agent:") {
+		t.Fatalf("expected dry-run output not to show post-adopt guidance:\n%s", output)
+	}
 
 	agentsRaw, err := os.ReadFile(filepath.Join(env.project, "AGENTS.md"))
 	if err != nil {
@@ -231,6 +237,33 @@ func TestCLIAdoptDryRunDoesNotWrite(t *testing.T) {
 	}
 	if string(agentsRaw) != "Manual contract\n" {
 		t.Fatalf("expected dry-run to preserve unmanaged AGENTS.md, got:\n%s", string(agentsRaw))
+	}
+}
+
+func TestCLIAdoptJSONNextStepsOnlyAfterAdoption(t *testing.T) {
+	env := newCLIEnv(t)
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "adopt"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse adopt payload: %v\n%s", err, jsonOut)
+	}
+	steps, ok := payload["next_steps"].([]any)
+	if !ok || len(steps) == 0 {
+		t.Fatalf("expected next_steps in non-dry-run payload: %#v", payload)
+	}
+	if !strings.Contains(fmt.Sprint(steps), "manifests") || !strings.Contains(fmt.Sprint(steps), "managed blocks refreshable") {
+		t.Fatalf("expected complete post-adopt guidance in next_steps: %#v", steps)
+	}
+
+	dryRunEnv := newCLIEnv(t)
+	dryRunJSON := requireOK(t, dryRunEnv.run(t, "", "--config", dryRunEnv.config, "--project", dryRunEnv.project, "--json", "adopt", "--dry-run"))
+	var dryRunPayload map[string]any
+	if err := json.Unmarshal([]byte(dryRunJSON), &dryRunPayload); err != nil {
+		t.Fatalf("parse dry-run adopt payload: %v\n%s", err, dryRunJSON)
+	}
+	if _, ok := dryRunPayload["next_steps"]; ok {
+		t.Fatalf("expected dry-run payload to omit next_steps: %#v", dryRunPayload)
 	}
 }
 

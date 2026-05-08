@@ -41,6 +41,9 @@ func addAdoptCommand(root *cobra.Command, flags *rootFlagsState) {
 				"db_file":     boot.Project.DBFile,
 				"results":     results,
 			}
+			if !dryRun {
+				payload["next_steps"] = projectcontext.PostAdoptionEnrichmentSteps()
+			}
 			printer := output.New(modeFromFlag(flags, boot.Config.OutputMode), cmd.OutOrStdout())
 			return printer.Print(payload, func(w io.Writer) error {
 				if err := output.KeyValue(w, "Config", boot.Global.ConfigFile); err != nil {
@@ -71,6 +74,16 @@ func addAdoptCommand(root *cobra.Command, flags *rootFlagsState) {
 					}
 					if _, err := fmt.Fprintf(w, "%-9s %-8s %s%s\n", result.Action, result.Kind, result.Path, preserve); err != nil {
 						return err
+					}
+				}
+				if !dryRun {
+					if _, err := fmt.Fprintln(w, "\nNext for AI agent:"); err != nil {
+						return err
+					}
+					for _, step := range projectcontext.PostAdoptionEnrichmentSteps() {
+						if _, err := fmt.Fprintf(w, "- %s\n", step); err != nil {
+							return err
+						}
 					}
 				}
 				return nil

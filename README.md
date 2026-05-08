@@ -39,7 +39,7 @@ That usually means:
 
 ## What Brain Actually Does
 
-`brain` keeps human docs at the repo root, machine-managed context under `.brain/`, and a local SQLite index for durable project knowledge.
+`brain` keeps agent-readable project docs at the repo root, machine-managed context under `.brain/`, and a local SQLite index for durable project knowledge.
 
 It provides explicit workflows for:
 
@@ -67,8 +67,8 @@ my-project/
     state/
 ```
 
-- `AGENTS.md` is the root contract for humans and agents.
-- `docs/` is the human-readable project documentation layer.
+- `AGENTS.md` is the root contract for AI agents.
+- `docs/` is the agent-readable project documentation layer.
 - `.brain/context/` is the generated modular context bundle.
 - `.brain/resources/` holds durable references, captures, and change history.
 - `.brain/sessions/` holds recorded session ledgers and is local runtime state.
@@ -163,7 +163,7 @@ brain session run --project . -- go test ./...
 brain session finish --project . --summary "auth flow tightened"
 ```
 
-Use `brain adopt --project .` instead of `brain init --project .` when the repo already has docs or an unmanaged `AGENTS.md`.
+Use `brain adopt --project .` instead of `brain init --project .` when the repo already has docs or an unmanaged `AGENTS.md`. After adoption, the AI agent should treat the generated files as starter context, scan the repo deeply, and update AGENTS.md, docs, or `.brain` notes with durable project-specific findings.
 
 ## What Brain Does Not Try To Be
 

@@ -10,7 +10,7 @@ user-invocable: true
 ---
 # Brain
 
-Use `brain` as the primary interface for project-local memory and workflow.
+Use `brain` as the primary interface for AI-agent project-local memory and workflow.
 
 ## Project-First Behavior
 
@@ -26,7 +26,7 @@ If the current repository has Brain context, use the repo-local Brain docs first
 
 ## Goals
 
-- keep durable project knowledge in markdown
+- keep durable project knowledge in agent-readable markdown
 - prefer explicit CLI operations over ad hoc memory files
 - preserve backups, history, and undo for note changes
 - keep retrieval focused on repo-managed docs instead of transient files
@@ -49,6 +49,8 @@ Use these commands by default:
 
 - `brain init --project .`
   - Create the local Brain workspace for a project.
+- `brain adopt --project .`
+  - Adopt an existing repo into the Brain-managed context model. Treat generated files as starter context, then scan the repo and enrich AGENTS.md, docs, or `.brain` notes with durable project-specific findings.
 - `brain doctor --project .`
   - Validate the local workspace, sqlite state, project migration state, and embedder configuration.
 - `brain update --project .`
@@ -134,6 +136,12 @@ Use these commands by default:
 - Do not create sidecar memory systems when Brain already owns the workflow.
 - Prefer updating an existing durable note over creating duplicates.
 - Use human-readable filenames and titles.
+
+## Post-Adoption Enrichment
+
+After `brain adopt`, the generated context is only starter context. Brain does not run an automatic deep LLM scan during adoption.
+
+The AI agent should scan repo structure, docs, manifests, entrypoints, tests, CI, config, and deployment surfaces. Then update AGENTS.md, docs, or `.brain` notes with concrete project facts, add focused `.brain/resources` notes for architecture, workflows, risks, and references that do not belong in top-level templates, and keep generated managed blocks refreshable by putting hand-authored findings in Local Notes or dedicated notes.
 
 ## Upgrade Workflow
 
