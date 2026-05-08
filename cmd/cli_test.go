@@ -186,13 +186,16 @@ func TestCLIAdoptExistingRepoPreservesManagedFiles(t *testing.T) {
 	if !strings.Contains(adoptOutput, "adopted") || !strings.Contains(adoptOutput, "AGENTS.md") {
 		t.Fatalf("unexpected adopt output:\n%s", adoptOutput)
 	}
+	if !strings.Contains(adoptOutput, "Next for AI agent:") || !strings.Contains(adoptOutput, "scan repo structure") {
+		t.Fatalf("expected post-adopt AI agent guidance in output:\n%s", adoptOutput)
+	}
 
 	agentsRaw, err := os.ReadFile(filepath.Join(env.project, "AGENTS.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	agents := string(agentsRaw)
-	if !strings.Contains(agents, "<!-- brain:begin agents-contract -->") || !strings.Contains(agents, "Manual contract") {
+	if !strings.Contains(agents, "<!-- brain:begin agents-contract -->") || !strings.Contains(agents, "Manual contract") || !strings.Contains(agents, "## Post-Adoption Enrichment") {
 		t.Fatalf("unexpected adopted AGENTS.md:\n%s", agents)
 	}
 
@@ -223,6 +226,9 @@ func TestCLIAdoptDryRunDoesNotWrite(t *testing.T) {
 	output := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "adopt", "--dry-run"))
 	if !strings.Contains(output, "Adoption plan:") || !strings.Contains(output, "adopted") {
 		t.Fatalf("unexpected dry-run output:\n%s", output)
+	}
+	if strings.Contains(output, "Next for AI agent:") {
+		t.Fatalf("expected dry-run output not to show post-adopt guidance:\n%s", output)
 	}
 
 	agentsRaw, err := os.ReadFile(filepath.Join(env.project, "AGENTS.md"))

@@ -40,6 +40,7 @@ func addAdoptCommand(root *cobra.Command, flags *rootFlagsState) {
 				"brain_dir":   boot.Project.BrainDir,
 				"db_file":     boot.Project.DBFile,
 				"results":     results,
+				"next_steps":  adoptNextSteps(),
 			}
 			printer := output.New(modeFromFlag(flags, boot.Config.OutputMode), cmd.OutOrStdout())
 			return printer.Print(payload, func(w io.Writer) error {
@@ -73,6 +74,16 @@ func addAdoptCommand(root *cobra.Command, flags *rootFlagsState) {
 						return err
 					}
 				}
+				if !dryRun {
+					if _, err := fmt.Fprintln(w, "\nNext for AI agent:"); err != nil {
+						return err
+					}
+					for _, step := range adoptNextSteps() {
+						if _, err := fmt.Fprintf(w, "- %s\n", step); err != nil {
+							return err
+						}
+					}
+				}
 				return nil
 			})
 		},
@@ -83,4 +94,13 @@ func addAdoptCommand(root *cobra.Command, flags *rootFlagsState) {
 	cmd.Flags().StringArrayVarP(&agents, "agent", "a", nil, "agent instruction files to integrate or create; repeatable")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "show the adoption plan without writing files")
 	root.AddCommand(cmd)
+}
+
+func adoptNextSteps() []string {
+	return []string{
+		"treat generated context as starter context, not complete repo memory",
+		"scan repo structure, docs, entrypoints, tests, CI, config, and deployment surfaces",
+		"update AGENTS.md, docs, or .brain notes with durable project-specific findings",
+		"add focused .brain/resources notes when details are too specific for the main templates",
+	}
 }

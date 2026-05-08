@@ -14,6 +14,15 @@ Use this file for agent operating workflow inside the repo.
 4. Use `brain context compile --task "<task>"` only when you need the lower-level packet compiler directly.
 5. If project memory still matters, run `brain find brain` or `brain search "brain <task>"`.
 
+## Post-Adoption Enrichment
+
+After `brain adopt` creates starter context, the AI agent must scan the repo before treating the templates as complete memory.
+
+1. Inspect repo structure, docs, manifests, entrypoints, tests, CI, config, and deployment surfaces.
+2. Replace generic template notes with concrete project facts in AGENTS.md, docs, or .brain notes.
+3. Add focused .brain/resources notes for architecture, workflows, risks, and references that do not belong in top-level templates.
+4. Keep generated managed blocks refreshable; put hand-authored findings in Local Notes or dedicated notes.
+
 ## During Work
 
 - Keep durable discoveries, decisions, and risks in AGENTS.md, /docs, or .brain notes.

@@ -6,6 +6,8 @@ updated: "2026-04-20T05:35:38Z"
 <!-- brain:begin agents-contract -->
 Use this file as a Brain-managed project context entrypoint for `brain`.
 
+Brain is intended for AI agents operating in this repo, not as a human-operated project dashboard.
+
 Read the linked context files before substantial work. Prefer the `brain` skill and `brain` CLI for project memory, retrieval, and durable context updates.
 
 ## Table Of Contents
@@ -18,7 +20,7 @@ Read the linked context files before substantial work. Prefer the `brain` skill 
 - [Current State](./.brain/context/current-state.md)
 - [Policy](./.brain/policy.yaml)
 
-## Human Docs
+## Project Docs
 
 - [README.md](./README.md)
 - [architecture.md](./docs/architecture.md)
@@ -39,6 +41,15 @@ Read the linked context files before substantial work. Prefer the `brain` skill 
 6. Use `brain edit` for durable context updates to AGENTS.md, docs, or .brain notes.
 7. Use `brain session run -- <command>` for required verification commands.
 8. Finish with `brain session finish` so policy checks can enforce verification and surface promotion review when durable follow-through is still needed.
+
+## Post-Adoption Enrichment
+
+After `brain adopt` creates starter context, the AI agent must scan the repo before treating the templates as complete memory.
+
+1. Inspect repo structure, docs, manifests, entrypoints, tests, CI, config, and deployment surfaces.
+2. Replace generic template notes with concrete project facts in AGENTS.md, docs, or .brain notes.
+3. Add focused .brain/resources notes for architecture, workflows, risks, and references that do not belong in top-level templates.
+4. Keep generated managed blocks refreshable; put hand-authored findings in Local Notes or dedicated notes.
 <!-- brain:end agents-contract -->
 
 ## Local Notes
