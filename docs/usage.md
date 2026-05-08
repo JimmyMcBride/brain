@@ -64,7 +64,7 @@ Brain treats `.brain/session.json`, `.brain/sessions/`, `.brain/state/`, and `.b
 `brain init` is the clean bootstrap path.  
 `brain adopt` is the existing-repo path: it creates the local Brain workspace, adopts Brain-owned docs into the managed-block model, and preserves previous content under `Local Notes`.
 
-The generated files are starter context for AI agents, not complete repo memory. After `brain adopt`, the AI agent should scan repo structure, docs, manifests, entrypoints, tests, CI, config, and deployment surfaces, then update AGENTS.md, docs, or `.brain` notes with durable project-specific findings. Use focused `.brain/resources` notes when the detail is too specific for the main templates.
+The generated files are starter context for AI agents, not complete repo memory. After `brain adopt`, the AI agent should scan repo structure, docs, manifests, entrypoints, tests, CI, config, and deployment surfaces, then update AGENTS.md, docs, or `.brain` notes with durable project-specific findings. Use focused `.brain/resources` notes for architecture, workflows, risks, and references that do not belong in top-level templates, and keep generated managed blocks refreshable by putting hand-authored findings in Local Notes or dedicated notes.
 
 ## Read And Update Notes
 

@@ -1,9 +1,9 @@
 ---
+title: "Agent Workflow"
+type: "reference"
 created: "2026-04-11T00:00:00Z"
-source: migrated_project_memory
-title: Agent Workflow
-type: reference
-updated: "2026-05-08T00:39:36Z"
+updated: "2026-05-08T01:39:42Z"
+source: "migrated_project_memory"
 ---
 # Agent Workflow
 
@@ -21,7 +21,8 @@ After `brain adopt`, treat generated context as starter context, not complete re
 
 1. Scan repo structure, docs, manifests, entrypoints, tests, CI, config, and deployment surfaces.
 2. Update AGENTS.md, docs, or `.brain` notes with durable project-specific findings.
-3. Add focused `.brain/resources` notes when details are too specific for the main templates.
+3. Add focused `.brain/resources` notes for architecture, workflows, risks, and references that do not belong in top-level templates.
+4. Keep generated managed blocks refreshable; put hand-authored findings in Local Notes or dedicated notes.
 
 ## Guide Selection
 

@@ -107,7 +107,7 @@ Expected order:
 
 `brain adopt --agent ...` is the explicit path that may create a missing local agent instruction file. Unsupported agent names are rejected instead of creating arbitrary directories.
 
-After adoption, the Brain-managed templates are only starter context. The AI agent should scan repo structure, docs, entrypoints, tests, CI, config, and deployment surfaces, then enrich AGENTS.md, docs, or `.brain` notes with durable project-specific findings. Brain does not run an automatic deep LLM scan during `brain adopt`.
+After adoption, the Brain-managed templates are only starter context. The AI agent should scan repo structure, docs, manifests, entrypoints, tests, CI, config, and deployment surfaces, then enrich AGENTS.md, docs, or `.brain` notes with durable project-specific findings. Use focused `.brain/resources` notes for architecture, workflows, risks, and references that do not belong in top-level templates, and keep generated managed blocks refreshable by putting hand-authored findings in Local Notes or dedicated notes. Brain does not run an automatic deep LLM scan during `brain adopt`.
 
 ## Sessions And Verification
 

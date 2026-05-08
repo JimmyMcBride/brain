@@ -240,6 +240,33 @@ func TestCLIAdoptDryRunDoesNotWrite(t *testing.T) {
 	}
 }
 
+func TestCLIAdoptJSONNextStepsOnlyAfterAdoption(t *testing.T) {
+	env := newCLIEnv(t)
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "adopt"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse adopt payload: %v\n%s", err, jsonOut)
+	}
+	steps, ok := payload["next_steps"].([]any)
+	if !ok || len(steps) == 0 {
+		t.Fatalf("expected next_steps in non-dry-run payload: %#v", payload)
+	}
+	if !strings.Contains(fmt.Sprint(steps), "manifests") || !strings.Contains(fmt.Sprint(steps), "managed blocks refreshable") {
+		t.Fatalf("expected complete post-adopt guidance in next_steps: %#v", steps)
+	}
+
+	dryRunEnv := newCLIEnv(t)
+	dryRunJSON := requireOK(t, dryRunEnv.run(t, "", "--config", dryRunEnv.config, "--project", dryRunEnv.project, "--json", "adopt", "--dry-run"))
+	var dryRunPayload map[string]any
+	if err := json.Unmarshal([]byte(dryRunJSON), &dryRunPayload); err != nil {
+		t.Fatalf("parse dry-run adopt payload: %v\n%s", err, dryRunJSON)
+	}
+	if _, ok := dryRunPayload["next_steps"]; ok {
+		t.Fatalf("expected dry-run payload to omit next_steps: %#v", dryRunPayload)
+	}
+}
+
 func TestCLIAdoptIsIdempotentOnManagedRepo(t *testing.T) {
 	env := newCLIEnv(t)
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))

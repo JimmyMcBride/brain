@@ -141,7 +141,7 @@ Use these commands by default:
 
 After `brain adopt`, the generated context is only starter context. Brain does not run an automatic deep LLM scan during adoption.
 
-The AI agent should scan repo structure, docs, manifests, entrypoints, tests, CI, config, and deployment surfaces. Then update AGENTS.md, docs, or `.brain` notes with concrete project facts, and add focused `.brain/resources` notes for details too specific for the main templates.
+The AI agent should scan repo structure, docs, manifests, entrypoints, tests, CI, config, and deployment surfaces. Then update AGENTS.md, docs, or `.brain` notes with concrete project facts, add focused `.brain/resources` notes for architecture, workflows, risks, and references that do not belong in top-level templates, and keep generated managed blocks refreshable by putting hand-authored findings in Local Notes or dedicated notes.
 
 ## Upgrade Workflow
 

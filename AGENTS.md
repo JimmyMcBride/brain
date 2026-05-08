@@ -46,10 +46,11 @@ Read the linked context files before substantial work. Prefer the `brain` skill 
 
 After `brain adopt` creates starter context, the AI agent must scan the repo before treating the templates as complete memory.
 
-1. Inspect repo structure, docs, manifests, entrypoints, tests, CI, config, and deployment surfaces.
-2. Replace generic template notes with concrete project facts in AGENTS.md, docs, or .brain notes.
-3. Add focused .brain/resources notes for architecture, workflows, risks, and references that do not belong in top-level templates.
-4. Keep generated managed blocks refreshable; put hand-authored findings in Local Notes or dedicated notes.
+1. Treat generated context as starter context, not complete repo memory.
+2. Scan repo structure, docs, manifests, entrypoints, tests, CI, config, and deployment surfaces.
+3. Update AGENTS.md, docs, or .brain notes with durable project-specific findings.
+4. Add focused .brain/resources notes for architecture, workflows, risks, and references that do not belong in top-level templates.
+5. Keep generated managed blocks refreshable; put hand-authored findings in Local Notes or dedicated notes.
 <!-- brain:end agents-contract -->
 
 ## Local Notes

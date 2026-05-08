@@ -15,6 +15,14 @@ const localNotesSection = "## Local Notes\n\nAdd repo-specific notes here. `brai
 
 var supportedAgentIntegrationAgents = []string{"ai", "claude", "codex", "copilot", "openclaw", "pi"}
 
+var postAdoptionEnrichmentSteps = []string{
+	"treat generated context as starter context, not complete repo memory",
+	"scan repo structure, docs, manifests, entrypoints, tests, CI, config, and deployment surfaces",
+	"update AGENTS.md, docs, or .brain notes with durable project-specific findings",
+	"add focused .brain/resources notes for architecture, workflows, risks, and references that do not belong in top-level templates",
+	"keep generated managed blocks refreshable; put hand-authored findings in Local Notes or dedicated notes",
+}
+
 type Manager struct {
 	Home string
 }
@@ -88,6 +96,10 @@ func New(home string) *Manager {
 		home, _ = os.UserHomeDir()
 	}
 	return &Manager{Home: home}
+}
+
+func PostAdoptionEnrichmentSteps() []string {
+	return append([]string(nil), postAdoptionEnrichmentSteps...)
 }
 
 func (m *Manager) Install(ctx context.Context, req Request) ([]Result, error) {
@@ -1438,21 +1450,26 @@ func renderAgentIntegration(agent string) string {
 	b.WriteString("- if finish blocks, review the promotion suggestions or run `brain distill --session --dry-run`\n")
 	b.WriteString("- finish with `brain session finish`\n")
 	b.WriteString("\nPost-adoption enrichment:\n")
-	b.WriteString("- after `brain adopt`, treat generated context as starter context, not complete repo memory\n")
-	b.WriteString("- scan repo structure, docs, entrypoints, tests, CI, config, and deployment surfaces\n")
-	b.WriteString("- update AGENTS.md, docs, or .brain notes with durable project-specific findings\n")
-	b.WriteString("- add focused .brain/resources notes when details are too specific for the main templates\n")
+	for _, step := range postAdoptionEnrichmentSteps {
+		fmt.Fprintf(&b, "- %s\n", step)
+	}
 	return b.String()
 }
 
 func writePostAdoptionEnrichment(b *strings.Builder) {
 	b.WriteString("\n## Post-Adoption Enrichment\n\n")
 	b.WriteString("After `brain adopt` creates starter context, the AI agent must scan the repo before treating the templates as complete memory.\n\n")
-	b.WriteString("1. Inspect repo structure, docs, manifests, entrypoints, tests, CI, config, and deployment surfaces.\n")
-	b.WriteString("2. Replace generic template notes with concrete project facts in AGENTS.md, docs, or .brain notes.\n")
-	b.WriteString("3. Add focused .brain/resources notes for architecture, workflows, risks, and references that do not belong in top-level templates.\n")
-	b.WriteString("4. Keep generated managed blocks refreshable; put hand-authored findings in Local Notes or dedicated notes.\n")
+	for i, step := range postAdoptionEnrichmentSteps {
+		fmt.Fprintf(b, "%d. %s.\n", i+1, sentenceCase(step))
+	}
 	b.WriteString("\n")
+}
+
+func sentenceCase(value string) string {
+	if value == "" {
+		return value
+	}
+	return strings.ToUpper(value[:1]) + value[1:]
 }
 
 func renderGitIgnore() string {

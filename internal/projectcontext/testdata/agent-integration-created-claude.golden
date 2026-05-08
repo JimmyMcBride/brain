@@ -23,8 +23,9 @@ When working with Brain-managed repos:
 - finish with `brain session finish`
 
 Post-adoption enrichment:
-- after `brain adopt`, treat generated context as starter context, not complete repo memory
-- scan repo structure, docs, entrypoints, tests, CI, config, and deployment surfaces
+- treat generated context as starter context, not complete repo memory
+- scan repo structure, docs, manifests, entrypoints, tests, CI, config, and deployment surfaces
 - update AGENTS.md, docs, or .brain notes with durable project-specific findings
-- add focused .brain/resources notes when details are too specific for the main templates
+- add focused .brain/resources notes for architecture, workflows, risks, and references that do not belong in top-level templates
+- keep generated managed blocks refreshable; put hand-authored findings in Local Notes or dedicated notes
 <!-- brain:end agent-integration-claude -->
