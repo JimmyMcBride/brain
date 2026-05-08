@@ -9,11 +9,21 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 const localNotesSection = "## Local Notes\n\nAdd repo-specific notes here. `brain context refresh` preserves content outside managed blocks.\n"
 
 var supportedAgentIntegrationAgents = []string{"ai", "claude", "codex", "copilot", "openclaw", "pi"}
+
+var postAdoptionEnrichmentSteps = []string{
+	"treat generated context as starter context, not complete repo memory",
+	"scan repo structure, docs, manifests, entrypoints, tests, CI, config, and deployment surfaces",
+	"update AGENTS.md, docs, or .brain notes with durable project-specific findings",
+	"add focused .brain/resources notes for architecture, workflows, risks, and references that do not belong in top-level templates",
+	"keep generated managed blocks refreshable; put hand-authored findings in Local Notes or dedicated notes",
+}
 
 type Manager struct {
 	Home string
@@ -88,6 +98,10 @@ func New(home string) *Manager {
 		home, _ = os.UserHomeDir()
 	}
 	return &Manager{Home: home}
+}
+
+func PostAdoptionEnrichmentSteps() []string {
+	return append([]string(nil), postAdoptionEnrichmentSteps...)
 }
 
 func (m *Manager) Install(ctx context.Context, req Request) ([]Result, error) {
@@ -1228,6 +1242,7 @@ func renderAgents(snapshot Snapshot) string {
 	var b strings.Builder
 	slug := policySlug(snapshot.ProjectName)
 	fmt.Fprintf(&b, "Use this file as a Brain-managed project context entrypoint for `%s`.\n\n", snapshot.ProjectName)
+	b.WriteString("Brain is intended for AI agents operating in this repo, not as a human-operated project dashboard.\n\n")
 	b.WriteString("Read the linked context files before substantial work. Prefer the `brain` skill and `brain` CLI for project memory, retrieval, and durable context updates.\n\n")
 	b.WriteString("## Table Of Contents\n\n")
 	for _, entry := range []struct {
@@ -1245,7 +1260,7 @@ func renderAgents(snapshot Snapshot) string {
 		fmt.Fprintf(&b, "- [%s](%s)\n", entry.name, entry.path)
 	}
 	if len(snapshot.DocFiles) != 0 {
-		b.WriteString("\n## Human Docs\n\n")
+		b.WriteString("\n## Project Docs\n\n")
 		for _, file := range snapshot.DocFiles {
 			fmt.Fprintf(&b, "- [%s](./%s)\n", filepath.Base(file), file)
 		}
@@ -1259,6 +1274,7 @@ func renderAgents(snapshot Snapshot) string {
 	b.WriteString("6. Use `brain edit` for durable context updates to AGENTS.md, docs, or .brain notes.\n")
 	b.WriteString("7. Use `brain session run -- <command>` for required verification commands.\n")
 	b.WriteString("8. Finish with `brain session finish` so policy checks can enforce verification and surface promotion review when durable follow-through is still needed.\n")
+	writePostAdoptionEnrichment(&b)
 	return b.String()
 }
 
@@ -1339,7 +1355,8 @@ func renderWorkflows(snapshot Snapshot) string {
 	b.WriteString("2. If a session already exists, run `brain prep`.\n")
 	b.WriteString("3. Read `AGENTS.md`, `.brain/policy.yaml`, and the linked context files still needed for the task.\n")
 	b.WriteString("4. Use `brain context compile --task \"<task>\"` only when you need the lower-level packet compiler directly.\n")
-	fmt.Fprintf(&b, "5. If project memory still matters, run `brain find %s` or `brain search \"%s <task>\"`.\n\n", slug, slug)
+	fmt.Fprintf(&b, "5. If project memory still matters, run `brain find %s` or `brain search \"%s <task>\"`.\n", slug, slug)
+	writePostAdoptionEnrichment(&b)
 	b.WriteString("## During Work\n\n")
 	b.WriteString("- Keep durable discoveries, decisions, and risks in AGENTS.md, /docs, or .brain notes.\n")
 	b.WriteString("- Update existing durable notes instead of duplicating context.\n")
@@ -1418,6 +1435,7 @@ func renderCurrentState(snapshot Snapshot) string {
 func renderAgentIntegration(agent string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Brain-managed project context for `%s` lives under `.brain/`.\n\n", agent)
+	b.WriteString("Brain is intended for AI agents, not as a human-operated project dashboard.\n\n")
 	b.WriteString("Read these when Brain context is relevant:\n")
 	b.WriteString("- `.brain/policy.yaml`\n")
 	b.WriteString("- `.brain/context/overview.md`\n")
@@ -1433,7 +1451,31 @@ func renderAgentIntegration(agent string) string {
 	b.WriteString("- use `brain session run -- <command>` for required verification commands\n")
 	b.WriteString("- if finish blocks, review the promotion suggestions or run `brain distill --session --dry-run`\n")
 	b.WriteString("- finish with `brain session finish`\n")
+	b.WriteString("\nPost-adoption enrichment:\n")
+	for _, step := range postAdoptionEnrichmentSteps {
+		fmt.Fprintf(&b, "- %s\n", step)
+	}
 	return b.String()
+}
+
+func writePostAdoptionEnrichment(b *strings.Builder) {
+	b.WriteString("\n## Post-Adoption Enrichment\n\n")
+	b.WriteString("After `brain adopt` creates starter context, the AI agent must scan the repo before treating the templates as complete memory.\n\n")
+	for i, step := range postAdoptionEnrichmentSteps {
+		fmt.Fprintf(b, "%d. %s.\n", i+1, sentenceCase(step))
+	}
+	b.WriteString("\n")
+}
+
+func sentenceCase(value string) string {
+	if value == "" {
+		return value
+	}
+	first, size := utf8.DecodeRuneInString(value)
+	if first == utf8.RuneError && size == 0 {
+		return value
+	}
+	return string(unicode.ToUpper(first)) + value[size:]
 }
 
 func renderGitIgnore() string {

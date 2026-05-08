@@ -3,6 +3,8 @@
 <!-- brain:begin agent-integration-claude -->
 Brain-managed project context for `claude` lives under `.brain/`.
 
+Brain is intended for AI agents, not as a human-operated project dashboard.
+
 Read these when Brain context is relevant:
 - `.brain/policy.yaml`
 - `.brain/context/overview.md`
@@ -19,4 +21,11 @@ When working with Brain-managed repos:
 - use `brain session run -- <command>` for required verification commands
 - if finish blocks, review the promotion suggestions or run `brain distill --session --dry-run`
 - finish with `brain session finish`
+
+Post-adoption enrichment:
+- treat generated context as starter context, not complete repo memory
+- scan repo structure, docs, manifests, entrypoints, tests, CI, config, and deployment surfaces
+- update AGENTS.md, docs, or .brain notes with durable project-specific findings
+- add focused .brain/resources notes for architecture, workflows, risks, and references that do not belong in top-level templates
+- keep generated managed blocks refreshable; put hand-authored findings in Local Notes or dedicated notes
 <!-- brain:end agent-integration-claude -->
