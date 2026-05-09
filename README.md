@@ -1,6 +1,6 @@
 # 🧠 brain
 
-![Scarecrow dancing](docs/assets/scarecrow.gif)
+![Brain overview for AI agents](docs/assets/brain-overview.png)
 
 ## Give Your AI Coding Agent A Real Brain Inside The Repo
 
