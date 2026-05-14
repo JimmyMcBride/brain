@@ -39,8 +39,9 @@ Read the linked context files before substantial work. Prefer the `brain` skill 
 4. Use `brain context compile --task "<task>"` only when you need the lower-level packet compiler directly.
 5. Retrieve project memory with `brain find brain` or `brain search "brain <task>"` when the compiled packet is not enough.
 6. Use `brain edit` for durable context updates to AGENTS.md, docs, or .brain notes.
-7. Use `brain session run -- <command>` for required verification commands.
-8. Finish with `brain session finish` so policy checks can enforce verification and surface promotion review when durable follow-through is still needed.
+7. Run `brain context audit` after meaningful architecture, config, CI, deploy, test, or docs-surface changes.
+8. Use `brain session run -- <command>` for required verification commands.
+9. Finish with `brain session finish` so policy checks can enforce verification and surface promotion review when durable follow-through is still needed.
 
 ## Post-Adoption Enrichment
 

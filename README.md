@@ -46,6 +46,7 @@ It provides explicit workflows for:
 - project contracts and docs
 - local retrieval
 - compiled task context
+- context maintenance audits
 - session enforcement
 - note history and undo
 - promotion-style distillation from active work sessions
@@ -157,6 +158,7 @@ In any project directory:
 brain init --project .
 brain doctor --project .
 brain context install --project .
+brain context audit --project .
 brain prep --project . --task "tighten auth flow"
 brain search --project . "tighten auth flow"
 brain session run --project . -- go test ./...
@@ -164,6 +166,8 @@ brain session finish --project . --summary "auth flow tightened"
 ```
 
 Use `brain adopt --project .` instead of `brain init --project .` when the repo already has docs or an unmanaged `AGENTS.md`. After adoption, the AI agent should treat the generated files as starter context, scan the repo deeply, and update AGENTS.md, docs, or `.brain` notes with durable project-specific findings.
+
+As the repo evolves, use `brain context audit --project .` to review whether Brain markdown still covers architecture, config, CI, deploy, test, and docs surfaces. Add `--proposal` when the findings should become a reviewed `.brain/resources/changes/...` note for the agent to apply.
 
 ## What Brain Does Not Try To Be
 
@@ -186,7 +190,7 @@ If you already use separate delivery tools, Brain is designed to complement them
 - `brain prep`: start or reuse a session and compile the first task packet
 - `brain read`, `brain edit`: inspect and update managed markdown
 - `brain find`, `brain search`: project-local retrieval
-- `brain context ...`: install, refresh, compile, inspect, and analyze task context, including packet effectiveness
+- `brain context ...`: install, refresh, compile, inspect, audit, and analyze task context, including packet effectiveness
 - `brain distill --session`: create a reviewed distillation proposal from active session work
 - `brain session ...`: enforce workflow and verification rules
 - `brain skills ...`: install the Brain skill for agent runtimes

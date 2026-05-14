@@ -74,6 +74,8 @@ brain adopt --project .
 
 Use `brain adopt --project .` when existing local agent instruction files still need their Brain-managed integration block refreshed or migrated.
 
+Use `brain context audit --project .` after meaningful architecture, config, CI, deploy, test, or docs-surface changes to review whether durable Brain markdown still covers the current repo. The audit is advisory by default; add `--proposal` only when the findings should become a reviewed `.brain/resources/changes/context-audit-...md` note.
+
 When a repo change updates Brain's command surface, agent-facing workflow guidance, or automatic project-upgrade behavior, update `skills/brain/SKILL.md` in the same branch, validate the bundled skill and migration path with the current branch binary, and reinstall the local Brain skill for Codex and OpenClaw before closing the work:
 
 ```bash
