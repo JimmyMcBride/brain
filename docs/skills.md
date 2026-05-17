@@ -64,6 +64,8 @@ Brain treats `.brain/session.json`, `.brain/sessions/`, `.brain/state/`, and `.b
 
 Use `brain doctor --project .` to inspect whether project migrations are `current`, `pending`, or `broken`.
 
+When `brain update --project .` reports that an older Brain-managed `AGENTS.md` is missing Karpathy Guidelines, the AI agent should ask the user whether to add them. Record the answer with `brain context guidance karpathy --accept --project .` or `brain context guidance karpathy --decline --project .`; Brain stores that local decision under `.brain/state/` and does not ask again unless the user explicitly changes it.
+
 If an automatic project migration fails, run these from the project root:
 
 ```bash

@@ -1281,7 +1281,7 @@ func renderAgents(snapshot Snapshot) string {
 }
 
 func writeKarpathyGuidelines(b *strings.Builder) {
-	b.WriteString("\n## Karpathy Guidelines\n\n")
+	b.WriteString("\n" + KarpathyGuidanceHeading + "\n\n")
 	b.WriteString("Behavioral guidelines to reduce common LLM coding mistakes, derived from [Andrej Karpathy's observations](https://x.com/karpathy/status/2015883857489522876) on LLM coding pitfalls.\n\n")
 	b.WriteString("Use these guidelines when writing, reviewing, or refactoring code to avoid overcomplication, make surgical changes, surface assumptions, and define verifiable success criteria.\n\n")
 	b.WriteString("**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.\n\n")

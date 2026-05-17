@@ -130,6 +130,20 @@ func writeCLIFile(t *testing.T, path, content string) {
 	}
 }
 
+func readProjectFile(t *testing.T, project, rel string) string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(project, filepath.FromSlash(rel)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
+}
+
+func writeLegacyManagedAgentsWithoutKarpathy(t *testing.T, project string) {
+	t.Helper()
+	writeCLIFile(t, filepath.Join(project, "AGENTS.md"), "# Project Agent Contract\n\n<!-- brain:begin agents-contract -->\nUse Brain.\n<!-- brain:end agents-contract -->\n\n## Local Notes\n\nkeep me\n")
+}
+
 func listDirNames(t *testing.T, path string) []string {
 	t.Helper()
 	entries, err := os.ReadDir(path)
@@ -2063,6 +2077,89 @@ func TestCLIUpdateJSONIncludesProjectMigrationStatus(t *testing.T) {
 	}
 	if !strings.Contains(jsonOut, "\"project_migration_messages\": [") {
 		t.Fatalf("expected project migration messages in json output:\n%s", jsonOut)
+	}
+}
+
+func TestCLIUpdateSuggestsKarpathyGuidanceWhenUnset(t *testing.T) {
+	env := newCLIEnv(t)
+	restoreUpdater := newUpdater
+	restoreSkillRunner := skillInstallRunner
+	restoreMigrationRunner := projectMigrationRunner
+	defer func() {
+		newUpdater = restoreUpdater
+		skillInstallRunner = restoreSkillRunner
+		projectMigrationRunner = restoreMigrationRunner
+	}()
+
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	writeLegacyManagedAgentsWithoutKarpathy(t, env.project)
+
+	newUpdater = func(cfg *config.Config, paths config.Paths) updater {
+		return stubUpdater{result: update.Result{
+			CurrentVersion: "v0.1.0",
+			LatestVersion:  "v0.1.0",
+			Status:         "up_to_date",
+			Message:        "already up to date (v0.1.0)",
+			CurrentPath:    filepath.Join(env.root, "bin", "brain"),
+		}}
+	}
+	skillInstallRunner = func(binaryPath, configPath, projectPath string, scope skills.Scope, agents []string) ([]skills.InstallResult, error) {
+		return nil, nil
+	}
+	projectMigrationRunner = func(binaryPath, configPath, projectPath string) (*projectcontext.ApplyProjectMigrationsResult, error) {
+		return &projectcontext.ApplyProjectMigrationsResult{
+			UsesBrain:  true,
+			ProjectDir: projectPath,
+			Status:     "unchanged",
+		}, nil
+	}
+
+	output := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "update"))
+	if !strings.Contains(output, "Next for AI agent:") || !strings.Contains(output, "brain context guidance karpathy --accept --project .") {
+		t.Fatalf("expected Karpathy guidance recommendation:\n%s", output)
+	}
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "update"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse update json: %v\n%s", err, jsonOut)
+	}
+	guidance, ok := payload["karpathy_guidance"].(map[string]any)
+	if !ok || guidance["decision"] != "unset" {
+		t.Fatalf("expected Karpathy guidance json payload: %#v", payload)
+	}
+}
+
+func TestCLIContextGuidanceKarpathyAcceptDeclineStatus(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	writeLegacyManagedAgentsWithoutKarpathy(t, env.project)
+
+	status := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "guidance", "karpathy", "--status"))
+	if !strings.Contains(status, "decision: unset") || !strings.Contains(status, "guidelines_present: false") || !strings.Contains(status, "Next for AI agent:") {
+		t.Fatalf("expected unset guidance status:\n%s", status)
+	}
+
+	decline := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "guidance", "karpathy", "--decline"))
+	if !strings.Contains(decline, "decision: declined") {
+		t.Fatalf("expected decline output:\n%s", decline)
+	}
+	agentsBody := readProjectFile(t, env.project, "AGENTS.md")
+	if strings.Contains(agentsBody, "## Karpathy Guidelines") {
+		t.Fatalf("decline should not add guidelines:\n%s", agentsBody)
+	}
+	status = requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "guidance", "karpathy", "--status"))
+	if strings.Contains(status, "Next for AI agent:") {
+		t.Fatalf("decline should suppress recommendation:\n%s", status)
+	}
+
+	accept := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "guidance", "karpathy", "--accept"))
+	if !strings.Contains(accept, "action: updated") || !strings.Contains(accept, "decision: accepted") || !strings.Contains(accept, "updated   contract AGENTS.md preserve-user") {
+		t.Fatalf("expected accept output:\n%s", accept)
+	}
+	agentsBody = readProjectFile(t, env.project, "AGENTS.md")
+	if !strings.Contains(agentsBody, "## Karpathy Guidelines") || !strings.Contains(agentsBody, "keep me") {
+		t.Fatalf("accept should add guidelines and preserve notes:\n%s", agentsBody)
 	}
 }
 
