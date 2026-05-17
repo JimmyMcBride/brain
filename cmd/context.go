@@ -8,6 +8,7 @@ import (
 
 	"brain/internal/config"
 	"brain/internal/contextassembly"
+	"brain/internal/contextaudit"
 	"brain/internal/livecontext"
 	"brain/internal/output"
 	"brain/internal/projectcontext"
@@ -39,6 +40,8 @@ func addContextCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLo
 	var structurePath string
 	var liveTask string
 	var liveExplain bool
+	var auditSince string
+	var auditProposal bool
 
 	contextCmd := &cobra.Command{
 		Use:   "context",
@@ -372,6 +375,31 @@ Use the other subcommands to inspect compatibility views or refresh the Brain-ma
 		},
 	}
 
+	auditCmd := &cobra.Command{
+		Use:   "audit",
+		Short: "Audit whether durable context still covers the repo shape",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			projectRoot := contextProjectPath(project, flags.projectPath)
+			appCtx, err := loadApp(projectRoot)
+			if err != nil {
+				return err
+			}
+			defer appCtx.Close()
+
+			report, err := appCtx.Audit.Audit(cmd.Context(), contextaudit.Request{
+				ProjectDir: projectRoot,
+				Since:      auditSince,
+				Proposal:   auditProposal,
+			})
+			if err != nil {
+				return err
+			}
+			return appCtx.Output.Print(report, func(w io.Writer) error {
+				return contextaudit.RenderHuman(w, report)
+			})
+		},
+	}
+
 	structureCmd := &cobra.Command{
 		Use:   "structure",
 		Short: "Inspect structural repo context",
@@ -532,6 +560,9 @@ Use the other subcommands to inspect compatibility views or refresh the Brain-ma
 	statsCmd.Flags().IntVar(&statsLimit, "limit", 5, "maximum number of entries to show per stats section")
 	effectivenessCmd.Flags().StringVar(&project, "project", "", "project root to inspect context telemetry from")
 	effectivenessCmd.Flags().IntVar(&effectivenessLimit, "limit", 5, "maximum number of entries to show per report section")
+	auditCmd.Flags().StringVar(&project, "project", "", "project root to audit")
+	auditCmd.Flags().StringVar(&auditSince, "since", "", "git ref to compare for diff-focused audit findings")
+	auditCmd.Flags().BoolVar(&auditProposal, "proposal", false, "create a reviewed audit proposal note under .brain/resources/changes")
 	structureCmd.Flags().StringVar(&project, "project", "", "project root to inspect structure from")
 	structureCmd.Flags().StringVar(&structurePath, "path", "", "subtree path filter for structural context")
 	structureStatusCmd.Flags().StringVar(&project, "project", "", "project root to inspect structure from")
@@ -540,7 +571,7 @@ Use the other subcommands to inspect compatibility views or refresh the Brain-ma
 	liveCmd.Flags().BoolVar(&liveExplain, "explain", false, "include rationale and missing-signal detail")
 
 	structureCmd.AddCommand(structureStatusCmd)
-	contextCmd.AddCommand(installCmd, refreshCmd, loadCmd, migrateCmd, assembleCmd, compileCmd, explainCmd, statsCmd, effectivenessCmd, structureCmd, liveCmd)
+	contextCmd.AddCommand(installCmd, refreshCmd, loadCmd, migrateCmd, assembleCmd, compileCmd, explainCmd, statsCmd, effectivenessCmd, auditCmd, structureCmd, liveCmd)
 	root.AddCommand(contextCmd)
 }
 

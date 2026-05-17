@@ -89,6 +89,12 @@ Use these commands by default:
   - Summarize likely signal, likely noise, repeated expansions, verification links, fresh-packet budget pressure, and recurring omitted markdown docs from local compiler telemetry.
 - `brain context effectiveness`
   - Assess packet usage, cache behavior, budget pressure, outcome links, likely misses, telemetry gaps, and recommended packet-shaping follow-ups.
+- `brain context audit`
+  - Review whether durable Brain markdown still covers current architecture, config, CI, deploy, test, and docs surfaces. Writes nothing by default.
+- `brain context audit --since <git-ref>`
+  - Add diff-focused findings for context-sensitive changes since a base ref.
+- `brain context audit --proposal`
+  - Create a reviewed `.brain/resources/changes/context-audit-...md` proposal note without directly editing durable docs.
 - `brain distill --session`
 - `brain distill --session --dry-run`
   - Create a session-scoped promotion-review proposal with source provenance, promotion diagnostics, and suggested durable note updates.
@@ -136,6 +142,7 @@ Use these commands by default:
 - Do not create sidecar memory systems when Brain already owns the workflow.
 - Prefer updating an existing durable note over creating duplicates.
 - Use human-readable filenames and titles.
+- Run `brain context audit` after meaningful architecture, config, CI, deploy, test, or docs-surface changes.
 
 ## Post-Adoption Enrichment
 
@@ -172,11 +179,13 @@ The AI agent should scan repo structure, docs, manifests, entrypoints, tests, CI
 6. `brain context explain --last` when you need to inspect why the latest packet looked the way it did, whether Brain reused or delta-linked it, which items were expanded later, or which downstream verification and closeout outcomes were recorded.
 7. `brain context stats` when you are tuning compiler behavior and want a compact view of likely signal, likely noise, repeated expansions, verification-link patterns, fresh-packet budget pressure, and recurring omitted docs from local telemetry.
 8. `brain context effectiveness` when you need a higher-level read on whether packet telemetry suggests useful context, likely misses, low-signal includes, telemetry gaps, or concrete packet-shaping follow-ups.
-9. `brain context structure` when you need repo boundaries, entrypoints, config surfaces, or test surfaces before deeper retrieval.
-10. `brain context live --task "<task>"` when you need current session, changed-file, touched-boundary, nearby-test, verification-recipe, or policy signals, not just compiled startup context.
-11. `brain context assemble --task "<task>"` when you need the broader typed packet instead of the compiler-first working set.
-12. `brain context assemble --explain` when you need to inspect why Brain chose its broader packet and what it left nearby.
-13. `brain context load --level ...` only when you need the older static-bundle compatibility view.
+9. `brain context audit` after meaningful architecture, config, CI, deploy, test, or docs-surface changes so durable context stays aligned with the repo.
+10. `brain context audit --proposal` only when audit findings should become a tracked review note for the active branch or PR.
+11. `brain context structure` when you need repo boundaries, entrypoints, config surfaces, or test surfaces before deeper retrieval.
+12. `brain context live --task "<task>"` when you need current session, changed-file, touched-boundary, nearby-test, verification-recipe, or policy signals, not just compiled startup context.
+13. `brain context assemble --task "<task>"` when you need the broader typed packet instead of the compiler-first working set.
+14. `brain context assemble --explain` when you need to inspect why Brain chose its broader packet and what it left nearby.
+15. `brain context load --level ...` only when you need the older static-bundle compatibility view.
 
 ## Distillation Workflow
 
@@ -193,6 +202,7 @@ The AI agent should scan repo structure, docs, manifests, entrypoints, tests, CI
 - If `brain session finish` blocks, inspect the promotion suggestions in the closeout output first.
 - Run `brain distill --session --dry-run` when you need the full promotion review before deciding what to keep.
 - Run `brain distill --session` only when you intentionally want a tracked proposal note to carry in the active branch or PR.
+- Run `brain context audit --since <baseline>` when closeout points at architecture, config, CI, deploy, test, or docs-surface changes that may need context maintenance.
 - Review the proposal, update the durable notes that matter, then retry `brain session finish`.
 - Before switching branches or returning to a protected branch, run `git status --short` and resolve repo-owned leftovers such as `.brain/resources/changes/*`, `.brain/`, `docs/`, or contract files.
 - If the session changed no durable knowledge after review, use `brain session finish --force --reason "<why>"` explicitly instead of pretending there was a durable update.

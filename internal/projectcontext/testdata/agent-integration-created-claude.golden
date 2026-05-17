@@ -18,6 +18,7 @@ When working with Brain-managed repos:
 - if a validated session already exists, run `brain prep`
 - use `brain context compile --task "<task>"` when you need the lower-level packet compiler directly
 - use the `brain` CLI for project-local memory and context workflows
+- run `brain context audit` after meaningful architecture, config, CI, deploy, test, or docs-surface changes
 - use `brain session run -- <command>` for required verification commands
 - if finish blocks, review the promotion suggestions or run `brain distill --session --dry-run`
 - finish with `brain session finish`

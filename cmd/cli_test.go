@@ -130,6 +130,19 @@ func writeCLIFile(t *testing.T, path, content string) {
 	}
 }
 
+func listDirNames(t *testing.T, path string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+	return names
+}
+
 func TestCLIProjectLifecycle(t *testing.T) {
 	env := newCLIEnv(t)
 	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
@@ -2169,6 +2182,83 @@ func TestCLIPrepRunsMigrationPreflight(t *testing.T) {
 	}
 	if !strings.Contains(string(agentsBody), "brain prep") || !strings.Contains(string(agentsBody), "keep me") {
 		t.Fatalf("expected prep preflight migration to refresh AGENTS.md:\n%s", string(agentsBody))
+	}
+}
+
+func TestCLIContextAuditReportsAndDoesNotWriteByDefault(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	before := listDirNames(t, filepath.Join(env.project, ".brain", "resources", "changes"))
+
+	output := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "audit"))
+	if !strings.Contains(output, "## Context Audit") || !strings.Contains(output, "## Findings") {
+		t.Fatalf("unexpected audit output:\n%s", output)
+	}
+	after := listDirNames(t, filepath.Join(env.project, ".brain", "resources", "changes"))
+	if strings.Join(before, "\n") != strings.Join(after, "\n") {
+		t.Fatalf("expected audit without --proposal not to create change notes; before=%v after=%v", before, after)
+	}
+}
+
+func TestCLIContextAuditJSONAndProposal(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+
+	jsonOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "--json", "context", "audit"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("parse audit json: %v\n%s", err, jsonOut)
+	}
+	if _, ok := payload["summary"].(map[string]any); !ok {
+		t.Fatalf("expected summary in audit json: %#v", payload)
+	}
+	if _, ok := payload["base"].(map[string]any); !ok {
+		t.Fatalf("expected base in audit json: %#v", payload)
+	}
+
+	proposalOut := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "context", "audit", "--proposal"))
+	if !strings.Contains(proposalOut, "## Proposal") || !strings.Contains(proposalOut, ".brain/resources/changes/context-audit-") {
+		t.Fatalf("expected proposal output:\n%s", proposalOut)
+	}
+	matches, err := filepath.Glob(filepath.Join(env.project, ".brain", "resources", "changes", "context-audit-*.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("expected one context audit proposal, got %v", matches)
+	}
+}
+
+func TestCLIPrepSuggestsAuditForRelevantSessionChanges(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	initGitProject(t, env.project)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "prep", "--task", "change config"))
+	if err := os.WriteFile(filepath.Join(env.project, "go.mod"), []byte("module example.com/demo\n\ngo 1.27\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	output := requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "prep"))
+	if !strings.Contains(output, "brain context audit --since") {
+		t.Fatalf("expected prep to suggest context audit:\n%s", output)
+	}
+}
+
+func TestCLISessionFinishSuggestsAuditWithoutAuditGate(t *testing.T) {
+	env := newCLIEnv(t)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "init"))
+	initGitProject(t, env.project)
+	requireOK(t, env.run(t, "", "--config", env.config, "--project", env.project, "prep", "--task", "change config"))
+	if err := os.WriteFile(filepath.Join(env.project, "go.mod"), []byte("module example.com/demo\n\ngo 1.27\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result := env.run(t, "", "--config", env.config, "--project", env.project, "session", "finish", "--summary", "premature")
+	if result.err == nil {
+		t.Fatalf("expected finish to block for existing closeout obligations")
+	}
+	if !strings.Contains(result.stdout, "brain context audit --since") {
+		t.Fatalf("expected finish remediation to suggest audit without making it a separate gate:\nstdout=%s\nstderr=%s", result.stdout, result.stderr)
 	}
 }
 

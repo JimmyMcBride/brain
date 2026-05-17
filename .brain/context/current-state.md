@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-21T04:17:45Z"
+updated: "2026-05-14T02:30:43Z"
 ---
 <!-- brain:begin context-current-state -->
 This file is a deterministic snapshot of the repository state at the last refresh.
@@ -10,10 +10,10 @@ This file is a deterministic snapshot of the repository state at the last refres
 - Root: `.`
 - Runtime: `go`
 - Go module: `brain`
-- Current branch: `develop`
+- Current branch: `codex/context-audit`
 - Default branch: `develop`
 - Remote: `https://github.com/JimmyMcBride/brain.git`
-- Go test files: `24`
+- Go test files: `25`
 
 ## Docs
 
@@ -29,6 +29,7 @@ This file is a deterministic snapshot of the repository state at the last refres
 
 ## Local Notes
 
+- 2026-05-14: Added `brain context audit` as an advisory context-maintenance surface. It runs deterministic repo coverage checks, can add diff-focused findings from `--since` or a session baseline, reports missing coverage and stale references, and can write reviewed `.brain/resources/changes/context-audit-...md` proposals without directly editing durable docs.
 - 2026-04-25: Added `brain context effectiveness` as the first context-effectiveness reporting surface. It summarizes recorded packet usage, cache behavior, budget pressure, outcome links, likely misses from repeated omissions, known telemetry gaps, and recommended packet-shaping follow-ups before Brain adds guide-packet behavior or new telemetry.
 - 2026-04-25: Added post-packet search and Brain-routed context-access telemetry. `brain search` now records compact post-packet search outcomes, `brain session run` classifies direct read/search-like commands, and context effectiveness/explain reports can surface omitted markdown docs that were later accessed.
 - 2026-04-20: Added `brain prep` as the default Brain-first startup path. It validates or starts the session and compiles the startup packet in one step, while `brain context compile` remains the lower-level manual path.
