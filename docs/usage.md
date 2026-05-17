@@ -124,6 +124,9 @@ brain context compile --project . --task "auth flow" --fresh
 brain context explain --project . --last
 brain context stats --project .
 brain context effectiveness --project .
+brain context audit --project .
+brain context audit --project . --since origin/develop
+brain context audit --project . --proposal
 brain context install --project .
 brain context refresh --project .
 brain context refresh --project . --agent claude
@@ -170,6 +173,14 @@ brain context load --project . --level 3 --query "auth flow"
 - `context stats` summarizes likely signal items, likely noise items, repeated expansion patterns, common verification links, fresh-packet budget-pressure frequency, and recurring omitted markdown docs from local compiler telemetry
 - `context effectiveness` turns packet telemetry into a higher-level report on packet usage, cache behavior, budget pressure, post-packet searches, Brain-routed context reads/searches, likely misses from omitted docs later accessed, telemetry gaps, and recommended packet-shaping follow-ups
 
+`context audit` is the review-first maintenance surface for keeping Brain markdown alive as the repo evolves:
+
+- runs deterministic whole-repo coverage checks against structural repo context and durable docs
+- adds diff-focused findings when `--since`, an active session baseline, or a merge-base is available
+- reports missing coverage, changed context-sensitive surfaces, and stale path references
+- writes nothing by default; `--proposal` creates a reviewed `.brain/resources/changes/context-audit-...md` note
+- should be run after meaningful architecture, config, CI, deploy, test, or docs-surface changes
+
 `context structure` is the structural repo inspection surface:
 
 - returns grouped boundaries, entrypoints, config surfaces, and test surfaces
@@ -214,6 +225,8 @@ brain session finish --project . --summary "auth flow tightened"
 
 If finish blocks because repo changes need durable memory updates, inspect the promotion suggestions first. Run `brain distill --project . --session --dry-run` when you need the full review without creating a proposal note; use `brain distill --project . --session` only when you intentionally want a tracked proposal note, then apply the note updates that matter and retry `brain session finish`.
 
+For context-sensitive changes, `brain prep` and `brain session finish` may suggest `brain context audit --since <baseline>`. That audit is advisory in v1; it helps the agent review context coverage but does not create a separate closeout gate.
+
 ## History And Undo
 
 ```bash
@@ -232,3 +245,5 @@ Use `brain update --project .` to refresh the current Brain binary, refresh alre
 Use `brain context migrate --project .` when you want to run the project migration path explicitly with the current binary.
 
 Lazy preflight repair only applies auto-safe migrations. Git-index cleanup for ignored Brain runtime state is explicit-only, so it runs through `brain update --project .` or `brain context migrate --project .`, prints what it changed, and leaves the resulting diff for you to review and commit.
+
+If an older Brain-managed `AGENTS.md` does not include Karpathy Guidelines, `brain update --project .` prints a `Next for AI agent:` reminder. The AI agent should ask the user whether to add the guidelines, then run `brain context guidance karpathy --accept --project .` or `brain context guidance karpathy --decline --project .` to record the decision. Declining suppresses future reminders, but the user can later opt in with `--accept`.

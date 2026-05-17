@@ -105,6 +105,26 @@ and then compiles the smallest justified startup packet for the task.
 				return err
 			}
 
+			nextSteps := []string{
+				"Use this packet first before manually assembling repo context.",
+				fmt.Sprintf("If it is not enough, run `brain search %q` or `brain find <keyword>`.", resolvedTask),
+				"Run required verification through `brain session run -- <command>`.",
+			}
+			if appCtx.Audit != nil {
+				hint, err := appCtx.Audit.SessionHint(cmd.Context(), projectRoot, active)
+				if err == nil && hint.ShouldAudit {
+					since := hint.Since
+					if len(since) > 12 {
+						since = since[:12]
+					}
+					if strings.TrimSpace(since) != "" {
+						nextSteps = append(nextSteps, fmt.Sprintf("Run `brain context audit --since %s` before closeout because this session touched context-sensitive surfaces.", since))
+					} else {
+						nextSteps = append(nextSteps, "Run `brain context audit` before closeout because this session touched context-sensitive surfaces.")
+					}
+				}
+			}
+
 			payload := prepResponse{
 				SessionAction: sessionAction,
 				ValidationRan: validation != nil,
@@ -115,11 +135,7 @@ and then compiles the smallest justified startup packet for the task.
 				},
 				Validation: validation,
 				Packet:     response,
-				NextSteps: []string{
-					"Use this packet first before manually assembling repo context.",
-					fmt.Sprintf("If it is not enough, run `brain search %q` or `brain find <keyword>`.", resolvedTask),
-					"Run required verification through `brain session run -- <command>`.",
-				},
+				NextSteps:  nextSteps,
 			}
 
 			return appCtx.Output.Print(payload, func(w io.Writer) error {

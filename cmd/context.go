@@ -8,6 +8,7 @@ import (
 
 	"brain/internal/config"
 	"brain/internal/contextassembly"
+	"brain/internal/contextaudit"
 	"brain/internal/livecontext"
 	"brain/internal/output"
 	"brain/internal/projectcontext"
@@ -39,6 +40,11 @@ func addContextCommand(root *cobra.Command, flags *rootFlagsState, loadApp appLo
 	var structurePath string
 	var liveTask string
 	var liveExplain bool
+	var auditSince string
+	var auditProposal bool
+	var guidanceAccept bool
+	var guidanceDecline bool
+	var guidanceStatus bool
 
 	contextCmd := &cobra.Command{
 		Use:   "context",
@@ -372,6 +378,83 @@ Use the other subcommands to inspect compatibility views or refresh the Brain-ma
 		},
 	}
 
+	auditCmd := &cobra.Command{
+		Use:   "audit",
+		Short: "Audit whether durable context still covers the repo shape",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			projectRoot := contextProjectPath(project, flags.projectPath)
+			appCtx, err := loadApp(projectRoot)
+			if err != nil {
+				return err
+			}
+			defer appCtx.Close()
+
+			report, err := appCtx.Audit.Audit(cmd.Context(), contextaudit.Request{
+				ProjectDir: projectRoot,
+				Since:      auditSince,
+				Proposal:   auditProposal,
+			})
+			if err != nil {
+				return err
+			}
+			return appCtx.Output.Print(report, func(w io.Writer) error {
+				return contextaudit.RenderHuman(w, report)
+			})
+		},
+	}
+
+	guidanceCmd := &cobra.Command{
+		Use:   "guidance",
+		Short: "Manage optional agent guidance decisions",
+	}
+
+	karpathyCmd := &cobra.Command{
+		Use:   "karpathy",
+		Short: "Record the Karpathy Guidelines opt-in decision",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, _, err := config.LoadOrCreate(flags.configPath)
+			if err != nil {
+				return err
+			}
+			projectRoot := contextProjectPath(project, flags.projectPath)
+			manager := contextManager()
+			selected := 0
+			for _, enabled := range []bool{guidanceAccept, guidanceDecline, guidanceStatus} {
+				if enabled {
+					selected++
+				}
+			}
+			if selected != 1 {
+				return errors.New("context guidance karpathy requires exactly one of --accept, --decline, or --status")
+			}
+
+			printer := output.New(modeFromFlag(flags, cfg.OutputMode), cmd.OutOrStdout())
+			if guidanceStatus {
+				status, err := manager.KarpathyGuidanceStatus(projectRoot)
+				if err != nil {
+					return err
+				}
+				return printer.Print(status, func(w io.Writer) error {
+					renderKarpathyGuidanceStatus(w, status)
+					return nil
+				})
+			}
+
+			decision := projectcontext.GuidanceDecisionDeclined
+			if guidanceAccept {
+				decision = projectcontext.GuidanceDecisionAccepted
+			}
+			result, err := manager.SetKarpathyGuidanceDecision(cmd.Context(), projectRoot, decision)
+			if err != nil {
+				return err
+			}
+			return printer.Print(result, func(w io.Writer) error {
+				renderKarpathyGuidanceResult(w, result)
+				return nil
+			})
+		},
+	}
+
 	structureCmd := &cobra.Command{
 		Use:   "structure",
 		Short: "Inspect structural repo context",
@@ -532,6 +615,13 @@ Use the other subcommands to inspect compatibility views or refresh the Brain-ma
 	statsCmd.Flags().IntVar(&statsLimit, "limit", 5, "maximum number of entries to show per stats section")
 	effectivenessCmd.Flags().StringVar(&project, "project", "", "project root to inspect context telemetry from")
 	effectivenessCmd.Flags().IntVar(&effectivenessLimit, "limit", 5, "maximum number of entries to show per report section")
+	auditCmd.Flags().StringVar(&project, "project", "", "project root to audit")
+	auditCmd.Flags().StringVar(&auditSince, "since", "", "git ref to compare for diff-focused audit findings")
+	auditCmd.Flags().BoolVar(&auditProposal, "proposal", false, "create a reviewed audit proposal note under .brain/resources/changes")
+	karpathyCmd.Flags().StringVar(&project, "project", "", "project root to update")
+	karpathyCmd.Flags().BoolVar(&guidanceAccept, "accept", false, "record acceptance and add Karpathy Guidelines to AGENTS.md")
+	karpathyCmd.Flags().BoolVar(&guidanceDecline, "decline", false, "record decline without editing AGENTS.md")
+	karpathyCmd.Flags().BoolVar(&guidanceStatus, "status", false, "show the recorded Karpathy Guidelines decision")
 	structureCmd.Flags().StringVar(&project, "project", "", "project root to inspect structure from")
 	structureCmd.Flags().StringVar(&structurePath, "path", "", "subtree path filter for structural context")
 	structureStatusCmd.Flags().StringVar(&project, "project", "", "project root to inspect structure from")
@@ -540,8 +630,49 @@ Use the other subcommands to inspect compatibility views or refresh the Brain-ma
 	liveCmd.Flags().BoolVar(&liveExplain, "explain", false, "include rationale and missing-signal detail")
 
 	structureCmd.AddCommand(structureStatusCmd)
-	contextCmd.AddCommand(installCmd, refreshCmd, loadCmd, migrateCmd, assembleCmd, compileCmd, explainCmd, statsCmd, effectivenessCmd, structureCmd, liveCmd)
+	guidanceCmd.AddCommand(karpathyCmd)
+	contextCmd.AddCommand(installCmd, refreshCmd, loadCmd, migrateCmd, assembleCmd, compileCmd, explainCmd, statsCmd, effectivenessCmd, auditCmd, guidanceCmd, structureCmd, liveCmd)
 	root.AddCommand(contextCmd)
+}
+
+func renderKarpathyGuidanceStatus(w io.Writer, status *projectcontext.GuidanceStatus) {
+	if status == nil {
+		return
+	}
+	fmt.Fprintf(w, "topic: %s\n", status.Topic)
+	fmt.Fprintf(w, "decision: %s\n", status.Decision)
+	fmt.Fprintf(w, "agents_managed: %t\n", status.AgentsManaged)
+	fmt.Fprintf(w, "guidelines_present: %t\n", status.GuidelinesPresent)
+	if status.Recommendation != nil {
+		fmt.Fprintln(w)
+		renderKarpathyGuidanceRecommendation(w, status.Recommendation)
+	}
+}
+
+func renderKarpathyGuidanceResult(w io.Writer, result *projectcontext.GuidanceApplyResult) {
+	if result == nil {
+		return
+	}
+	fmt.Fprintf(w, "action: %s\n", result.Action)
+	renderKarpathyGuidanceStatus(w, &result.GuidanceStatus)
+	for _, syncResult := range result.Results {
+		preserve := ""
+		if syncResult.PreservedUserContent {
+			preserve = " preserve-user"
+		}
+		fmt.Fprintf(w, "%-9s %-8s %s%s\n", syncResult.Action, syncResult.Kind, syncResult.Path, preserve)
+	}
+}
+
+func renderKarpathyGuidanceRecommendation(w io.Writer, recommendation *projectcontext.GuidanceRecommendation) {
+	if recommendation == nil {
+		return
+	}
+	fmt.Fprintln(w, "Next for AI agent:")
+	fmt.Fprintln(w, "- Ask the user: Would you like me to add Karpathy Guidelines to AGENTS.md for this repo?")
+	for _, command := range recommendation.Commands {
+		fmt.Fprintf(w, "- If appropriate, run `%s`.\n", command)
+	}
 }
 
 func runContextCommand(cmd *cobra.Command, loadApp appLoader, req projectcontext.Request, install bool) error {
