@@ -10,10 +10,10 @@ This file is a deterministic snapshot of the repository state at the last refres
 - Root: `.`
 - Runtime: `go`
 - Go module: `brain`
-- Current branch: `codex/karpathy-guidelines`
+- Current branch: `develop`
 - Default branch: `develop`
 - Remote: `https://github.com/JimmyMcBride/brain.git`
-- Go test files: `25`
+- Go test files: `26`
 
 ## Docs
 
