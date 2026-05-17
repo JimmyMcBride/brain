@@ -10,6 +10,7 @@ import (
 	"brain/internal/buildinfo"
 	"brain/internal/config"
 	"brain/internal/output"
+	"brain/internal/projectcontext"
 	"brain/internal/update"
 
 	"github.com/spf13/cobra"
@@ -27,6 +28,7 @@ type updateCommandOutput struct {
 	update.Result
 	skillRefreshResult
 	projectMigrationStatusResult
+	KarpathyGuidance *projectcontext.GuidanceStatus `json:"karpathy_guidance,omitempty"`
 }
 
 func addUpdateCommand(root *cobra.Command, flags *rootFlagsState, _ appLoader) {
@@ -75,6 +77,15 @@ func addUpdateCommand(root *cobra.Command, flags *rootFlagsState, _ appLoader) {
 					migrationResult, err := projectMigrationRunner(refreshBinary, flags.configPath, projectRoot)
 					out.projectMigrationStatusResult = summarizeProjectMigrationResult(migrationResult)
 					migrationErr = err
+					if migrationErr == nil {
+						guidanceStatus, err := contextManager().KarpathyGuidanceStatus(projectRoot)
+						if err != nil {
+							return err
+						}
+						if guidanceStatus.Recommendation != nil {
+							out.KarpathyGuidance = guidanceStatus
+						}
+					}
 				}
 			}
 
@@ -149,6 +160,12 @@ func addUpdateCommand(root *cobra.Command, flags *rootFlagsState, _ appLoader) {
 								return err
 							}
 						}
+					}
+					if out.KarpathyGuidance != nil && out.KarpathyGuidance.Recommendation != nil {
+						if _, err := fmt.Fprintln(w); err != nil {
+							return err
+						}
+						renderKarpathyGuidanceRecommendation(w, out.KarpathyGuidance.Recommendation)
 					}
 				}
 				return nil

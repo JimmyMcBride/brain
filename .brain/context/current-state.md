@@ -10,7 +10,7 @@ This file is a deterministic snapshot of the repository state at the last refres
 - Root: `.`
 - Runtime: `go`
 - Go module: `brain`
-- Current branch: `codex/context-audit`
+- Current branch: `codex/karpathy-guidelines`
 - Default branch: `develop`
 - Remote: `https://github.com/JimmyMcBride/brain.git`
 - Go test files: `25`

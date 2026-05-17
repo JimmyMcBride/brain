@@ -245,3 +245,5 @@ Use `brain update --project .` to refresh the current Brain binary, refresh alre
 Use `brain context migrate --project .` when you want to run the project migration path explicitly with the current binary.
 
 Lazy preflight repair only applies auto-safe migrations. Git-index cleanup for ignored Brain runtime state is explicit-only, so it runs through `brain update --project .` or `brain context migrate --project .`, prints what it changed, and leaves the resulting diff for you to review and commit.
+
+If an older Brain-managed `AGENTS.md` does not include Karpathy Guidelines, `brain update --project .` prints a `Next for AI agent:` reminder. The AI agent should ask the user whether to add the guidelines, then run `brain context guidance karpathy --accept --project .` or `brain context guidance karpathy --decline --project .` to record the decision. Declining suppresses future reminders, but the user can later opt in with `--accept`.

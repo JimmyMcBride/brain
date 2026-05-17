@@ -104,6 +104,8 @@ If no GitHub release exists yet, the installer falls back to downloading the cur
 
 When you upgrade an older Brain repo, `brain update --project .` or `brain context migrate --project .` may refresh `.gitignore` and remove legacy tracked runtime files from the Git index while keeping them on disk. Brain prints what changed so you can review and commit the diff yourself.
 
+If an older Brain-managed `AGENTS.md` does not include Karpathy Guidelines, `brain update --project .` tells the AI agent to ask whether you want them added. The agent records the answer with `brain context guidance karpathy --accept --project .` or `brain context guidance karpathy --decline --project .`, and Brain will not ask again unless you explicitly change the decision later.
+
 ### Build from source
 
 Unix shell:
@@ -190,7 +192,7 @@ If you already use separate delivery tools, Brain is designed to complement them
 - `brain prep`: start or reuse a session and compile the first task packet
 - `brain read`, `brain edit`: inspect and update managed markdown
 - `brain find`, `brain search`: project-local retrieval
-- `brain context ...`: install, refresh, compile, inspect, audit, and analyze task context, including packet effectiveness
+- `brain context ...`: install, refresh, compile, inspect, audit, analyze task context, and record optional guidance decisions
 - `brain distill --session`: create a reviewed distillation proposal from active session work
 - `brain session ...`: enforce workflow and verification rules
 - `brain skills ...`: install the Brain skill for agent runtimes
