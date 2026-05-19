@@ -29,6 +29,7 @@ After `brain adopt` creates starter context, the AI agent must scan the repo bef
 - Keep durable discoveries, decisions, and risks in AGENTS.md, /docs, or .brain notes.
 - Update existing durable notes instead of duplicating context.
 - Run required verification commands through `brain session run -- <command>`.
+- Run `brain context audit` after meaningful architecture, config, CI, deploy, test, or docs-surface changes.
 - If you change Brain command behavior or agent-facing workflow guidance, update `skills/brain/SKILL.md` in the same branch.
 - Re-read context before large changes if the task shifts.
 
@@ -44,6 +45,7 @@ After `brain adopt` creates starter context, the AI agent must scan the repo bef
 ## Close-Out
 
 - Refresh or update durable notes for meaningful behavior, config, or architecture changes.
+- Use `brain context audit --proposal` when context coverage findings should become a reviewed durable update proposal.
 - If `brain session finish` blocks, inspect the promotion suggestions first; run `brain distill --session --dry-run` only when you need the full review without creating a proposal note.
 - Before switching away from a working branch or back to `develop`, run `git status --short` and resolve repo-owned leftovers. If `.brain/resources/changes/*`, `.brain/`, `docs/`, or contract files belong to the task, keep them in the same branch/PR; otherwise review and intentionally remove them instead of carrying them onto `develop`, `release/*`, or `main`.
 - If `skills/brain/` changed, reinstall the local Brain skill for Codex and OpenClaw with `brain skills install --scope local --agent codex --agent openclaw --project .`.
@@ -60,3 +62,4 @@ After `brain adopt` creates starter context, the AI agent must scan the repo bef
 - 2026-04-20: Release fixes go into `develop` first, then the exact commit is cherry-picked into the active `release/vX.Y.Z` branch.
 - 2026-04-20: After every PR merge into `develop`, fetch latest remote state, check out the updated `origin/develop`, and refresh repo context from latest `develop`. Refresh `.plan/` context too if that workspace exists in this repo later.
 - 2026-04-20: Do not carry repo-owned proposal or context files back onto `develop`. Resolve `.brain/resources/changes/*`, `.brain/`, `docs/`, and contract-file leftovers on the feature branch by merging them in the active PR or intentionally removing them after review.
+- 2026-05-14: `scripts/next-release-tag.sh` is the release helper for calculating the next stable semver tag during release automation.

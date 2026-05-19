@@ -1,6 +1,6 @@
 # 🧠 brain
 
-![Scarecrow dancing](docs/assets/scarecrow.gif)
+![Brain overview for AI agents](docs/assets/brain-overview.png)
 
 ## Give Your AI Coding Agent A Real Brain Inside The Repo
 
@@ -46,6 +46,7 @@ It provides explicit workflows for:
 - project contracts and docs
 - local retrieval
 - compiled task context
+- context maintenance audits
 - session enforcement
 - note history and undo
 - promotion-style distillation from active work sessions
@@ -103,6 +104,8 @@ If no GitHub release exists yet, the installer falls back to downloading the cur
 
 When you upgrade an older Brain repo, `brain update --project .` or `brain context migrate --project .` may refresh `.gitignore` and remove legacy tracked runtime files from the Git index while keeping them on disk. Brain prints what changed so you can review and commit the diff yourself.
 
+If an older Brain-managed `AGENTS.md` does not include Karpathy Guidelines, `brain update --project .` tells the AI agent to ask whether you want them added. The agent records the answer with `brain context guidance karpathy --accept --project .` or `brain context guidance karpathy --decline --project .`, and Brain will not ask again unless you explicitly change the decision later.
+
 ### Build from source
 
 Unix shell:
@@ -157,6 +160,7 @@ In any project directory:
 brain init --project .
 brain doctor --project .
 brain context install --project .
+brain context audit --project .
 brain prep --project . --task "tighten auth flow"
 brain search --project . "tighten auth flow"
 brain session run --project . -- go test ./...
@@ -164,6 +168,8 @@ brain session finish --project . --summary "auth flow tightened"
 ```
 
 Use `brain adopt --project .` instead of `brain init --project .` when the repo already has docs or an unmanaged `AGENTS.md`. After adoption, the AI agent should treat the generated files as starter context, scan the repo deeply, and update AGENTS.md, docs, or `.brain` notes with durable project-specific findings.
+
+As the repo evolves, use `brain context audit --project .` to review whether Brain markdown still covers architecture, config, CI, deploy, test, and docs surfaces. Add `--proposal` when the findings should become a reviewed `.brain/resources/changes/...` note for the agent to apply.
 
 ## What Brain Does Not Try To Be
 
@@ -186,7 +192,7 @@ If you already use separate delivery tools, Brain is designed to complement them
 - `brain prep`: start or reuse a session and compile the first task packet
 - `brain read`, `brain edit`: inspect and update managed markdown
 - `brain find`, `brain search`: project-local retrieval
-- `brain context ...`: install, refresh, compile, inspect, and analyze task context, including packet effectiveness
+- `brain context ...`: install, refresh, compile, inspect, audit, analyze task context, and record optional guidance decisions
 - `brain distill --session`: create a reviewed distillation proposal from active session work
 - `brain session ...`: enforce workflow and verification rules
 - `brain skills ...`: install the Brain skill for agent runtimes

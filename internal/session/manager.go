@@ -656,6 +656,13 @@ func (m *Manager) evaluateFinish(ctx context.Context, policy *projectcontext.Pol
 		result.Remediation = append(result.Remediation, "durable notes were already committed in the session commit range")
 	}
 	if result.RepoChanged {
+		if auditRelevantSessionChange(changedFiles) {
+			auditCommand := "brain context audit"
+			if strings.TrimSpace(active.GitBaseline.Head) != "" {
+				auditCommand = fmt.Sprintf("brain context audit --since %s", shortHash(active.GitBaseline.Head))
+			}
+			result.Remediation = append(result.Remediation, fmt.Sprintf("run `%s` to review context coverage for architecture, config, CI, deploy, test, or docs changes", auditCommand))
+		}
 		for _, profile := range policy.Closeout.VerificationProfiles {
 			if !commandProfileSatisfied(profile, active.CommandRuns) {
 				result.OK = false
@@ -718,6 +725,46 @@ func (m *Manager) historyAfterBaseline(baseline HistoryBaseline) ([]history.Entr
 		}
 	}
 	return out, nil
+}
+
+func auditRelevantSessionChange(paths []string) bool {
+	for _, path := range paths {
+		path = filepath.ToSlash(strings.TrimSpace(path))
+		if path == "" {
+			continue
+		}
+		base := strings.ToLower(filepath.Base(path))
+		lower := strings.ToLower(path)
+		switch {
+		case path == "AGENTS.md":
+			return true
+		case strings.HasPrefix(path, ".brain/context/"):
+			return true
+		case strings.HasPrefix(path, "docs/"):
+			return true
+		case strings.HasPrefix(path, ".github/workflows/"):
+			return true
+		case strings.HasPrefix(path, "cmd/") || strings.HasPrefix(path, "internal/") || strings.HasPrefix(path, "pkg/") || strings.HasPrefix(path, "src/") || strings.HasPrefix(path, "app/"):
+			return true
+		case strings.Contains(lower, "deploy") || strings.Contains(lower, "release") || strings.Contains(lower, "publish"):
+			return true
+		case strings.HasSuffix(base, "_test.go") || strings.Contains(base, ".test.") || strings.Contains(base, ".spec."):
+			return true
+		}
+		switch base {
+		case "go.mod", "package.json", "cargo.toml", "pyproject.toml", "makefile", "dockerfile", "docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml", "vercel.json", "netlify.toml", "fly.toml", "render.yaml", "procfile":
+			return true
+		}
+	}
+	return false
+}
+
+func shortHash(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) <= 12 {
+		return value
+	}
+	return value[:12]
 }
 
 func loadActiveSession(path string) (*ActiveSession, error) {

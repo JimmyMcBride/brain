@@ -10,6 +10,7 @@ Use this file for the structural shape of the repository.
 - `internal/buildinfo/`
 - `internal/config/`
 - `internal/contextassembly/`
+- `internal/contextaudit/`
 - `internal/distill/`
 - `internal/embeddings/`
 - `internal/history/`

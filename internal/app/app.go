@@ -9,6 +9,7 @@ import (
 
 	"brain/internal/backup"
 	"brain/internal/config"
+	"brain/internal/contextaudit"
 	"brain/internal/distill"
 	"brain/internal/embeddings"
 	"brain/internal/history"
@@ -40,6 +41,7 @@ type App struct {
 	Distill   *distill.Manager
 	Skills    *skills.Installer
 	Context   *projectcontext.Manager
+	Audit     *contextaudit.Manager
 	Structure *structure.Manager
 	Live      *livecontext.Manager
 	Session   *session.Manager
@@ -97,6 +99,7 @@ func New(configPath, projectPath string, jsonOutput bool, opts Options) (*App, e
 		return nil, err
 	}
 	liveContextManager := livecontext.New(historyLog)
+	auditManager := contextaudit.New(structureManager, notesManager, sessionManager)
 
 	return &App{
 		Config:    cfg,
@@ -113,6 +116,7 @@ func New(configPath, projectPath string, jsonOutput bool, opts Options) (*App, e
 		Distill:   distillManager,
 		Skills:    skills.NewInstaller(userHome),
 		Context:   projectcontext.New(userHome),
+		Audit:     auditManager,
 		Structure: structureManager,
 		Live:      liveContextManager,
 		Session:   sessionManager,
