@@ -1,0 +1,21 @@
+{
+  "schema_version": 3,
+  "last_active_chain": "brainstorm/integrate-planning-as-an-official-brain-module",
+  "last_updated_at": "2026-07-27T21:39:42Z",
+  "sessions": {
+    "brainstorm/integrate-planning-as-an-official-brain-module": {
+      "chain_id": "brainstorm/integrate-planning-as-an-official-brain-module",
+      "brainstorm": "integrate-planning-as-an-official-brain-module",
+      "current_stage": "brainstorm",
+      "current_cluster": 5,
+      "current_cluster_label": "handoff-epic",
+      "stage_statuses": {
+        "brainstorm": "in_progress"
+      },
+      "summary": "Recap:\nCurrent understanding: Brain and Plan have complementary foundations but separate product identities, storage, CLI, cloud direction, and extension assumptions. A direct merge would duplicate platform systems or force Planning on every Brain user. / Brain users can opt into native planning; current Plan users retain artifacts and scripts during migration; teams and community authors gain stable module contracts without adopting one mandated workflow.\nKey decisions: appetite captured.\nUnresolved risks or questions: there are still open questions to review.\nParked items: none.\nRecommended next stage: Review recap and continue into the epic stage when ready.",
+      "next_action": "Review recap and continue into the epic stage when ready.",
+      "created_at": "2026-07-27T21:38:28Z",
+      "updated_at": "2026-07-27T21:39:42Z"
+    }
+  }
+}
