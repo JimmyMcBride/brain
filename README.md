@@ -4,7 +4,8 @@
 
 ## Give Your AI Coding Agent A Real Brain Inside The Repo
 
-`brain` is a local-first memory, context, retrieval, and workflow layer for AI coding agents.
+`brain` is a local-first context, memory, retrieval, and workflow platform for AI
+coding agents.
 
 It gives every project a durable operating memory inside the repo so the agent stops starting from scratch, stops wasting turns rediscovering context, and works more reliably as the codebase evolves.
 
@@ -171,18 +172,43 @@ Use `brain adopt --project .` instead of `brain init --project .` when the repo 
 
 As the repo evolves, use `brain context audit --project .` to review whether Brain markdown still covers architecture, config, CI, deploy, test, and docs surfaces. Add `--proposal` when the findings should become a reviewed `.brain/resources/changes/...` note for the agent to apply.
 
+## Optional Modules
+
+Brain is defining a staged module framework so teams can add domain workflows
+without making them part of every installation.
+
+Planning is the first official optional module. It is not implemented in Brain
+yet. The standalone [`plan`](https://github.com/JimmyMcBride/plan) product remains
+the reference implementation and compatibility source while Brain gains module
+infrastructure and Planning migrates in controlled phases.
+
+The approved direction:
+
+- Brain Core remains fully useful with Planning disabled.
+- Official modules begin as compiled Go packages behind controlled interfaces.
+- Future community modules run as external processes over a versioned protocol.
+- Local Planning initially retains compatible `.plan/` storage.
+- GitHub Planning support is transitional; official Linear support will retire.
+- Planning can propose Brain memory updates but cannot silently write them.
+
+See [Module Overview](docs/modules/overview.md),
+[Planning Vision](docs/planning/vision.md), and
+[Implementation Roadmap](docs/planning/implementation-roadmap.md).
+
 ## What Brain Does Not Try To Be
 
-`brain` intentionally stays focused on repo-local memory and execution context.
+Brain Core intentionally stays focused on context, memory, retrieval, and
+workflow foundations. Optional modules can add domain behavior without turning it
+into a Core requirement.
 
-It does not try to replace:
+Core does not require:
 
-- your roadmap or issue tracker
-- your issue tracker
-- hosted product-management software
-- cloud memory systems glued on top of the repo
+- Planning or a specific issue tracker
+- GitHub, Linear, Jira, or another external service
+- hosted infrastructure for local workflows
+- one universal delivery process
 
-If you already use separate delivery tools, Brain is designed to complement them rather than compete with them.
+Teams may use Brain without Planning and keep their existing planning systems.
 
 ## Main Commands
 
@@ -203,5 +229,8 @@ If you already use separate delivery tools, Brain is designed to complement them
 
 - [Usage](docs/usage.md)
 - [Architecture](docs/architecture.md)
+- [Modules](docs/modules/overview.md)
+- [Planning](docs/planning/vision.md)
+- [Architecture Decisions](docs/adr/README.md)
 - [Skills](docs/skills.md)
 - [Why](docs/why.md)

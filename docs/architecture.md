@@ -50,6 +50,31 @@ The index is local to each project under `.brain/state/brain.sqlite3`.
 - `cmd/*` stays thin and maps flags/args to internal services
 - `internal/app` wires config, workspace, notes, search, context compilation, sessions, distillation, skills, and output
 
+## Approved Module Direction
+
+The module framework is an approved target, not current behavior. Today every
+command is registered centrally in `cmd/root.go`, the `App` type in `internal/app`
+wires
+concrete services, configuration is global-only, and no module registry,
+permission broker, typed event bus, module manifest, or external extension
+protocol exists.
+
+The staged target:
+
+1. compiled official Go modules behind controlled registration, enablement,
+   configuration, permissions, lifecycle, capabilities, and health
+2. future external-process community modules over a versioned protocol
+3. future Brain Cloud module services and trusted web surfaces
+
+Planning is the first official optional module. It must use formal Core contracts;
+Core must remain useful without it. Existing packages stay in place initially.
+The minimal migration adds `internal/modules/*` and a trivial reference module
+before any Planning domain extraction. A wholesale Core package-tree
+reorganization is not part of the architecture phase.
+
+Detailed contracts: `docs/modules/architecture.md` and
+`docs/modules/planning-driven-requirements.md`.
+
 ## Key Design Rules
 
 - project-local markdown is the source of truth
@@ -57,3 +82,6 @@ The index is local to each project under `.brain/state/brain.sqlite3`.
 - generated context must be deterministic and refreshable
 - agent workflows should use explicit CLI operations instead of ad hoc file conventions
 - session enforcement is the hard control layer above the softer context layer
+- modules use registered Core facades rather than private storage or concrete app managers
+- module enablement never implies permission grant or data deletion
+- Planning memory updates are proposals unless an explicit Core policy grants more
