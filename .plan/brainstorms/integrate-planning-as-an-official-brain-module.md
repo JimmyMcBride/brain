@@ -40,7 +40,8 @@ extension foundations.
 - Brain Core stays useful with Planning disabled.
 - No major Planning port before the module framework is reviewed.
 - Retain .plan and Plan CLI compatibility during migration.
-- No official Linear commitment; GitHub remains transitional.
+- Supported migration sources are local, GitHub, and GitHub hybrid. Brain
+  Planning does not import Linear integration.
 - Do not claim external-process sandboxing or choose transport yet.
 
 ## Open Questions
@@ -54,7 +55,9 @@ extension foundations.
 
 - Redesign identity, configuration, permissions, events, audit, context/retrieval access, cloud storage, tools, health, and memory proposals through Brain Core contracts.
 
-- Keep GitHub transitional behind future generic Planning adapters; retire official Linear with explicit old-workspace diagnostics and migration/export.
+- Keep GitHub transitional behind future generic Planning adapters. Reject legacy
+  Linear workspaces with standalone Plan migration guidance; do not import their
+  integration state.
 
 - Use local, cloud, and explicit layer-owned hybrid Planning modes; treat Planning sync separately from Brain context-memory sync.
 ## Raw Notes
@@ -83,7 +86,8 @@ Phase 0 is documentation, inventory, ADRs, and migration contracts only. First i
 
 - Build minimal compiled-module registry/runtime first, then extract storage-neutral Planning domain.
 - Retain .plan locally and share implementation between brain plan and compatibility plan.
-- Move GitHub behind adapters after local module works; remove Linear only after diagnostics/export.
+- Move GitHub behind adapters after local module works; require standalone Plan to
+  migrate any Linear workspace before Brain Planning enablement.
 - Add Brain knowledge loop and Cloud/hybrid capabilities in later gated phases.
 
 ### Decision Snapshot

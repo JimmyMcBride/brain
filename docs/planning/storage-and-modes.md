@@ -5,6 +5,10 @@
 Approved high-level modes. Local compatibility is the first implementation.
 Hybrid synchronization details remain open.
 
+Migration source modes are limited to `local`, `github`, and `hybrid`
+(GitHub-backed hybrid). Linear is not a Brain Planning source mode, integration,
+configuration surface, or target adapter.
+
 ## Local
 
 Initial Brain Planning retains human-readable repository-local `.plan/` storage
@@ -83,9 +87,12 @@ future schema versions must fail closed with a compatible-version diagnostic.
 
 ## Metadata
 
-Current Plan `.plan/.meta/` includes workspace, migration, GitHub, Linear, and
-guided-session JSON. Phase 3 should read current forms. Target metadata must
-separate:
+Current standalone Plan `.plan/.meta/` may include Linear JSON because its v3
+adoption path creates that file even for local workspaces. Brain Planning must not
+track or import it. A legacy workspace configured for Linear fails with
+standalone Plan migration guidance before Brain Planning enablement.
+
+Target metadata must separate:
 
 - domain schema/revision
 - local migration history
@@ -93,6 +100,5 @@ separate:
 - optional integration mappings
 - sync/reconciliation state
 
-Linear metadata becomes read-only migration input. GitHub metadata remains
-transitional. Tool-managed JSON stays non-authoritative when a human-readable
-artifact is canonical.
+GitHub metadata remains transitional. Tool-managed JSON stays non-authoritative
+when a human-readable artifact is canonical.

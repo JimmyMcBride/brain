@@ -20,7 +20,7 @@ extension contracts, and local/cloud-client foundations.
 | Brain Core | In process | Product core | projects, context, memory, retrieval, sessions |
 | Official module | Compiled Go package | Trusted but interface-bound | Planning |
 | Companion integration | Compiled initially; separable later | Explicit capabilities | Git, GitHub |
-| Community module | External process in a future stage | Untrusted executable | company workflows, Jira, Linear |
+| Community module | External process in a future stage | Untrusted executable | company workflows, tracker adapters |
 
 Official status does not permit private storage access or undocumented hooks.
 Planning must exercise general extension contracts that an incident, architecture,

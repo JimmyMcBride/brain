@@ -55,7 +55,7 @@ Classifications:
 | Local source mode | `source_mode.go`, workspace | `.plan/` owns durable planning | filesystem | PRESERVE | Planning local adapter | Default/no hosted requirement | 3 |
 | GitHub source mode | source/workspace/GitHub backend | GitHub can own promoted artifacts/execution | GitHub + local mappings | TRANSITIONAL | GitHub companion adapter | Do not remove before Cloud/adapter path | 5 |
 | Hybrid source mode | source/workspace | Explicit split across local/integration layers | filesystem/GitHub | REDESIGN | Planning ownership/sync | Current semantics narrower than target hybrid | 5,9 |
-| Linear source mode | source/workspace | Linear team/project/issue metadata and agent-mediated path | `linear.json`, MCP workflow | RETIRE | Read-only migrator/community future | Explicit unsupported/migration message | 6 |
+| Linear source mode | source/workspace | Linear team/project/issue metadata and agent-mediated path | `linear.json`, MCP workflow | RETIRE | Standalone Plan cleanup only | Brain refuses source; no import or adapter | 6 |
 | GitHub Discussions | `github_client.go`, collaboration | Read source/comments; repair/promotion | GitHub | TRANSITIONAL | Collaboration adapter | Preserve source URL/revision evidence | 5 |
 | GitHub Issues | backend/reconcile/adopt | Initiative/spec/story records | GitHub Issues + `github.json` | TRANSITIONAL | Publication/external work adapter | Stable IDs and action plans | 5 |
 | GitHub Projects | project workspace/status/drift | Workspace fields/items and execution status | GitHub Projects v2 + meta | TRANSITIONAL | Execution-status adapter | GraphQL IDs/field options/drift | 5 |
@@ -67,7 +67,7 @@ Classifications:
 | `.plan/.meta/workspace.json` | `WorkspaceMeta` | version, source mode, ownership, story backend | tool JSON | TRANSITIONAL | Planning local metadata | Versioned read/migrate | 3,9 |
 | `.plan/.meta/migrations.json` | `MigrationState`, archive records | migration runs and archived paths/specs | tool JSON | PRESERVE/evolve | Planning migrator | Audit, backup, idempotency | 3 |
 | `.plan/.meta/github.json` | `GitHubState` and records | repo/integration/planning/story/project mappings | tool JSON | TRANSITIONAL | GitHub adapter metadata | Preserve IDs and last reconciliation | 5 |
-| `.plan/.meta/linear.json` | `LinearState` | workspace/team/project/issue identity | tool JSON | RETIRE | Read-only migration input | Never silently delete | 6 |
+| `.plan/.meta/linear.json` | `LinearState` | workspace/team/project/issue identity | tool JSON | RETIRE | Standalone Plan cleanup only | Not tracked or parsed by Brain | 6 |
 | `.plan/.meta/guided_sessions.json` | guided workspace file | active chains, stages, checkpoints, actions | tool JSON | PRESERVE/evolve | Planning workflow state | Schema/version and resume compatibility | 2,3 |
 | Markdown templates | `internal/templates` | Project/roadmap/brainstorm/epic/spec/story canonical shapes | embedded templates | PRESERVE/evolve | Planning local adapter | Golden fixtures before edits | 2,3 |
 | JSON command outputs | collaboration/guide/status/source/etc. structs | Agent/script machine contracts | stdout | REDESIGN/version | Planning API/CLI | Inventory fields and golden outputs before change | 3,4 |
@@ -100,7 +100,7 @@ Current workspace schema version is `3`; planning model is `spec_first_v1`
 | `GitHubPlanningRecord` | slug/kind/title, issue identity/state/readiness, ownership/entry/source modes, Discussion identity, parent/milestone, dependencies, update time | Preserve stable remote identity and links |
 | `GitHubProjectDecisionRecord` | decision/reason, initiative/spec/milestone identity, Project owner/number/node/URL, field IDs, source/entry/Discussion, update time | Transitional; preserve decisions and GraphQL IDs |
 | `GitHubStoryRecord` | domain content/status/dependencies/readiness critique, issue/PR/doc refs, ready/blocked/visible marker, update time | Map legacy story evidence without loss |
-| `.plan/.meta/linear.json` / `LinearState` | workspace/team identity, enabled/updated/reconciled times, source and promotion target | Read-only diagnostic/export; retire |
+| `.plan/.meta/linear.json` / `LinearState` | workspace/team identity, enabled/updated/reconciled times, source and promotion target | Historical inventory only; never import into Brain |
 | `.plan/.meta/guided_sessions.json` / `GuidedSessionState` | schema, last active/updated, keyed records containing chain/artifact refs, stage/cluster/checkpoint, stage statuses, summary/next action/times | Preserve/evolve with versioned workflow migration |
 | maturity assessment stdout | schema/kind/time, source, ownership, decision state/confidence/reason/strengths/gaps/path/titles/dependencies/repair/next command | Versioned Planning API/CLI contract |
 | promotion draft stdout | assessment plus issue drafts/actions/readiness, relationships, milestone/project plans, agent mutation policy, fallback and confirmation | Preserve safety/idempotency semantics; version schema |

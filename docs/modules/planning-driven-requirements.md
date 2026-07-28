@@ -35,7 +35,7 @@ This matrix separates general Brain platform needs from Planning domain behavior
 | Planning source references | Yes | Pattern general | Planning over Core | Brain provenance exists in packets | Planning schema using Core source references |
 | Completion memory proposals | Yes | Pattern general | Planning over Core | Distill proposals only | Planning proposal provider |
 | GitHub publication/collaboration | Transitional | Provider pattern | Companion adapter | Plan GitHub-specific client/backend | Planning integration contracts; no GitHub types in domain |
-| Linear integration | No official need | Community use | Community module | Plan source mode and metadata | Retire official surface; do not genericize dead concepts |
+| Linear integration | No | No | Outside Brain Planning | Historical Plan source mode | Refuse import; standalone Plan cleanup only |
 | External process protocol | Future | Yes | Core | None | Phase 11 after official contracts prove stable |
 
 ## Phase 1 Minimum

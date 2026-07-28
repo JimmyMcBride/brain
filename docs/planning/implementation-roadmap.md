@@ -4,7 +4,7 @@
 
 This documentation phase establishes product boundaries, feature classification,
 module/security contracts, ADRs, storage modes, GitHub transition, Linear
-retirement, CLI compatibility, Brain knowledge loop, and cloud direction. It
+exclusion, CLI compatibility, Brain knowledge loop, and cloud direction. It
 contains no major migration code.
 
 Exit: docs are internally consistent, Brain/Plan implementations are inventoried,
@@ -22,7 +22,8 @@ Do not load external community processes. Do not migrate Planning domain code.
 
 Deliver storage-neutral brainstorm, spec, initiative, roadmap, readiness,
 approval, execution, queue, and runtime-slice models with unit tests. Keep Cobra,
-filesystem, GitHub, Linear, and cloud dependencies outside domain packages.
+filesystem, GitHub, and cloud dependencies outside domain packages. Do not
+extract Linear code or types.
 
 ## Phase 3 — Local Planning Module
 
@@ -42,11 +43,12 @@ behind generic Planning ports. Support planning PRs and retained Discussion,
 issue, milestone, Project, and reconciliation behavior. No GitHub type remains in
 Planning domain.
 
-## Phase 6 — Linear Removal
+## Phase 6 — Standalone Plan Linear Cleanup
 
-Add old-workspace diagnostics/export, then remove commands, source values, active
-code, tests, and current docs. Retain compatibility fixtures and migration notes
-for the supported window.
+Complete Linear removal in standalone Plan before shared implementation crosses
+into Brain. Brain Planning accepts only local, GitHub, and GitHub-hybrid
+workspaces. A Linear-configured workspace receives standalone Plan migration
+guidance; no Linear schema, adapter, command, permission, or event enters Brain.
 
 ## Phase 7 — Brain Planning Knowledge Loop
 

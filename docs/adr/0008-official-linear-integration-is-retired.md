@@ -1,4 +1,4 @@
-# ADR 0008: Official Linear Integration Is Retired
+# ADR 0008: Brain Planning Excludes Linear Integration
 
 - Status: Accepted
 - Date: 2026-07-27
@@ -11,26 +11,27 @@ concepts and broaden product commitments.
 
 ## Decision
 
-Retire official Linear support. Do not carry Linear-specific concepts into
-generic contracts. Existing metadata receives explicit detection, export/migration,
-and unsupported-configuration diagnostics. A future community module may support
-Linear.
+Brain Planning supports local, GitHub, and GitHub-hybrid migration sources only.
+It never imports or implements Linear integration. Do not carry Linear-specific
+schemas, configuration, commands, permissions, events, adapters, or concepts into
+generic contracts. A Linear-configured workspace receives an unsupported-source
+diagnostic directing the user to migrate it with standalone Plan first.
 
 ## Consequences
 
-Product scope shrinks and generic APIs remain evidence-driven. Old workspaces need
-a careful compatibility path.
+Product scope shrinks and generic APIs remain evidence-driven. Brain avoids
+becoming a second Linear migration runtime.
 
 ## Alternatives Considered
 
 - Keep official support: ongoing auth/API/workflow commitment.
-- Delete immediately: risks data loss and opaque failures.
+- Import read-only Linear metadata: still brings Linear schema into Brain.
 - Genericize every Linear feature: false abstraction.
 
 ## Migration Implications
 
-Architecture marks retirement now; active code removal waits for Phase 6
-diagnostics and migration fixtures.
+Standalone Plan owns safe cleanup/export. Brain Planning only detects the
+unsupported source value at its workspace boundary and refuses enablement.
 
 ## Follow-up Work
 

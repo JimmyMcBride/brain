@@ -25,7 +25,8 @@ controlled migration.
   reviewed.
 - Initial local Planning retains `.plan/`.
 - The standalone `plan` CLI and repository remain during migration.
-- GitHub Planning is transitional; official Linear support retires safely.
+- Supported migration source modes are local, GitHub, and GitHub hybrid. Brain
+  Planning never imports or implements Linear integration.
 - Planning cannot silently write Brain memory.
 - Community modules are future external processes; no sandbox or protocol
   transport is claimed yet.

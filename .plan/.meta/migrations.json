@@ -16,7 +16,6 @@
     ".plan/.meta/workspace.json",
     ".plan/.meta/migrations.json",
     ".plan/.meta/github.json",
-    ".plan/.meta/linear.json",
     ".plan/.meta/guided_sessions.json"
   ],
   "history": [
@@ -36,7 +35,6 @@
         ".plan/.meta/workspace.json",
         ".plan/.meta/migrations.json",
         ".plan/.meta/github.json",
-        ".plan/.meta/linear.json",
         ".plan/.meta/guided_sessions.json"
       ]
     }

@@ -15,7 +15,7 @@ migration contracts without porting Planning code.
 - [x] Define optional Planning product boundary
 - [x] Inventory standalone Plan behavior and persistence
 - [x] Record ADRs for module/runtime/storage/integration decisions
-- [x] Define GitHub transition, Linear removal, CLI compatibility, and cloud direction
+- [x] Define local/GitHub/GitHub-hybrid migration, Linear exclusion, CLI compatibility, and cloud direction
 - [x] Record Brain knowledge-loop and permission boundaries
 
 ## Phase 1: Minimal Internal Module Framework
@@ -41,11 +41,11 @@ the `plan` command as a shared compatibility wrapper.
 
 ## Phase 5–7: Integrations and Knowledge Loop
 
-Goal: Move GitHub behind adapters, remove official Linear safely, and connect
+Goal: Move GitHub behind adapters, keep Linear outside Brain Planning, and connect
 Planning outcomes to review-first Brain memory proposals.
 
 - [ ] GitHub adapter transition
-- [ ] Linear diagnostics/export and official removal
+- [ ] Reject legacy Linear workspaces with standalone Plan migration guidance
 - [ ] Brain context sources and Planning context packets
 - [ ] Completion-to-memory proposals
 

@@ -72,13 +72,13 @@ memory; it cannot silently publish them.
   proposals, cloud sync, and repository associations.
 - Transitional: GitHub source mode and collaboration/tracking, standalone `plan`,
   and migration metadata.
-- Retire: official Linear support, separate Plan Cloud/SDK/identity/registry,
+- Exclude: Linear integration, separate Plan Cloud/SDK/identity/registry,
   permanent GitHub canonicality, and legacy epic/story creation after read-only
   migration support is sufficient.
 
 ## Non-Goals
 
 No complete module, cloud/hybrid sync, community loader, marketplace, frontend,
-large code port, immediate CLI retirement, immediate Linear deletion, `.plan/`
+  large code port, immediate CLI retirement, standalone Plan Linear deletion, `.plan/`
 relocation, sprint system, support desk, HR system, source hosting, CI, or deploy
 platform is implemented by this architecture.

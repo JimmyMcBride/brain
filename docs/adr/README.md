@@ -9,7 +9,7 @@ Accepted module and Planning direction:
 5. [Planning initially retains `.plan/`](0005-planning-retains-plan-directory-initially.md)
 6. [Local, cloud, and hybrid Planning](0006-planning-supports-local-cloud-and-hybrid-modes.md)
 7. [GitHub Planning is transitional](0007-github-planning-is-transitional.md)
-8. [Official Linear integration is retired](0008-official-linear-integration-is-retired.md)
+8. [Brain Planning excludes Linear integration](0008-official-linear-integration-is-retired.md)
 9. [Plan CLI compatibility path](0009-plan-cli-gets-a-compatibility-path.md)
 10. [Planning memory updates use proposals](0010-planning-memory-updates-use-proposals.md)
 11. [Planning and memory permissions are separate](0011-planning-and-memory-permissions-are-separate.md)

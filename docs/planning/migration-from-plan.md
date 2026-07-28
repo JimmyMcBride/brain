@@ -25,7 +25,7 @@ standalone repository and binary during migration.
 | `internal/workspace` `.plan/` schema and integration state | Local Planning storage adapter plus compatibility reader |
 | `cmd/*` direct command construction | Shared Planning service called by native and wrapper CLIs |
 | GitHub client/backend/reconcile | Optional GitHub companion adapter |
-| Linear state/promotion | Read-only migration diagnostics, then removal |
+| Linear state/promotion | Standalone Plan cleanup; Brain refuses import |
 | guided sessions | Planning workflow state over Core sessions/audit where appropriate |
 | skills bundle | Brain agent-tool/module discovery direction |
 | epics/stories | read/import compatibility mapping to initiatives/execution |
@@ -48,7 +48,7 @@ standalone repository and binary during migration.
 - legacy epic/story and active spec execution overlap
 - JSON payloads may be consumed by agents/scripts beyond documented use
 - GitHub reconciliation depends on stable remote identity and idempotency
-- current Linear metadata must not be lost when official support ends
+- standalone Plan must handle any Linear export before Brain migration begins
 
 ## Stale-Direction Audit
 
@@ -57,7 +57,7 @@ Repository search on 2026-07-27 found:
 | Search concept | Remaining matches | Classification |
 | --- | --- | --- |
 | `Plan Cloud` / `plan-cloud` / `plan-cloud-sdk-go` | Planning vision and cloud-direction non-goals | Correct explicit retirement |
-| official Linear integration | ADR index/ADR 0008 and removal contract | Correct superseded/retirement decision |
+| official Linear integration | ADR index/ADR 0008 and exclusion contract | Correct superseded/exclusion decision |
 | GitHub as permanent Planning source | None | No stale reference |
 | Planning required by Brain | None | No stale reference |
 
