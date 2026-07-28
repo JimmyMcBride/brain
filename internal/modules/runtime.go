@@ -104,9 +104,14 @@ type Runtime struct {
 	configStore ConfigStore
 	grantStore  GrantStore
 
-	mu           sync.Mutex
-	initialized  map[string]Module
-	initFailures map[string]*Failure
+	mu              sync.Mutex
+	initializations map[string]*moduleInitialization
+}
+
+type moduleInitialization struct {
+	once    sync.Once
+	module  Module
+	failure *Failure
 }
 
 func NewRuntime(project ProjectRef, registry *Registry, configStore ConfigStore, grantStore GrantStore) *Runtime {
@@ -120,12 +125,11 @@ func NewRuntime(project ProjectRef, registry *Registry, configStore ConfigStore,
 		grantStore = NewMemoryGrantStore()
 	}
 	return &Runtime{
-		project:      project,
-		registry:     registry,
-		configStore:  configStore,
-		grantStore:   grantStore,
-		initialized:  map[string]Module{},
-		initFailures: map[string]*Failure{},
+		project:         project,
+		registry:        registry,
+		configStore:     configStore,
+		grantStore:      grantStore,
+		initializations: map[string]*moduleInitialization{},
 	}
 }
 
@@ -367,6 +371,9 @@ func (r *Runtime) evaluate(ctx context.Context, id string, config ProjectConfig,
 		report.Failure = configFailure(id, fmt.Sprintf("config version %d does not match required version %d", entry.ConfigVersion, descriptor.ConfigVersion))
 		return report, nil
 	}
+	if entry.Config == nil {
+		entry.Config = Config{}
+	}
 	if failure := permissionFailure(descriptor, grants[id]); failure != nil {
 		report.State = StateBlocked
 		report.Failure = failure
@@ -392,32 +399,31 @@ func (r *Runtime) evaluate(ctx context.Context, id string, config ProjectConfig,
 func (r *Runtime) initialize(ctx context.Context, registration Registration, config Config) (Module, *Failure) {
 	id := registration.Descriptor.ID
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	if failure := r.initFailures[id]; failure != nil {
-		return nil, failure
+	initialization := r.initializations[id]
+	if initialization == nil {
+		initialization = &moduleInitialization{}
+		r.initializations[id] = initialization
 	}
-	if module := r.initialized[id]; module != nil {
-		return module, nil
-	}
-	module := registration.Factory()
-	if module == nil {
-		failure := configFailure(id, "factory returned a nil module")
-		r.initFailures[id] = failure
-		return nil, failure
-	}
-	moduleContext := ModuleContext{Project: r.project}
-	if err := module.Validate(ctx, moduleContext, config); err != nil {
-		failure := configFailure(id, err.Error())
-		r.initFailures[id] = failure
-		return nil, failure
-	}
-	if err := module.Initialize(ctx, moduleContext, config); err != nil {
-		failure := &Failure{Code: FailureInitializeFailed, Message: fmt.Sprintf("module %s initialization failed: %v", id, err)}
-		r.initFailures[id] = failure
-		return nil, failure
-	}
-	r.initialized[id] = module
-	return module, nil
+	r.mu.Unlock()
+
+	initialization.once.Do(func() {
+		module := registration.Factory()
+		if module == nil {
+			initialization.failure = configFailure(id, "factory returned a nil module")
+			return
+		}
+		moduleContext := ModuleContext{Project: r.project}
+		if err := module.Validate(ctx, moduleContext, config); err != nil {
+			initialization.failure = configFailure(id, err.Error())
+			return
+		}
+		if err := module.Initialize(ctx, moduleContext, config); err != nil {
+			initialization.failure = &Failure{Code: FailureInitializeFailed, Message: fmt.Sprintf("module %s initialization failed: %v", id, err)}
+			return
+		}
+		initialization.module = module
+	})
+	return initialization.module, initialization.failure
 }
 
 func permissionFailure(descriptor Descriptor, grants []string) *Failure {

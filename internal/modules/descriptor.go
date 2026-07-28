@@ -52,9 +52,12 @@ func (d Descriptor) Validate() error {
 func validateDeclarations(moduleID, kind string, values []string) error {
 	seen := make(map[string]struct{}, len(values))
 	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
 			return fmt.Errorf("module %s declares an empty %s", moduleID, kind)
+		}
+		if trimmed != value {
+			return fmt.Errorf("module %s declares %s %q with surrounding whitespace", moduleID, kind, value)
 		}
 		if _, exists := seen[value]; exists {
 			return fmt.Errorf("module %s declares duplicate %s %q", moduleID, kind, value)

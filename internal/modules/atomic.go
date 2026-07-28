@@ -2,6 +2,7 @@ package modules
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 )
@@ -25,7 +26,7 @@ func atomicWriteFile(path string, data []byte, mode os.FileMode) (err error) {
 	if err = file.Chmod(mode); err != nil {
 		return fmt.Errorf("set temporary file mode: %w", err)
 	}
-	if _, err = file.Write(data); err != nil {
+	if err = writeAll(file, data); err != nil {
 		return fmt.Errorf("write temporary file: %w", err)
 	}
 	if err = file.Sync(); err != nil {
@@ -39,6 +40,17 @@ func atomicWriteFile(path string, data []byte, mode os.FileMode) (err error) {
 	}
 	if err = os.Chmod(path, mode); err != nil {
 		return fmt.Errorf("set destination file mode: %w", err)
+	}
+	return nil
+}
+
+func writeAll(writer io.Writer, data []byte) error {
+	written, err := writer.Write(data)
+	if err != nil {
+		return err
+	}
+	if written != len(data) {
+		return io.ErrShortWrite
 	}
 	return nil
 }

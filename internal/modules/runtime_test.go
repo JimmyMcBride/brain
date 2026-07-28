@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"brain/internal/modules"
 	"brain/internal/modules/testmodule"
@@ -23,6 +25,7 @@ func TestDescriptorAndRegistryValidation(t *testing.T) {
 		{name: "incompatible API", registrations: []modules.Registration{withDescriptor(valid, func(d *modules.Descriptor) { d.BrainAPIMajor++ })}, want: "supported major"},
 		{name: "invalid config version", registrations: []modules.Registration{withDescriptor(valid, func(d *modules.Descriptor) { d.ConfigVersion = 0 })}, want: "config version"},
 		{name: "duplicate permission", registrations: []modules.Registration{withDescriptor(valid, func(d *modules.Descriptor) { d.Permissions = []string{"test.read", "test.read"} })}, want: "duplicate permission"},
+		{name: "permission whitespace", registrations: []modules.Registration{withDescriptor(valid, func(d *modules.Descriptor) { d.Permissions = []string{" test.read"} })}, want: "surrounding whitespace"},
 		{name: "missing factory", registrations: []modules.Registration{{Descriptor: valid.Descriptor}}, want: "no factory"},
 	}
 	for _, tt := range tests {
@@ -169,6 +172,121 @@ func TestRuntimeIncompatibleConfigVersionBlocksWithoutInstantiation(t *testing.T
 	requireCounters(t, counters, 0, 0, 0, 0)
 }
 
+func TestRuntimeNormalizesOmittedConfigBeforeModuleCallbacks(t *testing.T) {
+	ctx := context.Background()
+	counters := &testmodule.Counters{}
+	registry := mustRegistry(t, testmodule.Registration(counters, testmodule.Options{WriteConfig: true}))
+	configs := modules.NewMemoryConfigStore()
+	if err := configs.Save(modules.ProjectConfig{
+		SchemaVersion: 1,
+		Modules: map[string]modules.ModuleConfig{
+			testmodule.ID: {Enabled: true, ConfigVersion: 1},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	grants := modules.NewMemoryGrantStore()
+	if err := grants.Save(modules.GrantSet{testmodule.ID: {"test.read"}}); err != nil {
+		t.Fatal(err)
+	}
+	runtime := modules.NewRuntime(modules.ProjectRef{Root: t.TempDir()}, registry, configs, grants)
+	report, err := runtime.Show(ctx, testmodule.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requireState(t, report, modules.StateEnabled)
+}
+
+func TestRuntimeInitializesModuleOnceUnderConcurrency(t *testing.T) {
+	ctx := context.Background()
+	counters := &testmodule.Counters{}
+	registry := mustRegistry(t, testmodule.Registration(counters, testmodule.Options{}))
+	configs := modules.NewMemoryConfigStore()
+	if err := configs.Save(modules.ProjectConfig{
+		SchemaVersion: 1,
+		Modules: map[string]modules.ModuleConfig{
+			testmodule.ID: {Enabled: true, ConfigVersion: 1, Config: modules.Config{}},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	grants := modules.NewMemoryGrantStore()
+	if err := grants.Save(modules.GrantSet{testmodule.ID: {"test.read"}}); err != nil {
+		t.Fatal(err)
+	}
+	runtime := modules.NewRuntime(modules.ProjectRef{Root: t.TempDir()}, registry, configs, grants)
+
+	const callers = 8
+	errs := make(chan error, callers)
+	var wait sync.WaitGroup
+	for range callers {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			_, err := runtime.Show(ctx, testmodule.ID)
+			errs <- err
+		}()
+	}
+	wait.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	requireCounters(t, counters, 1, 1, 1, callers)
+}
+
+func TestRuntimeDoesNotHoldGlobalLockDuringModuleInitialization(t *testing.T) {
+	ctx := context.Background()
+	slowStarted := make(chan struct{})
+	releaseSlow := make(chan struct{})
+	registrations := []modules.Registration{
+		lifecycleRegistration("dev.brain.slow", func() error {
+			close(slowStarted)
+			<-releaseSlow
+			return nil
+		}),
+		lifecycleRegistration("dev.brain.fast", nil),
+	}
+	registry := mustRegistry(t, registrations...)
+	configs := modules.NewMemoryConfigStore()
+	if err := configs.Save(modules.ProjectConfig{
+		SchemaVersion: 1,
+		Modules: map[string]modules.ModuleConfig{
+			"dev.brain.slow": {Enabled: true, ConfigVersion: 1, Config: modules.Config{}},
+			"dev.brain.fast": {Enabled: true, ConfigVersion: 1, Config: modules.Config{}},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	runtime := modules.NewRuntime(modules.ProjectRef{Root: t.TempDir()}, registry, configs, modules.NewMemoryGrantStore())
+	slowDone := make(chan error, 1)
+	go func() {
+		_, err := runtime.Show(ctx, "dev.brain.slow")
+		slowDone <- err
+	}()
+	<-slowStarted
+
+	fastDone := make(chan error, 1)
+	go func() {
+		_, err := runtime.Show(ctx, "dev.brain.fast")
+		fastDone <- err
+	}()
+	select {
+	case err := <-fastDone:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("unrelated module initialization blocked on runtime lock")
+	}
+	close(releaseSlow)
+	if err := <-slowDone; err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRuntimeUnavailableConfigAndStaleGrant(t *testing.T) {
 	ctx := context.Background()
 	configs := modules.NewMemoryConfigStore()
@@ -232,4 +350,38 @@ func requireCounters(t *testing.T, counters *testmodule.Counters, factories, val
 	if snapshot.Factories != factories || snapshot.Validations != validations || snapshot.Initializes != initializes || snapshot.HealthCalls != health {
 		t.Fatalf("unexpected counters: got factories=%d validations=%d initializes=%d health=%d", snapshot.Factories, snapshot.Validations, snapshot.Initializes, snapshot.HealthCalls)
 	}
+}
+
+func lifecycleRegistration(id string, initialize func() error) modules.Registration {
+	return modules.Registration{
+		Descriptor: modules.Descriptor{
+			ID:            id,
+			Name:          id,
+			Version:       "1.0.0",
+			BrainAPIMajor: modules.BrainAPIMajor,
+			ConfigVersion: 1,
+		},
+		Factory: func() modules.Module {
+			return lifecycleModule{initialize: initialize}
+		},
+	}
+}
+
+type lifecycleModule struct {
+	initialize func() error
+}
+
+func (lifecycleModule) Validate(context.Context, modules.ModuleContext, modules.Config) error {
+	return nil
+}
+
+func (m lifecycleModule) Initialize(context.Context, modules.ModuleContext, modules.Config) error {
+	if m.initialize != nil {
+		return m.initialize()
+	}
+	return nil
+}
+
+func (lifecycleModule) Health(context.Context, modules.ModuleContext) modules.Health {
+	return modules.Health{Status: modules.HealthHealthy}
 }

@@ -33,6 +33,7 @@ type Options struct {
 	ValidationError error
 	InitializeError error
 	Health          modules.Health
+	WriteConfig     bool
 }
 
 func Registration(counters *Counters, opts Options) modules.Registration {
@@ -69,6 +70,9 @@ func (m *module) Validate(_ context.Context, _ modules.ModuleContext, config mod
 	m.counters.mu.Unlock()
 	if m.opts.ValidationError != nil {
 		return m.opts.ValidationError
+	}
+	if m.opts.WriteConfig {
+		config["validated"] = true
 	}
 	if invalid, _ := config["invalid"].(bool); invalid {
 		return errors.New("invalid test configuration")
