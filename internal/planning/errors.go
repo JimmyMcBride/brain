@@ -1,7 +1,7 @@
 package planning
 
 import (
-	"fmt"
+	"errors"
 	"strings"
 )
 
@@ -59,8 +59,9 @@ func ErrorCodeOf(err error) ErrorCode {
 	if err == nil {
 		return ""
 	}
-	if domain, ok := err.(*DomainError); ok {
+	var domain *DomainError
+	if errors.As(err, &domain) {
 		return domain.Code
 	}
-	return ErrorCode(fmt.Sprintf("%T", err))
+	return ""
 }

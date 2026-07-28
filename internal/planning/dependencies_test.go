@@ -141,14 +141,20 @@ func TestBuildQueueRejectsMultipleCurrentSpecs(t *testing.T) {
 
 func testSpec(id ArtifactID, status SpecStatus, dependencies ...ArtifactID) Spec {
 	approval := Approval{State: ApprovalApproved}
+	var executionID *ArtifactID
 	if status == SpecDraft {
 		approval.State = ApprovalPending
+	}
+	if status == SpecImplementing {
+		value := ArtifactID("execution-" + string(id))
+		executionID = &value
 	}
 	return Spec{
 		ID:           id,
 		Title:        string(id),
 		Status:       status,
 		Approval:     approval,
+		ExecutionID:  executionID,
 		Dependencies: append([]ArtifactID(nil), dependencies...),
 		Verification: []string{"go test ./..."},
 	}

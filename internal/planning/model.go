@@ -56,7 +56,7 @@ type SourceReference struct {
 	Purpose    string
 }
 
-func validateSources(owner ArtifactID, sources []SourceReference) []Finding {
+func validateSources(kind ArtifactKind, owner ArtifactID, sources []SourceReference) []Finding {
 	var findings []Finding
 	for _, source := range sources {
 		if strings.TrimSpace(source.URI) == "" || strings.TrimSpace(source.Purpose) == "" {
@@ -64,7 +64,7 @@ func validateSources(owner ArtifactID, sources []SourceReference) []Finding {
 				Code:     ErrInvalidArtifact,
 				Severity: SeverityError,
 				Message:  "source references require a URI and purpose",
-				Artifact: ArtifactRef{ID: owner},
+				Artifact: ArtifactRef{Kind: kind, ID: owner},
 			})
 		}
 	}
@@ -143,6 +143,7 @@ type Spec struct {
 	Dependencies        []ArtifactID
 	Verification        []string
 	Initiative          *ArtifactID
+	ExecutionID         *ArtifactID
 	Sources             []SourceReference
 	UnresolvedQuestions []string
 }
@@ -184,7 +185,7 @@ type Finding struct {
 
 func ValidateBrainstorm(brainstorm Brainstorm) []Finding {
 	findings := validateIdentity(ArtifactBrainstorm, brainstorm.ID, brainstorm.Title)
-	return append(findings, validateSources(brainstorm.ID, brainstorm.Sources)...)
+	return append(findings, validateSources(ArtifactBrainstorm, brainstorm.ID, brainstorm.Sources)...)
 }
 
 func ValidateSpec(spec Spec) []Finding {
@@ -202,6 +203,13 @@ func ValidateSpec(spec Spec) []Finding {
 			Message:  "non-draft specs require Planning approval",
 			Artifact: ArtifactRef{Kind: ArtifactSpec, ID: spec.ID},
 		})
+	}
+	if spec.Status == SpecImplementing {
+		if spec.ExecutionID == nil || spec.ExecutionID.Validate() != nil {
+			findings = append(findings, invalidArtifactFinding(ArtifactSpec, spec.ID, "implementing spec requires a valid execution identifier"))
+		}
+	} else if spec.Status != SpecDone && spec.ExecutionID != nil {
+		findings = append(findings, invalidArtifactFinding(ArtifactSpec, spec.ID, "execution identifier is only valid while implementing or done"))
 	}
 	if len(trimmedStrings(spec.Verification)) == 0 {
 		findings = append(findings, invalidArtifactFinding(ArtifactSpec, spec.ID, "verification is required"))
@@ -226,7 +234,7 @@ func ValidateSpec(spec Spec) []Finding {
 			findings = append(findings, invalidArtifactFinding(ArtifactSpec, spec.ID, "initiative has an invalid identifier"))
 		}
 	}
-	return append(findings, validateSources(spec.ID, spec.Sources)...)
+	return append(findings, validateSources(ArtifactSpec, spec.ID, spec.Sources)...)
 }
 
 func ValidateInitiative(initiative Initiative) []Finding {
@@ -242,17 +250,23 @@ func ValidateInitiative(initiative Initiative) []Finding {
 		}
 		seen[ref.ID] = struct{}{}
 	}
-	return append(findings, validateSources(initiative.ID, initiative.Sources)...)
+	return append(findings, validateSources(ArtifactInitiative, initiative.ID, initiative.Sources)...)
 }
 
 func ValidateRoadmap(roadmap Roadmap) []Finding {
 	findings := validateIdentity(ArtifactRoadmap, roadmap.ID, roadmap.Title)
+	seen := map[ArtifactRef]struct{}{}
 	for _, entry := range roadmap.Entries {
 		if entry.Ref.Validate() != nil || (entry.Ref.Kind != ArtifactSpec && entry.Ref.Kind != ArtifactInitiative) {
 			findings = append(findings, invalidArtifactFinding(ArtifactRoadmap, roadmap.ID, "roadmap entries must reference valid specs or initiatives"))
+			continue
 		}
+		if _, exists := seen[entry.Ref]; exists {
+			findings = append(findings, invalidArtifactFinding(ArtifactRoadmap, roadmap.ID, "roadmap entry is duplicated"))
+		}
+		seen[entry.Ref] = struct{}{}
 	}
-	return append(findings, validateSources(roadmap.ID, roadmap.Sources)...)
+	return append(findings, validateSources(ArtifactRoadmap, roadmap.ID, roadmap.Sources)...)
 }
 
 func validateIdentity(kind ArtifactKind, id ArtifactID, title string) []Finding {
@@ -308,6 +322,10 @@ func cloneSpec(spec Spec) Spec {
 	if spec.Initiative != nil {
 		initiative := *spec.Initiative
 		copy.Initiative = &initiative
+	}
+	if spec.ExecutionID != nil {
+		executionID := *spec.ExecutionID
+		copy.ExecutionID = &executionID
 	}
 	return copy
 }

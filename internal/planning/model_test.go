@@ -109,10 +109,14 @@ func TestArtifactValidationRejectsReferenceViolations(t *testing.T) {
 
 	roadmap := Roadmap{
 		ID: "roadmap", Title: "Roadmap",
-		Entries: []RoadmapEntry{{Ref: ArtifactRef{Kind: ArtifactBrainstorm, ID: "brainstorm"}}},
+		Entries: []RoadmapEntry{
+			{Ref: ArtifactRef{Kind: ArtifactBrainstorm, ID: "brainstorm"}},
+			{Ref: ArtifactRef{Kind: ArtifactSpec, ID: "domain"}},
+			{Ref: ArtifactRef{Kind: ArtifactSpec, ID: "domain"}},
+		},
 	}
-	if findings := ValidateRoadmap(roadmap); len(findings) != 1 {
-		t.Fatalf("expected invalid roadmap reference, got %#v", findings)
+	if findings := ValidateRoadmap(roadmap); len(findings) != 2 {
+		t.Fatalf("expected invalid and duplicate roadmap references, got %#v", findings)
 	}
 }
 

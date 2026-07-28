@@ -30,6 +30,7 @@ func ReopenSpec(spec Spec) (Spec, error) {
 	reopened := cloneSpec(spec)
 	reopened.Status = SpecDraft
 	reopened.Approval = Approval{State: ApprovalPending}
+	reopened.ExecutionID = nil
 	return reopened, nil
 }
 
