@@ -61,6 +61,32 @@ This creates:
 
 Brain treats `.brain/session.json`, `.brain/sessions/`, `.brain/state/`, and `.brain/policy.override.yaml` as local runtime state. They should stay out of Git by default while the durable shared layer lives in markdown and docs.
 
+## Optional Modules
+
+The production binary currently contains no modules, so inspection is an empty
+read-only operation:
+
+```bash
+brain modules list --project .
+```
+
+Builds with compiled module registrations support:
+
+```bash
+brain modules show --project . <id>
+brain modules grant --project . <id> <permission>...
+brain modules revoke --project . <id> <permission>...
+brain modules enable --project . <id>
+brain modules disable --project . <id>
+brain modules health --project . [id]
+```
+
+Tracked desired enablement and non-secret configuration live in
+`.brain/modules.yaml`. Local permission approvals live in the ignored
+`.brain/state/module-grants.json`. Read-only commands create neither file.
+Disabling preserves configuration and grants. Add the root `--json` flag for
+machine-readable output.
+
 `brain init` is the clean bootstrap path.  
 `brain adopt` is the existing-repo path: it creates the local Brain workspace, adopts Brain-owned docs into the managed-block model, and preserves previous content under `Local Notes`.
 

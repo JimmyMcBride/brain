@@ -2,10 +2,10 @@
 created_at: "2026-07-28T05:00:28Z"
 project: brain
 slug: minimal-internal-module-framework
-status: implementing
+status: done
 title: Minimal Internal Module Framework
 type: spec
-updated_at: "2026-07-28T05:24:43Z"
+updated_at: "2026-07-28T05:43:26Z"
 ---
 
 # Minimal Internal Module Framework

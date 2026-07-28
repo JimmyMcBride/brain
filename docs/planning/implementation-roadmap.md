@@ -12,9 +12,12 @@ context is refreshed, validation passes, and unresolved questions are explicit.
 
 ## Phase 1 — Minimal Internal Module Framework
 
-Deliver module descriptor/interface, registry, capability registration,
+Status: Implemented by
+`.plan/specs/minimal-internal-module-framework.md`; pending review and merge.
+
+Deliver module descriptor/interface, registry, capability declarations,
 project-scoped enable/disable state, namespaced configuration, permissions,
-lifecycle events, health, tests, and one trivial reference module.
+minimal lifecycle, health, tests, and one test-only reference module.
 
 Do not load external community processes. Do not migrate Planning domain code.
 
@@ -87,6 +90,7 @@ lifecycle, diagnostics, and distribution direction.
 
 ## Exact Next Slice
 
-> Build the minimal internal Brain module framework with registration, enablement,
-> configuration, permissions, lifecycle hooks, and one trivial reference module.
-> Do not migrate Planning domain code until that foundation is reviewed.
+> Review and merge the minimal internal module framework, then begin Phase 2
+> Planning domain extraction from a separately approved spec. Do not import
+> adapters, GitHub, Linear, Cobra, filesystem, or cloud dependencies into the
+> Planning domain.
