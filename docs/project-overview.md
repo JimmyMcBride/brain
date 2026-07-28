@@ -19,6 +19,7 @@ Primary runtime: `go`
 - `.brain/`
 - `.codex/`
 - `.openclaw/`
+- `.plan/`
 - `cmd/`
 - `docs/`
 - `internal/`

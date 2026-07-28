@@ -2,6 +2,10 @@
 /dist/
 /tmp/
 
+# Standalone Plan v3 creates this compatibility-only file even for local
+# workspaces. Brain Planning never tracks or imports Linear integration state.
+.plan/.meta/linear.json
+
 # brain:begin gitignore-session
 .brain/session.json
 .brain/sessions/
