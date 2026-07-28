@@ -365,7 +365,9 @@ status: ok
 blocking_findings: 0
 guidance_findings: 0
 
-- [ok] No findings.
+- [ok] No additional general-checklist findings. The advisory analysis warnings
+  above remain non-blocking.
+
 ## Resources
 
 - `.plan/brainstorms/integrate-planning-as-an-official-brain-module.md`
