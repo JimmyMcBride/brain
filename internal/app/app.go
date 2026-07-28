@@ -79,6 +79,10 @@ func New(configPath, projectPath string, jsonOutput bool, opts Options) (*App, e
 	if err := config.EnsureProjectPaths(paths); err != nil {
 		return nil, err
 	}
+	moduleRegistry, err := modules.NewRegistry(opts.ModuleRegistrations)
+	if err != nil {
+		return nil, err
+	}
 
 	workspaceSvc := workspace.New(projectDir)
 	tpl := templates.New(filepathIfExists(workspaceSvc.Root, "templates"))
@@ -103,10 +107,6 @@ func New(configPath, projectPath string, jsonOutput bool, opts Options) (*App, e
 	}
 	liveContextManager := livecontext.New(historyLog)
 	auditManager := contextaudit.New(structureManager, notesManager, sessionManager)
-	moduleRegistry, err := modules.NewRegistry(opts.ModuleRegistrations)
-	if err != nil {
-		return nil, err
-	}
 	moduleRuntime := modules.NewRuntime(
 		modules.ProjectRef{Root: projectDir},
 		moduleRegistry,
