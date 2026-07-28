@@ -2,8 +2,24 @@
 
 ## Status
 
-Target model derived from the standalone Plan implementation. Final Go types wait
-for Phase 2 extraction.
+Phase 2 is implemented in `internal/planning`. The package contains pure domain
+values and rules only; local persistence and module wiring remain Phase 3 work.
+
+## Phase 2 Boundary
+
+The implemented domain includes:
+
+- validated artifact identities, references, and source provenance
+- brainstorm, spec, initiative, and roadmap values
+- closed `local`, `github`, and `hybrid` ownership modes
+- Planning approval and spec lifecycle transitions
+- deterministic dependency ordering, readiness, and execution queues
+- runtime slice derivation and advancement after approved execution starts
+- stable domain error codes
+
+The package has no filesystem, command, module-runtime, Brain private-storage,
+GitHub, Linear, or cloud dependency. It defines no repository interface;
+persistence ports wait for the concrete local adapter to prove their shape.
 
 ## Aggregate Map
 
@@ -59,7 +75,7 @@ runtime/external work-item records, but must preserve original content and links
 
 ## Candidate Ports
 
-Names remain provisional:
+Future adapter responsibilities remain provisional:
 
 - artifact repositories for brainstorm, spec, initiative, roadmap, execution
 - collaboration source reader
@@ -69,8 +85,9 @@ Names remain provisional:
 - readiness check and approval provider
 - Brain context requester and memory proposal sink
 
-Do not add provider abstractions solely to preserve retired Linear code. Introduce
-a port only when local plus one retained adapter prove a genuine variation.
+Phase 2 intentionally added none of these ports. Do not add provider abstractions
+solely to preserve retired Linear code. Introduce a port only when a concrete
+later adapter proves a genuine variation.
 
 ## Source References
 

@@ -10,10 +10,10 @@ This file is a deterministic snapshot of the repository state at the last refres
 - Root: `.`
 - Runtime: `go`
 - Go module: `brain`
-- Current branch: `develop`
+- Current branch: `codex/planning-domain-extraction`
 - Default branch: `develop`
 - Remote: `https://github.com/JimmyMcBride/brain.git`
-- Go test files: `30`
+- Go test files: `33`
 
 ## Docs
 

@@ -35,7 +35,7 @@ Goal: Prove registration and lifecycle with no Planning domain migration.
 Goal: Extract storage-neutral Planning behavior, ship local `brain plan`, and keep
 the `plan` command as a shared compatibility wrapper.
 
-- [ ] [Planning domain extraction](./specs/planning-domain-extraction.md)
+- [x] [Planning domain extraction](./specs/planning-domain-extraction.md)
 - [ ] Local `.plan/` adapter and migration fixtures
 - [ ] Native Planning command group and permissions/events
 - [ ] Plan CLI mapping and compatibility tests

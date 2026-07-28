@@ -46,8 +46,8 @@ controlled migration.
 
 - Phase 0 architecture is documented in `docs/modules/`, `docs/planning/`, and
   ADRs 0001–0011.
-- Planning is not implemented in Brain yet.
+- Planning is not enabled or exposed in Brain yet.
 - Phase 1's minimal compiled internal module framework was merged into `develop`
   by PR #37. The separate Phase 2
   [Planning Domain Extraction](./specs/planning-domain-extraction.md) spec is
-  approved and ready for execution.
+  implemented and pending review/merge.

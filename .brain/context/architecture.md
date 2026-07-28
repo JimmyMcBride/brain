@@ -22,6 +22,7 @@ Use this file for the structural shape of the repository.
 - `internal/modules/`
 - `internal/notes/`
 - `internal/output/`
+- `internal/planning/`
 - `internal/projectcontext/`
 - `internal/promotion/`
 - `internal/search/`

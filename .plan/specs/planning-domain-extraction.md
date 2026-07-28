@@ -3,10 +3,10 @@ created_at: "2026-07-28T21:17:36Z"
 project: brain
 slug: planning-domain-extraction
 source_brainstorm: .plan/brainstorms/planning-domain-extraction.md
-status: implementing
+status: done
 title: Planning Domain Extraction
 type: spec
-updated_at: "2026-07-28T21:29:35Z"
+updated_at: "2026-07-28T21:38:09Z"
 ---
 
 # Planning Domain Extraction
