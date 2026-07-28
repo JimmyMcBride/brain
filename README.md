@@ -174,8 +174,9 @@ As the repo evolves, use `brain context audit --project .` to review whether Bra
 
 ## Optional Modules
 
-Brain is defining a staged module framework so teams can add domain workflows
-without making them part of every installation.
+Brain includes a minimal internal module framework so teams can add compiled
+domain workflows without making them part of every installation. The production
+binary currently registers zero modules.
 
 Planning is the first official optional module. It is not implemented in Brain
 yet. The standalone [`plan`](https://github.com/JimmyMcBride/plan) product remains
@@ -192,6 +193,9 @@ The approved direction:
   Plan migration, `hybrid` means split local/GitHub ownership. Brain Planning
   never imports or implements Linear integration.
 - Planning can propose Brain memory updates but cannot silently write them.
+
+Use `brain modules list`, `show`, `grant`, `revoke`, `enable`, `disable`, and
+`health` to inspect and manage the compiled modules available in a given build.
 
 See [Module Overview](docs/modules/overview.md),
 [Planning Vision](docs/planning/vision.md), and
@@ -224,6 +228,7 @@ Teams may use Brain without Planning and keep their existing planning systems.
 - `brain distill --session`: create a reviewed distillation proposal from active session work
 - `brain session ...`: enforce workflow and verification rules
 - `brain skills ...`: install the Brain skill for agent runtimes
+- `brain modules ...`: inspect, permission, enable, disable, and check compiled modules
 - `brain history`, `brain undo`: inspect and revert tracked note changes
 - `brain version`, `brain update`: inspect or update the CLI
 

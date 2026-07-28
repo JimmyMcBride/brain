@@ -2,16 +2,19 @@
 
 ## Current Baseline
 
-Brain is currently one Go CLI:
+Brain remains one Go CLI with a minimal compiled-module runtime:
 
 - `cmd/root.go` imports and registers every top-level Cobra command.
 - the `App` type in `internal/app` constructs concrete workspace, notes, index,
-  search, context, session, audit, and skill services.
-- `internal/config` owns a small global configuration with no module namespace.
+  search, context, session, audit, skill, and module services.
+- `internal/modules` owns descriptors, compiled registration, project
+  configuration, local grants, lifecycle, runtime state, and health.
+- `.brain/modules.yaml` stores tracked desired enablement and non-secret config.
+- `.brain/state/module-grants.json` stores ignored local permission approvals.
 - `internal/workspace` recognizes `AGENTS.md`, `docs/`, and `.brain/` as Brain
   knowledge and excludes local runtime state from canonical memory.
-- no module registry, permissions service, typed event bus, audit service, module
-  manifest, capability negotiation, or extension protocol exists.
+- no production module, dependency resolver, typed event bus, module audit
+  service, dynamic command registration, or external extension protocol exists.
 
 Existing services are implementation evidence, not yet stable module APIs.
 
@@ -33,7 +36,7 @@ SQLite schema, concrete managers, or authentication internals.
 
 ## Stage 1 Runtime
 
-Phase 1 adds small packages without reorganizing existing Core packages:
+Phase 1 adds one small package without reorganizing existing Core packages:
 
 ```text
 cmd/
@@ -42,11 +45,13 @@ cmd/
 internal/
   app/                       # Composition root remains
   modules/
-    contract/                # API version, descriptors, capability vocabulary
-    registry/                # compiled-module discovery and dependency ordering
-    runtime/                 # enablement, lifecycle, health
-    manifest/                # validation of built-in descriptors
-    testmodule/              # trivial reference module
+    descriptor.go            # API version, descriptor validation
+    registry.go              # compiled-module discovery
+    config.go                # tracked project configuration
+    grants.go                # ignored local approvals
+    runtime.go               # enablement and lifecycle
+    health.go                # health vocabulary
+    testmodule/              # test-only module
   official/
     planning/                # introduced incrementally after framework review
 ```
@@ -56,56 +61,48 @@ Current packages such as `workspace`, `search`, `session`, `projectcontext`, and
 needs access; a wholesale Core package-tree move would add churn without proving
 a contract.
 
-## Candidate Contracts
+## Phase 1 Contracts
 
-Names and Go signatures are intentionally provisional. Phase 1 must derive the
-smallest interfaces from tests.
+Phase 1 intentionally implements only the contracts proven by its tests.
 
 | Contract | Core responsibility | Module responsibility |
 | --- | --- | --- |
-| Descriptor/manifest | validate ID, API range, runtime, dependencies | declare metadata and requested capabilities |
-| Registrar | expose controlled registries | register commands, providers, tools, events |
-| Lifecycle | order calls, persist state, report failures | validate, enable, initialize, upgrade, health, shutdown |
-| Configuration | namespace, validate, migrate, resolve secrets | declare schema and defaults |
-| Permission broker | approve, authorize, audit | declare and check domain permissions |
-| Event bus | type/version events, enforce visibility | publish and subscribe explicitly |
-| Context provider | enforce request budget and provenance | return bounded, reasoned contributions |
-| Search provider | merge authorized results | expose records with source/revision data |
-| Memory proposal provider | create reviewable proposals | propose; never silently write |
-| Agent tool registry | validate schemas and policy | declare typed tools and mutation class |
-| Job registry | retry/idempotency and health in cloud | define retry-safe cloud work |
-| API registry | own routing/auth/versioning | contribute trusted versioned handlers |
+| Descriptor | validate reverse-domain ID, semver, Brain API major, config version, declarations | declare metadata, capabilities, and exact permissions |
+| Registry | reject invalid or duplicate compiled registrations | provide descriptor and factory |
+| Lifecycle | gate factories, initialize once per process, report stable failures and health | validate config, initialize idempotently across processes, report health |
+| Configuration | atomically persist deterministic tracked YAML and reject raw secrets | consume namespaced non-secret config |
+| Permissions | atomically persist exact ignored local grants | declare every required permission |
 
-Command registration must be namespaced and controlled. Core owns root flags,
-help consistency, collision detection, module-disabled diagnostics, and command
-policy. Module command code must not be imported by unrelated Core command
-packages.
+Dependencies, dynamic module commands, events/audit, providers, jobs, migrations,
+shutdown, external processes, and cloud contracts are deferred.
 
 ## Lifecycle State
 
-Conceptual project state:
+Project runtime state:
 
 ```text
-available -> enabled -> initialized -> healthy
-                |            |           |
-                +---------- disabled <---+
+available -> disabled
+    |
+    +-> blocked
+    |
+    +-> enabled -> healthy | degraded | unhealthy
+
+configured but not compiled -> unavailable
 ```
 
-Enablement and data initialization are separate. Enabling validates compatibility,
-configuration, dependencies, and permissions before storage creation. Disabling
-stops contributions and jobs but does not destroy data. Destructive removal is a
-separate future operation.
+Enabling validates compatibility, configuration, and permissions before
+initialization. Disabled, blocked, and unavailable modules are not instantiated
+during inspection. Disabling preserves configuration, grants, and module-owned
+data. Destructive removal is a separate future operation.
 
-Candidate hooks:
+Phase 1 lifecycle:
 
 1. Register descriptor and factories at process construction.
 2. Validate Brain API/runtime compatibility.
-3. Resolve enablement and dependencies.
+3. Resolve project enablement.
 4. Validate configuration and granted permissions.
-5. Initialize or migrate project state idempotently.
-6. Register active capabilities.
-7. Report health.
-8. Stop jobs and shut down safely.
+5. Initialize eligible modules once per process.
+6. Report health.
 
 ## Capability Registration Rules
 

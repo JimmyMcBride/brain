@@ -4,11 +4,12 @@
 
 The architecture exists to support one product claim: every project gets its own durable local brain for AI agents. Markdown stays canonical, local SQLite powers retrieval, and the CLI exposes explicit workflows for context compilation, history, and execution discipline.
 
-The repo has three important layers:
+The repo has four important layers:
 
 1. workspace and notes
 2. indexing, retrieval, and safety
 3. context compilation, session enforcement, and upgrade-aware repo guidance
+4. optional compiled-module registration and project runtime state
 
 ## Workspace Model
 
@@ -41,6 +42,8 @@ The index is local to each project under `.brain/state/brain.sqlite3`.
 - `internal/session` enforces preflight and closeout workflow rules and records packet telemetry
 - `internal/distill` turns active session work into review-first durable-memory proposals
 - `internal/promotion` classifies durable-memory candidates for closeout and distillation
+- `internal/modules` owns compiled module descriptors, registration, project
+  enablement/configuration, local permission grants, lifecycle, and health
 - `internal/skills` installs the Brain skill into agent runtimes
 - `internal/update` owns version/update behavior
 
@@ -48,29 +51,32 @@ The index is local to each project under `.brain/state/brain.sqlite3`.
 
 - `main.go` boots Cobra
 - `cmd/*` stays thin and maps flags/args to internal services
-- `internal/app` wires config, workspace, notes, search, context compilation, sessions, distillation, skills, and output
+- `internal/app` wires config, workspace, notes, search, context compilation,
+  sessions, distillation, skills, the module runtime, and output
 
-## Approved Module Direction
+## Module Foundation
 
-The module framework is an approved target, not current behavior. Today every
-command is registered centrally in `cmd/root.go`, the `App` type in `internal/app`
-wires
-concrete services, configuration is global-only, and no module registry,
-permission broker, typed event bus, module manifest, or external extension
-protocol exists.
+Phase 1 implements the minimal internal module foundation in `internal/modules`.
+Compiled registrations enter through `app.Options`, while `brain modules`
+provides list/show, grant/revoke, enable/disable, and health commands. Tracked
+project intent lives in the project module configuration file; ignored local
+permission grants live in Brain's state directory.
 
-The staged target:
+The production binary currently registers zero modules. The test-only module
+proves descriptor validation, compatibility, lifecycle, permission, persistence,
+and health behavior without importing Planning or changing Core behavior.
 
-1. compiled official Go modules behind controlled registration, enablement,
-   configuration, permissions, lifecycle, capabilities, and health
+Later stages remain:
+
+1. official compiled Go modules wired at the outer composition root
 2. future external-process community modules over a versioned protocol
 3. future Brain Cloud module services and trusted web surfaces
 
 Planning is the first official optional module. It must use formal Core contracts;
 Core must remain useful without it. Existing packages stay in place initially.
-The minimal migration adds `internal/modules/*` and a trivial reference module
-before any Planning domain extraction. A wholesale Core package-tree
-reorganization is not part of the architecture phase.
+The minimal migration uses one flat `internal/modules` package plus a test-only
+module before any Planning domain extraction. A wholesale Core package-tree
+reorganization is not part of the architecture.
 
 Detailed contracts: `docs/modules/architecture.md` and
 `docs/modules/planning-driven-requirements.md`.

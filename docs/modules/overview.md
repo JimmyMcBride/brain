@@ -2,7 +2,9 @@
 
 ## Status
 
-Approved product direction. Module runtime not implemented.
+Phase 1 internal runtime implemented. The production binary registers zero
+modules; Planning, external processes, cloud modules, and module-provided
+commands remain unimplemented.
 
 Brain is an extensible context, memory, retrieval, and workflow platform. Modules
 adapt Brain to a domain or team without making that domain mandatory. Planning is
@@ -28,9 +30,10 @@ or compliance module could also use.
 
 ## Stages
 
-1. Internal compiled official modules: registry, explicit enablement,
-   configuration, permissions, capabilities, lifecycle, events, health, and a
-   trivial reference module.
+1. Internal compiled modules: the registry, explicit enablement, configuration,
+   permissions, declared capabilities, minimal lifecycle, health, and a
+   test-only module are implemented. Events and the first production official
+   module remain later work.
 2. External-process community modules: versioned protocol, independent releases,
    compatibility negotiation, permission mediation, crash isolation, logs, health,
    and lifecycle control. Transport remains undecided.
@@ -43,16 +46,19 @@ Go's native `plugin` package is not the long-term community-module mechanism.
 ## Enablement Contract
 
 Modules are disabled unless explicitly enabled for a project or enabled by a
-governing cloud policy. Conceptual commands:
+governing cloud policy. Phase 1 commands:
 
 ```text
-brain modules list --project .
-brain modules enable planning --project .
-brain modules disable planning --project .
-brain modules health --project .
+brain modules list
+brain modules show <id>
+brain modules grant <id> <permission>...
+brain modules revoke <id> <permission>...
+brain modules enable <id>
+brain modules disable <id>
+brain modules health [id]
 ```
 
-Exact syntax remains subject to Phase 1 CLI review.
+All commands support the root `--project` and `--json` flags.
 
 Disabled modules:
 

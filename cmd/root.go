@@ -117,6 +117,7 @@ func addCommands(root *cobra.Command, flags *rootFlagsState, loadApp appLoader) 
 	addContextCommand(root, flags, loadApp)
 	addSessionCommand(root, flags, loadApp)
 	addSkillsCommand(root, flags, loadApp)
+	addModulesCommand(root, flags, loadApp)
 }
 
 func parseMeta(entries []string) (map[string]any, error) {
