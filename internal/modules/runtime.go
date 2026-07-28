@@ -227,7 +227,6 @@ func (r *Runtime) Enable(ctx context.Context, id string) (Report, error) {
 	if err := r.configStore.Save(config); err != nil {
 		return Report{}, err
 	}
-	r.resetModule(id)
 	report, err := r.evaluate(ctx, id, config, grants, true)
 	if err != nil {
 		return Report{}, err
@@ -256,7 +255,6 @@ func (r *Runtime) Disable(ctx context.Context, id string) (Report, error) {
 	if err := r.configStore.Save(config); err != nil {
 		return Report{}, err
 	}
-	r.resetModule(id)
 	return r.evaluate(ctx, id, config, grants, false)
 }
 
@@ -301,7 +299,6 @@ func (r *Runtime) Revoke(ctx context.Context, id string, permissions ...string) 
 	if err := r.grantStore.Save(grants); err != nil {
 		return Report{}, err
 	}
-	r.resetModule(id)
 	return r.evaluate(ctx, id, config, grants, true)
 }
 
@@ -421,13 +418,6 @@ func (r *Runtime) initialize(ctx context.Context, registration Registration, con
 	}
 	r.initialized[id] = module
 	return module, nil
-}
-
-func (r *Runtime) resetModule(id string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	delete(r.initialized, id)
-	delete(r.initFailures, id)
 }
 
 func permissionFailure(descriptor Descriptor, grants []string) *Failure {

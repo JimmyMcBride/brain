@@ -140,6 +140,35 @@ func TestRuntimeInvalidConfigAndInitializeFailure(t *testing.T) {
 	}
 }
 
+func TestRuntimeIncompatibleConfigVersionBlocksWithoutInstantiation(t *testing.T) {
+	ctx := context.Background()
+	counters := &testmodule.Counters{}
+	registry := mustRegistry(t, testmodule.Registration(counters, testmodule.Options{}))
+	configs := modules.NewMemoryConfigStore()
+	if err := configs.Save(modules.ProjectConfig{
+		SchemaVersion: 1,
+		Modules: map[string]modules.ModuleConfig{
+			testmodule.ID: {Enabled: true, ConfigVersion: 2, Config: modules.Config{}},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	grants := modules.NewMemoryGrantStore()
+	if err := grants.Save(modules.GrantSet{testmodule.ID: {"test.read"}}); err != nil {
+		t.Fatal(err)
+	}
+	runtime := modules.NewRuntime(modules.ProjectRef{Root: t.TempDir()}, registry, configs, grants)
+	reports, err := runtime.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requireState(t, reports[0], modules.StateBlocked)
+	if reports[0].Failure == nil || reports[0].Failure.Code != modules.FailureConfigInvalid {
+		t.Fatalf("expected config failure, got %#v", reports[0].Failure)
+	}
+	requireCounters(t, counters, 0, 0, 0, 0)
+}
+
 func TestRuntimeUnavailableConfigAndStaleGrant(t *testing.T) {
 	ctx := context.Background()
 	configs := modules.NewMemoryConfigStore()

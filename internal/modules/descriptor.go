@@ -35,7 +35,10 @@ func (d Descriptor) Validate() error {
 		return fmt.Errorf("module %s has invalid semantic version %q", d.ID, d.Version)
 	}
 	if d.BrainAPIMajor != BrainAPIMajor {
-		return fmt.Errorf("module %s requires Brain API major %d, supported major is %d", d.ID, d.BrainAPIMajor, BrainAPIMajor)
+		return &Failure{
+			Code:    FailureAPIIncompatible,
+			Message: fmt.Sprintf("module %s requires Brain API major %d, supported major is %d", d.ID, d.BrainAPIMajor, BrainAPIMajor),
+		}
 	}
 	if d.ConfigVersion < 1 {
 		return fmt.Errorf("module %s has invalid config version %d", d.ID, d.ConfigVersion)
