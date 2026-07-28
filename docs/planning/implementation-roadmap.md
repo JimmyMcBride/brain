@@ -13,7 +13,7 @@ context is refreshed, validation passes, and unresolved questions are explicit.
 ## Phase 1 — Minimal Internal Module Framework
 
 Status: Implemented by
-`.plan/specs/minimal-internal-module-framework.md`; pending review and merge.
+`.plan/specs/minimal-internal-module-framework.md` and merged by PR #37.
 
 Deliver module descriptor/interface, registry, capability declarations,
 project-scoped enable/disable state, namespaced configuration, permissions,
@@ -90,7 +90,6 @@ lifecycle, diagnostics, and distribution direction.
 
 ## Exact Next Slice
 
-> Review and merge the minimal internal module framework, then begin Phase 2
-> Planning domain extraction from a separately approved spec. Do not import
-> adapters, GitHub, Linear, Cobra, filesystem, or cloud dependencies into the
-> Planning domain.
+> Start the approved Phase 2 Planning domain extraction spec so runtime slices
+> are derived from the canonical contract. Do not import adapters, GitHub,
+> Linear, Cobra, filesystem, or cloud dependencies into the Planning domain.
