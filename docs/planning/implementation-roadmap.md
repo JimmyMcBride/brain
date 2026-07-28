@@ -46,7 +46,7 @@ Planning domain.
 ## Phase 6 — Standalone Plan Linear Cleanup
 
 Complete Linear removal in standalone Plan before shared implementation crosses
-into Brain. Brain Planning accepts only local, GitHub, and GitHub-hybrid
+into Brain. Brain Planning accepts only `local`, `github`, and `hybrid`
 workspaces. A Linear-configured workspace receives standalone Plan migration
 guidance; no Linear schema, adapter, command, permission, or event enters Brain.
 

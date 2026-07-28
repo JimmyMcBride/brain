@@ -40,7 +40,8 @@ extension foundations.
 - Brain Core stays useful with Planning disabled.
 - No major Planning port before the module framework is reviewed.
 - Retain .plan and Plan CLI compatibility during migration.
-- Supported migration sources are local, GitHub, and GitHub hybrid. Brain
+- Supported migration sources are `local`, `github`, and `hybrid`. During
+  standalone Plan migration, `hybrid` means split local/GitHub ownership. Brain
   Planning does not import Linear integration.
 - Do not claim external-process sandboxing or choose transport yet.
 

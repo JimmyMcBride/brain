@@ -11,7 +11,7 @@ concepts and broaden product commitments.
 
 ## Decision
 
-Brain Planning supports local, GitHub, and GitHub-hybrid migration sources only.
+Brain Planning supports `local`, `github`, and `hybrid` migration sources only.
 It never imports or implements Linear integration. Do not carry Linear-specific
 schemas, configuration, commands, permissions, events, adapters, or concepts into
 generic contracts. A Linear-configured workspace receives an unsupported-source

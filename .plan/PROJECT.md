@@ -25,7 +25,8 @@ controlled migration.
   reviewed.
 - Initial local Planning retains `.plan/`.
 - The standalone `plan` CLI and repository remain during migration.
-- Supported migration source modes are local, GitHub, and GitHub hybrid. Brain
+- Supported migration source modes are `local`, `github`, and `hybrid`. During
+  standalone Plan migration, `hybrid` means split local/GitHub ownership. Brain
   Planning never imports or implements Linear integration.
 - Planning cannot silently write Brain memory.
 - Community modules are future external processes; no sandbox or protocol

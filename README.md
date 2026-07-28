@@ -188,7 +188,8 @@ The approved direction:
 - Official modules begin as compiled Go packages behind controlled interfaces.
 - Future community modules run as external processes over a versioned protocol.
 - Local Planning initially retains compatible `.plan/` storage.
-- Migration supports local, GitHub, and GitHub-hybrid sources. Brain Planning
+- Migration supports `local`, `github`, and `hybrid` sources. During standalone
+  Plan migration, `hybrid` means split local/GitHub ownership. Brain Planning
   never imports or implements Linear integration.
 - Planning can propose Brain memory updates but cannot silently write them.
 

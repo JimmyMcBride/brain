@@ -2,7 +2,7 @@
 
 ## Decision
 
-Brain Planning supports local, GitHub, and GitHub-hybrid migration sources only.
+Brain Planning supports `local`, `github`, and `hybrid` migration sources only.
 It never imports or implements Linear integration. Standalone Plan owns removal
 or export of its historical Linear state. Do not preserve dead Linear concepts
 inside Brain module APIs.
@@ -40,7 +40,7 @@ inside Brain module APIs.
 ## Error Contract
 
 An old workspace receives an actionable unsupported-source message naming the
-detected source mode and supported targets: local, GitHub, or GitHub hybrid. Brain
+detected source mode and supported targets: `local`, `github`, or `hybrid`. Brain
 must not read, import, or silently reinterpret Linear-owned data.
 
 ## Explicit Non-Actions

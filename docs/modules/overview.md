@@ -86,10 +86,12 @@ capabilities:
   - agent_tools
 permissions:
   - project.context.read
-  - project.memory.propose
+  - memory.propose
   - planning.read
-  - planning.write
-  - planning.approve
+  - planning.brainstorm
+  - planning.spec.create
+  - planning.spec.edit
+  - planning.spec.approve
   - planning.execute
 dependencies:
   required: []

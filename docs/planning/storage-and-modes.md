@@ -6,7 +6,9 @@ Approved high-level modes. Local compatibility is the first implementation.
 Hybrid synchronization details remain open.
 
 Migration source modes are limited to `local`, `github`, and `hybrid`
-(GitHub-backed hybrid). Linear is not a Brain Planning source mode, integration,
+only. During standalone Plan migration, “GitHub hybrid” is descriptive wording
+for the canonical `hybrid` value and means split local/GitHub ownership; it is not
+a fourth enum value. Linear is not a Brain Planning source mode, integration,
 configuration surface, or target adapter.
 
 ## Local

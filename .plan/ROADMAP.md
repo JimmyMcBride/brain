@@ -15,7 +15,7 @@ migration contracts without porting Planning code.
 - [x] Define optional Planning product boundary
 - [x] Inventory standalone Plan behavior and persistence
 - [x] Record ADRs for module/runtime/storage/integration decisions
-- [x] Define local/GitHub/GitHub-hybrid migration, Linear exclusion, CLI compatibility, and cloud direction
+- [x] Define `local`/`github`/`hybrid` migration, Linear exclusion, CLI compatibility, and cloud direction
 - [x] Record Brain knowledge-loop and permission boundaries
 
 ## Phase 1: Minimal Internal Module Framework
