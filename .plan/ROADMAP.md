@@ -22,6 +22,7 @@ migration contracts without porting Planning code.
 
 Goal: Prove registration and lifecycle with no Planning domain migration.
 
+- [x] Approve the [Minimal Internal Module Framework](./specs/minimal-internal-module-framework.md) spec
 - [ ] Module descriptor and registry
 - [ ] Project enable/disable state
 - [ ] Namespaced configuration
