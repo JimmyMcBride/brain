@@ -16,8 +16,11 @@ Use this file for the structural shape of the repository.
 - `internal/history/`
 - `internal/index/`
 - `internal/livecontext/`
+- `internal/modules/`
 - `internal/notes/`
+- `internal/official/`
 - `internal/output/`
+- `internal/planning/`
 - `internal/projectcontext/`
 - `internal/promotion/`
 - `internal/search/`

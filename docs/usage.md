@@ -61,6 +61,61 @@ This creates:
 
 Brain treats `.brain/session.json`, `.brain/sessions/`, `.brain/state/`, and `.brain/policy.override.yaml` as local runtime state. They should stay out of Git by default while the durable shared layer lives in markdown and docs.
 
+## Optional Modules
+
+The production binary contains the official Planning module, disabled by
+default:
+
+```bash
+brain modules list --project .
+brain modules show --project . official.planning
+```
+
+Module administration:
+
+```bash
+brain modules show --project . <id>
+brain modules grant --project . <id> <permission>...
+brain modules revoke --project . <id> <permission>...
+brain modules enable --project . <id>
+brain modules disable --project . <id>
+brain modules health --project . [id]
+```
+
+Tracked desired enablement and non-secret configuration live in
+`.brain/modules.yaml`. Local permission approvals live in the ignored
+`.brain/state/module-grants.json`. Read-only commands create neither file.
+Disabling preserves configuration and grants. Add the root `--json` flag for
+machine-readable output.
+
+### Local Planning
+
+Brain Planning currently supports compatible local schema-v3 `.plan/`
+workspaces. Grant its exact permissions, then enable it:
+
+```bash
+brain modules grant --project . official.planning \
+  planning.read planning.brainstorm project.context.read
+brain modules enable --project . official.planning
+```
+
+Available Phase 3 commands:
+
+```bash
+brain plan status --project .
+brain plan brainstorm list --project .
+brain plan brainstorm show --project . <slug>
+brain plan brainstorm start --project . "Topic"
+brain plan brainstorm start --project . "Topic" --confirm
+brain plan spec list --project .
+brain plan spec show --project . <slug>
+```
+
+`brainstorm start` previews by default. `--confirm` performs the atomic write;
+repeating the same title returns `unchanged` without another write or event.
+Planning never initializes or converts `.plan/` in this phase. Unsupported
+workspaces stay read-only and receive standalone Plan migration guidance.
+
 `brain init` is the clean bootstrap path.  
 `brain adopt` is the existing-repo path: it creates the local Brain workspace, adopts Brain-owned docs into the managed-block model, and preserves previous content under `Local Notes`.
 

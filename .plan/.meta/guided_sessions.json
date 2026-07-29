@@ -1,0 +1,49 @@
+{
+  "schema_version": 3,
+  "last_active_chain": "brainstorm/local-planning-module",
+  "last_updated_at": "2026-07-29T06:18:10Z",
+  "sessions": {
+    "brainstorm/integrate-planning-as-an-official-brain-module": {
+      "chain_id": "brainstorm/integrate-planning-as-an-official-brain-module",
+      "brainstorm": "integrate-planning-as-an-official-brain-module",
+      "current_stage": "brainstorm",
+      "current_cluster": 5,
+      "current_cluster_label": "handoff-epic",
+      "stage_statuses": {
+        "brainstorm": "in_progress"
+      },
+      "summary": "Recap:\nCurrent understanding: Brain and Plan have complementary foundations but separate product identities, storage, CLI, cloud direction, and extension assumptions. A direct merge would duplicate platform systems or force Planning on every Brain user. / Brain users can opt into native planning; current Plan users retain artifacts and scripts during migration; teams and community authors gain stable module contracts without adopting one mandated workflow.\nKey decisions: appetite captured.\nUnresolved risks or questions: there are still open questions to review.\nParked items: none.\nRecommended next stage: Review recap and continue into the epic stage when ready.",
+      "next_action": "Review recap and continue into the epic stage when ready.",
+      "created_at": "2026-07-27T21:38:28Z",
+      "updated_at": "2026-07-27T21:39:42Z"
+    },
+    "brainstorm/local-planning-module": {
+      "chain_id": "brainstorm/local-planning-module",
+      "brainstorm": "local-planning-module",
+      "current_stage": "brainstorm",
+      "current_cluster": 5,
+      "current_cluster_label": "handoff-epic",
+      "stage_statuses": {
+        "brainstorm": "in_progress"
+      },
+      "summary": "Recap:\nCurrent understanding: Brain has approved Planning domain contracts and module infrastructure, but no optional module connects them to real local .plan/ workspaces. Users must still leave Brain and use standalone Plan; Brain cannot yet prove local compatibility, disabled-state isolation, or permissioned Planning mutations. / AI agents and developers using Brain can enable Planning per project, open existing local .plan/ workspaces without conversion, and run a coherent native workflow. They gain one project context surface while preserving offline use, predictable files, and standalone Plan overlap during migration.\nKey decisions: appetite captured.\nUnresolved risks or questions: there are still open questions to review.\nParked items: none.\nRecommended next stage: Review recap and continue into the epic stage when ready.",
+      "next_action": "Review recap and continue into the epic stage when ready.",
+      "created_at": "2026-07-29T05:01:45Z",
+      "updated_at": "2026-07-29T06:18:10Z"
+    },
+    "brainstorm/planning-domain-extraction": {
+      "chain_id": "brainstorm/planning-domain-extraction",
+      "brainstorm": "planning-domain-extraction",
+      "current_stage": "brainstorm",
+      "current_cluster": 5,
+      "current_cluster_label": "handoff-epic",
+      "stage_statuses": {
+        "brainstorm": "in_progress"
+      },
+      "summary": "Recap:\nCurrent understanding: Planning behavior in standalone Plan is coupled to CLI, workspace files, and integration-specific types, so moving it directly into Brain would reproduce those dependencies and make later local, GitHub, and hybrid adapters hard to share or test. / Brain users gain an optional native Planning capability that stays local-first and integration-agnostic; standalone Plan can later share the same behavior through compatibility wrappers; maintainers get deterministic domain tests and clear adapter boundaries.\nKey decisions: appetite captured.\nUnresolved risks or questions: there are still open questions to review.\nParked items: none.\nRecommended next stage: Review recap and continue into the epic stage when ready.",
+      "next_action": "Review recap and continue into the epic stage when ready.",
+      "created_at": "2026-07-28T21:14:44Z",
+      "updated_at": "2026-07-28T21:16:20Z"
+    }
+  }
+}

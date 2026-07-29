@@ -15,6 +15,7 @@ import (
 	"brain/internal/history"
 	"brain/internal/index"
 	"brain/internal/livecontext"
+	"brain/internal/modules"
 	"brain/internal/notes"
 	"brain/internal/output"
 	"brain/internal/projectcontext"
@@ -45,12 +46,14 @@ type App struct {
 	Structure *structure.Manager
 	Live      *livecontext.Manager
 	Session   *session.Manager
+	Modules   *modules.Runtime
 	Output    *output.Printer
 }
 
 type Options struct {
-	Stdout io.Writer
-	Stderr io.Writer
+	Stdout              io.Writer
+	Stderr              io.Writer
+	ModuleRegistrations []modules.Registration
 }
 
 func New(configPath, projectPath string, jsonOutput bool, opts Options) (*App, error) {
@@ -74,6 +77,10 @@ func New(configPath, projectPath string, jsonOutput bool, opts Options) (*App, e
 	}
 	paths := config.ProjectPaths(globalPaths, projectDir)
 	if err := config.EnsureProjectPaths(paths); err != nil {
+		return nil, err
+	}
+	moduleRegistry, err := modules.NewRegistry(opts.ModuleRegistrations)
+	if err != nil {
 		return nil, err
 	}
 
@@ -100,6 +107,12 @@ func New(configPath, projectPath string, jsonOutput bool, opts Options) (*App, e
 	}
 	liveContextManager := livecontext.New(historyLog)
 	auditManager := contextaudit.New(structureManager, notesManager, sessionManager)
+	moduleRuntime := modules.NewRuntime(
+		modules.ProjectRef{Root: projectDir},
+		moduleRegistry,
+		modules.NewFileConfigStore(projectDir),
+		modules.NewFileGrantStore(projectDir),
+	)
 
 	return &App{
 		Config:    cfg,
@@ -120,6 +133,7 @@ func New(configPath, projectPath string, jsonOutput bool, opts Options) (*App, e
 		Structure: structureManager,
 		Live:      liveContextManager,
 		Session:   sessionManager,
+		Modules:   moduleRuntime,
 		Output:    output.New(cfg.OutputMode, opts.Stdout),
 	}, nil
 }
