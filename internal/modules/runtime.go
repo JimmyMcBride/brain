@@ -65,6 +65,7 @@ const (
 	FailureConfigInvalid     FailureCode = "config_invalid"
 	FailurePermissionMissing FailureCode = "permission_missing"
 	FailureInitializeFailed  FailureCode = "initialize_failed"
+	FailureModuleDisabled    FailureCode = "module_disabled"
 )
 
 type Failure struct {
@@ -91,11 +92,59 @@ type Report struct {
 	ConfigVersion  int      `json:"config_version,omitempty"`
 	Capabilities   []string `json:"capabilities"`
 	Permissions    []string `json:"permissions"`
+	Commands       []string `json:"commands"`
+	Events         []string `json:"events"`
 	Grants         []string `json:"grants"`
 	DesiredEnabled bool     `json:"desired_enabled"`
 	State          State    `json:"state"`
 	Health         *Health  `json:"health,omitempty"`
 	Failure        *Failure `json:"failure,omitempty"`
+}
+
+type CommandResolution struct {
+	ModuleID string
+	Module   Module
+}
+
+func (r *Runtime) ResolveCommand(ctx context.Context, name, permission string) (CommandResolution, error) {
+	registration, exists := r.registry.LookupCommand(name)
+	if !exists {
+		return CommandResolution{}, &Failure{
+			Code:    FailureModuleUnavailable,
+			Message: fmt.Sprintf("command group %s is not compiled into this binary", name),
+		}
+	}
+	module, err := r.resolveEnabled(ctx, registration.Descriptor.ID)
+	if err != nil {
+		return CommandResolution{}, err
+	}
+	if strings.TrimSpace(permission) != "" {
+		if err := r.RequirePermission(ctx, registration.Descriptor.ID, permission); err != nil {
+			return CommandResolution{}, err
+		}
+	}
+	return CommandResolution{ModuleID: registration.Descriptor.ID, Module: module}, nil
+}
+
+func (r *Runtime) RequirePermission(ctx context.Context, id, permission string) error {
+	if _, err := r.resolveEnabled(ctx, id); err != nil {
+		return err
+	}
+	registration, exists := r.registry.Lookup(id)
+	if !exists {
+		return unavailableFailure(id)
+	}
+	if _, declared := stringSet(registration.Descriptor.Permissions)[permission]; !declared {
+		return fmt.Errorf("module %s does not declare permission %q", id, permission)
+	}
+	_, grants, err := r.load()
+	if err != nil {
+		return err
+	}
+	if _, granted := stringSet(grants[id])[permission]; !granted {
+		return permissionFailure(registration.Descriptor, grants[id])
+	}
+	return nil
 }
 
 type Runtime struct {
@@ -341,6 +390,8 @@ func (r *Runtime) evaluate(ctx context.Context, id string, config ProjectConfig,
 			State:          StateUnavailable,
 			Capabilities:   []string{},
 			Permissions:    []string{},
+			Commands:       []string{},
+			Events:         []string{},
 			Grants:         normalizedStrings(grants[id]),
 			Failure:        unavailableFailure(id),
 		}, nil
@@ -354,6 +405,8 @@ func (r *Runtime) evaluate(ctx context.Context, id string, config ProjectConfig,
 		ConfigVersion:  descriptor.ConfigVersion,
 		Capabilities:   append([]string(nil), descriptor.Capabilities...),
 		Permissions:    append([]string(nil), descriptor.Permissions...),
+		Commands:       append([]string(nil), descriptor.Commands...),
+		Events:         append([]string(nil), descriptor.Events...),
 		Grants:         normalizedStrings(grants[id]),
 		DesiredEnabled: configured && entry.Enabled,
 		State:          StateAvailable,
@@ -394,6 +447,36 @@ func (r *Runtime) evaluate(ctx context.Context, id string, config ProjectConfig,
 		report.Health = &health
 	}
 	return report, nil
+}
+
+func (r *Runtime) resolveEnabled(ctx context.Context, id string) (Module, error) {
+	config, grants, err := r.load()
+	if err != nil {
+		return nil, err
+	}
+	report, err := r.evaluate(ctx, id, config, grants, false)
+	if err != nil {
+		return nil, err
+	}
+	if report.State != StateEnabled {
+		if report.Failure != nil {
+			return nil, report.Failure
+		}
+		return nil, &Failure{
+			Code:    FailureModuleDisabled,
+			Message: fmt.Sprintf("module %s is not enabled for this project", id),
+			Command: "brain modules enable " + id,
+		}
+	}
+	registration, exists := r.registry.Lookup(id)
+	if !exists {
+		return nil, unavailableFailure(id)
+	}
+	module, failure := r.initialize(ctx, registration, config.Modules[id].Config)
+	if failure != nil {
+		return nil, failure
+	}
+	return module, nil
 }
 
 func (r *Runtime) initialize(ctx context.Context, registration Registration, config Config) (Module, *Failure) {

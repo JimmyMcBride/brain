@@ -26,6 +26,8 @@ func TestDescriptorAndRegistryValidation(t *testing.T) {
 		{name: "invalid config version", registrations: []modules.Registration{withDescriptor(valid, func(d *modules.Descriptor) { d.ConfigVersion = 0 })}, want: "config version"},
 		{name: "duplicate permission", registrations: []modules.Registration{withDescriptor(valid, func(d *modules.Descriptor) { d.Permissions = []string{"test.read", "test.read"} })}, want: "duplicate permission"},
 		{name: "permission whitespace", registrations: []modules.Registration{withDescriptor(valid, func(d *modules.Descriptor) { d.Permissions = []string{" test.read"} })}, want: "surrounding whitespace"},
+		{name: "invalid command", registrations: []modules.Registration{withDescriptor(valid, func(d *modules.Descriptor) { d.Commands = []string{"Plan"} })}, want: "invalid command"},
+		{name: "invalid event", registrations: []modules.Registration{withDescriptor(valid, func(d *modules.Descriptor) { d.Events = []string{"created"} })}, want: "invalid event"},
 		{name: "missing factory", registrations: []modules.Registration{{Descriptor: valid.Descriptor}}, want: "no factory"},
 	}
 	for _, tt := range tests {
@@ -35,6 +37,67 @@ func TestDescriptorAndRegistryValidation(t *testing.T) {
 				t.Fatalf("expected error containing %q, got %v", tt.want, err)
 			}
 		})
+	}
+}
+
+func TestRegistryRejectsCommandAndEventCollisions(t *testing.T) {
+	first := withDescriptor(testmodule.Registration(nil, testmodule.Options{}), func(d *modules.Descriptor) {
+		d.Commands = []string{"plan"}
+		d.Events = []string{"planning.brainstorm.created"}
+	})
+	second := withDescriptor(first, func(d *modules.Descriptor) {
+		d.ID = "dev.brain.other"
+	})
+	if _, err := modules.NewRegistry([]modules.Registration{first, second}); err == nil || !strings.Contains(err.Error(), "command") {
+		t.Fatalf("expected command collision, got %v", err)
+	}
+	second = withDescriptor(second, func(d *modules.Descriptor) {
+		d.Commands = []string{"other"}
+	})
+	if _, err := modules.NewRegistry([]modules.Registration{first, second}); err == nil || !strings.Contains(err.Error(), "event") {
+		t.Fatalf("expected event collision, got %v", err)
+	}
+}
+
+func TestRuntimeResolvesDeclaredCommandsOnlyWhenEnabledAndAuthorized(t *testing.T) {
+	ctx := context.Background()
+	registration := withDescriptor(testmodule.Registration(nil, testmodule.Options{}), func(d *modules.Descriptor) {
+		d.Commands = []string{"plan"}
+		d.Events = []string{"planning.brainstorm.created"}
+	})
+	runtime := modules.NewRuntime(
+		modules.ProjectRef{Root: t.TempDir()},
+		mustRegistry(t, registration),
+		modules.NewMemoryConfigStore(),
+		modules.NewMemoryGrantStore(),
+	)
+
+	if _, err := runtime.ResolveCommand(ctx, "missing", "test.read"); err == nil || !strings.Contains(err.Error(), "not compiled") {
+		t.Fatalf("expected unavailable command, got %v", err)
+	}
+	if _, err := runtime.ResolveCommand(ctx, "plan", "test.read"); err == nil {
+		t.Fatal("expected disabled command failure")
+	} else {
+		var failure *modules.Failure
+		if !errors.As(err, &failure) || failure.Code != modules.FailureModuleDisabled {
+			t.Fatalf("expected module_disabled, got %v", err)
+		}
+	}
+	if _, err := runtime.Grant(ctx, testmodule.ID, "test.read"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runtime.Enable(ctx, testmodule.ID); err != nil {
+		t.Fatal(err)
+	}
+	resolution, err := runtime.ResolveCommand(ctx, "plan", "test.read")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolution.ModuleID != testmodule.ID || resolution.Module == nil {
+		t.Fatalf("unexpected resolution: %#v", resolution)
+	}
+	if _, err := runtime.ResolveCommand(ctx, "plan", "test.write"); err == nil || !strings.Contains(err.Error(), "does not declare") {
+		t.Fatalf("expected undeclared permission failure, got %v", err)
 	}
 }
 

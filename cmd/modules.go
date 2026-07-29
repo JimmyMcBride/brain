@@ -184,6 +184,8 @@ func printModuleDetails(w io.Writer, report modules.Report) error {
 		{"config version", fmt.Sprintf("%d", report.ConfigVersion)},
 		{"capabilities", strings.Join(report.Capabilities, ", ")},
 		{"permissions", strings.Join(report.Permissions, ", ")},
+		{"commands", strings.Join(report.Commands, ", ")},
+		{"events", strings.Join(report.Events, ", ")},
 		{"grants", strings.Join(report.Grants, ", ")},
 	}
 	if report.Health != nil {
