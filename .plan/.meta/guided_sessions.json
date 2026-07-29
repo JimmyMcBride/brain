@@ -1,7 +1,7 @@
 {
   "schema_version": 3,
-  "last_active_chain": "brainstorm/local-planning-module",
-  "last_updated_at": "2026-07-29T06:18:10Z",
+  "last_active_chain": "brainstorm/plan-cli-compatibility",
+  "last_updated_at": "2026-07-29T08:38:46Z",
   "sessions": {
     "brainstorm/integrate-planning-as-an-official-brain-module": {
       "chain_id": "brainstorm/integrate-planning-as-an-official-brain-module",
@@ -30,6 +30,20 @@
       "next_action": "Review recap and continue into the epic stage when ready.",
       "created_at": "2026-07-29T05:01:45Z",
       "updated_at": "2026-07-29T06:18:10Z"
+    },
+    "brainstorm/plan-cli-compatibility": {
+      "chain_id": "brainstorm/plan-cli-compatibility",
+      "brainstorm": "plan-cli-compatibility",
+      "current_stage": "brainstorm",
+      "current_cluster": 5,
+      "current_cluster_label": "handoff-epic",
+      "stage_statuses": {
+        "brainstorm": "in_progress"
+      },
+      "summary": "Recap:\nCurrent understanding: Standalone Plan remains the compatibility source while Brain now owns the first native local Planning workflow. Without an explicit compatibility contract and shared implementation boundary, the two CLIs will drift, scripts may break, and Phase 4 could accidentally absorb later GitHub, Linear-cleanup, cloud, or legacy-creation work. / Existing Plan users and automation keep working during migration, while Brain users gain one coherent local spec-first workflow under brain plan. Maintainers get one behavior contract, measurable compatibility, and a safe path to make Brain Planning primary without forcing an immediate standalone Plan retirement.\nKey decisions: appetite captured.\nUnresolved risks or questions: there are still open questions to review.\nParked items: none.\nRecommended next stage: Review recap and continue into the epic stage when ready.",
+      "next_action": "Review recap and continue into the epic stage when ready.",
+      "created_at": "2026-07-29T08:36:48Z",
+      "updated_at": "2026-07-29T08:38:46Z"
     },
     "brainstorm/planning-domain-extraction": {
       "chain_id": "brainstorm/planning-domain-extraction",
