@@ -42,7 +42,10 @@ and local tests.
 
 ## Phase 4 — Plan CLI Compatibility
 
-Status: Approved in `.plan/specs/plan-cli-compatibility.md`; ready for execution.
+Status: In progress from `.plan/specs/plan-cli-compatibility.md`. The first
+execution slice pins standalone Plan revision `53ebd96`, records the complete
+command disposition, and captures initial black-box `status` cases in
+`internal/planning/conformance`. Brain's module path has not changed.
 
 Deliver wrapper/shared implementation, command mapping, warning policy, docs, and
 script/exit/JSON compatibility tests.
@@ -98,6 +101,6 @@ lifecycle, diagnostics, and distribution direction.
 
 ## Exact Next Slice
 
-> Start the approved Phase 4 Plan CLI Compatibility workflow. Derive runtime
-> slices from the canonical spec, document each slice through its implementation
-> commit, and persist no standalone slice files.
+> Review and merge the Phase 4 conformance manifest, then normalize Brain's Go
+> module path in an isolated behavior-preserving slice before exposing any
+> public Planning package.

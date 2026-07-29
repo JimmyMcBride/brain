@@ -1,0 +1,11 @@
+Error: validate workspace metadata: schema_version 4 is newer than supported 3
+Usage:
+  plan status [flags]
+
+Flags:
+  -h, --help   help for status
+
+Global Flags:
+      --project string   project root (default ".")
+
+validate workspace metadata: schema_version 4 is newer than supported 3

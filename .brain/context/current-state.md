@@ -1,5 +1,5 @@
 ---
-updated: "2026-07-29T08:49:40Z"
+updated: "2026-07-29T17:41:52Z"
 ---
 <!-- brain:begin context-current-state -->
 This file is a deterministic snapshot of the repository state at the last refresh.
@@ -10,10 +10,10 @@ This file is a deterministic snapshot of the repository state at the last refres
 - Root: `.`
 - Runtime: `go`
 - Go module: `brain`
-- Current branch: `codex/plan-cli-compatibility-spec`
+- Current branch: `codex/plan-cli-conformance-manifest`
 - Default branch: `develop`
 - Remote: `https://github.com/JimmyMcBride/brain.git`
-- Go test files: `37`
+- Go test files: `38`
 
 ## Docs
 

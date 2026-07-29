@@ -1,0 +1,11 @@
+Error: plan workspace not initialized at <PROJECT> (run `plan init --project .`)
+Usage:
+  plan status [flags]
+
+Flags:
+  -h, --help   help for status
+
+Global Flags:
+      --project string   project root (default ".")
+
+plan workspace not initialized at <PROJECT> (run `plan init --project .`)
