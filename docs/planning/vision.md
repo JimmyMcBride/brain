@@ -39,7 +39,8 @@ brain plan status --project .
 ```
 
 The current native surface is status, brainstorm list/show/start, and spec
-list/show. Full standalone command mapping remains Phase 4.
+list/show. The approved Phase 4 Plan CLI Compatibility spec defines the broader
+local mapping and standalone overlap; implementation remains pending.
 
 When disabled, Planning creates no storage or configuration, injects no context,
 grants no permissions, and direct Planning commands explain how to enable it.

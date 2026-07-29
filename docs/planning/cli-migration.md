@@ -3,8 +3,10 @@
 ## Status
 
 Approved staged compatibility direction. Phase 3's bounded local native surface
-is implemented; full command mapping and warning schedule remain Phase 4
-decisions.
+is merged. Phase 4's approved
+`.plan/specs/plan-cli-compatibility.md` defines the shared-package boundary,
+mapped local workflow, full command disposition, compatibility contract, and
+warning policy; implementation remains pending.
 
 ## Command Families
 
