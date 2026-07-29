@@ -65,7 +65,7 @@ func TestCreateBrainstormEmitsOnceAndRerunIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestServiceRefusesNonWritableWorkspace(t *testing.T) {
+func TestServiceRefusesIncompatibleWorkspace(t *testing.T) {
 	repository := newFakeRepository()
 	repository.status = WorkspaceStatus{
 		State:    WorkspaceFutureSchema,
@@ -73,11 +73,11 @@ func TestServiceRefusesNonWritableWorkspace(t *testing.T) {
 		Message:  "future schema",
 	}
 	service := New(repository, Options{})
-	if _, err := service.ListSpecs(context.Background()); !errors.Is(err, ErrWorkspaceNotWritable) {
-		t.Fatalf("expected workspace error, got %v", err)
+	if _, err := service.ListSpecs(context.Background()); !errors.Is(err, ErrWorkspaceNotReadable) {
+		t.Fatalf("expected readable workspace error, got %v", err)
 	}
 	if _, err := service.PreviewBrainstorm(context.Background(), "No Write"); !errors.Is(err, ErrWorkspaceNotWritable) {
-		t.Fatalf("expected workspace error, got %v", err)
+		t.Fatalf("expected writable workspace error, got %v", err)
 	}
 }
 

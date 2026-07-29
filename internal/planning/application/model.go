@@ -105,6 +105,7 @@ type ServiceProvider interface {
 
 var (
 	ErrConfirmationRequired = errors.New("planning mutation requires explicit confirmation")
+	ErrWorkspaceNotReadable = errors.New("planning workspace is not readable")
 	ErrWorkspaceNotWritable = errors.New("planning workspace is not writable")
 	ErrArtifactConflict     = errors.New("planning artifact conflicts with existing content")
 	ErrEventSinkRequired    = errors.New("planning mutation requires an event sink")

@@ -155,7 +155,7 @@ func (s *Service) requireReadable(ctx context.Context) error {
 		return err
 	}
 	if status.State != WorkspaceCompatible {
-		return fmt.Errorf("%w: %s", ErrWorkspaceNotWritable, status.Message)
+		return fmt.Errorf("%w: %s", ErrWorkspaceNotReadable, status.Message)
 	}
 	return nil
 }

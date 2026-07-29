@@ -204,6 +204,18 @@ func TestAdapterConcurrentRerunsCreateOnce(t *testing.T) {
 	assertNoTemporaryFiles(t, filepath.Join(root, ".plan", "brainstorms"))
 }
 
+func TestCreationLockTimeoutIdentifiesLockPath(t *testing.T) {
+	lockPath := filepath.Join(t.TempDir(), "brainstorm.lock")
+	if err := os.WriteFile(lockPath, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := acquireCreationLock(context.Background(), lockPath)
+	if err == nil || !strings.Contains(err.Error(), lockPath) {
+		t.Fatalf("expected timeout to identify lock path %q, got %v", lockPath, err)
+	}
+}
+
 func TestAdapterRejectsWritesForUnsupportedWorkspace(t *testing.T) {
 	root := t.TempDir()
 	copyFixture(t, "future", root)

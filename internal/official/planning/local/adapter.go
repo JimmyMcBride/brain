@@ -630,7 +630,7 @@ func acquireCreationLock(ctx context.Context, path string) (func(), error) {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-timer.C:
-			return nil, fmt.Errorf("timed out waiting for brainstorm creation lock")
+			return nil, fmt.Errorf("timed out waiting for brainstorm creation lock %q", path)
 		case <-ticker.C:
 		}
 	}
