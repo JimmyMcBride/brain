@@ -180,7 +180,10 @@ func (a *Adapter) CreateBrainstorm(
 		return application.BrainstormDocument{}, "", err
 	}
 	if findings := planning.ValidateBrainstorm(artifact); hasErrorFindings(findings) {
-		return application.BrainstormDocument{}, "", fmt.Errorf("invalid brainstorm artifact")
+		return application.BrainstormDocument{}, "", fmt.Errorf(
+			"invalid brainstorm artifact: %s",
+			joinErrorFindingMessages(findings),
+		)
 	}
 	release, err := acquireCreationLock(ctx, filepath.Join(a.projectRoot, ".plan", "brainstorms", "."+string(artifact.ID)+".lock"))
 	if err != nil {
@@ -283,7 +286,11 @@ func (a *Adapter) readBrainstorm(path string) (application.BrainstormDocument, e
 		Summary: firstParagraph(extractSection(body, "Desired Outcome"), extractSection(body, "Focus Question")),
 	}
 	if findings := planning.ValidateBrainstorm(artifact); hasErrorFindings(findings) {
-		return application.BrainstormDocument{}, fmt.Errorf("invalid brainstorm %s", relativePlanningPath(a.projectRoot, path))
+		return application.BrainstormDocument{}, fmt.Errorf(
+			"invalid brainstorm %s: %s",
+			relativePlanningPath(a.projectRoot, path),
+			joinErrorFindingMessages(findings),
+		)
 	}
 	return application.BrainstormDocument{
 		Artifact: artifact,
@@ -325,7 +332,11 @@ func (a *Adapter) readSpec(path string) (application.SpecDocument, error) {
 		ExecutionID:  executionID,
 	}
 	if findings := planning.ValidateSpec(artifact); hasErrorFindings(findings) {
-		return application.SpecDocument{}, fmt.Errorf("invalid spec %s", relativePlanningPath(a.projectRoot, path))
+		return application.SpecDocument{}, fmt.Errorf(
+			"invalid spec %s: %s",
+			relativePlanningPath(a.projectRoot, path),
+			joinErrorFindingMessages(findings),
+		)
 	}
 	return application.SpecDocument{
 		Artifact: artifact,
@@ -568,6 +579,16 @@ func hasErrorFindings(findings []planning.Finding) bool {
 		}
 	}
 	return false
+}
+
+func joinErrorFindingMessages(findings []planning.Finding) string {
+	messages := make([]string, 0, len(findings))
+	for _, finding := range findings {
+		if finding.Severity == planning.SeverityError {
+			messages = append(messages, finding.Message)
+		}
+	}
+	return strings.Join(messages, "; ")
 }
 
 func atomicWriteFile(path string, data []byte, mode os.FileMode) (err error) {
