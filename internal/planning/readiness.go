@@ -53,13 +53,13 @@ func EvaluateReadiness(spec Spec, findings []Finding, blockers []ArtifactID) Rea
 		return Readiness{State: ReadinessNeedsRefinement, Reasons: uniqueStrings(refinementReasons)}
 	}
 
+	if spec.Approval.State != ApprovalApproved || (spec.Status != SpecApproved && spec.Status != SpecImplementing) {
+		return Readiness{State: ReadinessNeedsRefinement, Reasons: []string{"spec is not approved for execution"}}
+	}
 	questions := trimmedStrings(spec.UnresolvedQuestions)
 	if len(questions) > 0 {
 		slices.Sort(questions)
-		return Readiness{State: ReadinessClarifying, Reasons: questions}
-	}
-	if spec.Approval.State != ApprovalApproved || (spec.Status != SpecApproved && spec.Status != SpecImplementing) {
-		return Readiness{State: ReadinessNeedsRefinement, Reasons: []string{"spec is not approved for execution"}}
+		return Readiness{State: ReadinessClarifying, Reasons: uniqueStrings(questions)}
 	}
 	return Readiness{State: ReadinessReady}
 }

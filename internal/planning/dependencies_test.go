@@ -81,6 +81,7 @@ func TestEvaluateReadinessPrecedence(t *testing.T) {
 		{name: "blocked before refinement", spec: testSpec("spec", SpecApproved), findings: []Finding{errorFinding}, blockers: []ArtifactID{"other"}, want: ReadinessBlocked},
 		{name: "dependency finding blocks", spec: testSpec("spec", SpecApproved), findings: []Finding{dependencyFinding}, want: ReadinessBlocked},
 		{name: "error needs refinement", spec: testSpec("spec", SpecApproved), findings: []Finding{errorFinding}, want: ReadinessNeedsRefinement},
+		{name: "approval before question", spec: withQuestions(testSpec("spec", SpecDraft), "Which adapter?"), want: ReadinessNeedsRefinement},
 		{name: "question clarifies", spec: withQuestions(testSpec("spec", SpecApproved), "Which adapter?"), want: ReadinessClarifying},
 		{name: "approved is ready", spec: testSpec("spec", SpecApproved), want: ReadinessReady},
 		{name: "draft needs refinement", spec: testSpec("spec", SpecDraft), want: ReadinessNeedsRefinement},
@@ -93,6 +94,20 @@ func TestEvaluateReadinessPrecedence(t *testing.T) {
 				t.Fatalf("EvaluateReadiness() = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestEvaluateReadinessDeduplicatesQuestions(t *testing.T) {
+	t.Parallel()
+
+	readiness := EvaluateReadiness(
+		withQuestions(testSpec("spec", SpecApproved), "Beta?", "Alpha?", "Beta?", " "),
+		nil,
+		nil,
+	)
+	want := Readiness{State: ReadinessClarifying, Reasons: []string{"Alpha?", "Beta?"}}
+	if !reflect.DeepEqual(readiness, want) {
+		t.Fatalf("EvaluateReadiness() = %#v, want %#v", readiness, want)
 	}
 }
 
@@ -136,6 +151,29 @@ func TestBuildQueueRejectsMultipleCurrentSpecs(t *testing.T) {
 	}, nil)
 	if ErrorCodeOf(err) != ErrInvalidExecution {
 		t.Fatalf("expected invalid execution, got %v", err)
+	}
+}
+
+func TestBuildQueueSortsCurrentBlockers(t *testing.T) {
+	t.Parallel()
+
+	build := func(dependencies []ArtifactID) error {
+		current := testSpec("current", SpecImplementing, dependencies...)
+		_, err := BuildQueue([]Spec{
+			current,
+			testSpec("alpha", SpecApproved),
+			testSpec("beta", SpecApproved),
+		}, nil)
+		return err
+	}
+
+	first := build([]ArtifactID{"beta", "alpha", "beta"})
+	second := build([]ArtifactID{"alpha", "beta"})
+	if ErrorCodeOf(first) != ErrInvalidExecution || ErrorCodeOf(second) != ErrInvalidExecution {
+		t.Fatalf("expected invalid execution errors, got %v and %v", first, second)
+	}
+	if first.Error() != second.Error() {
+		t.Fatalf("blocker errors differ:\n%s\n%s", first, second)
 	}
 }
 

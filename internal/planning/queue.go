@@ -71,6 +71,7 @@ func BuildQueue(specs []Spec, current *ArtifactID) (Queue, error) {
 				blockers = append(blockers, dependency)
 			}
 		}
+		blockers = uniqueSortedIDs(blockers)
 
 		if id == currentID && len(blockers) > 0 {
 			return Queue{}, domainError(ErrInvalidExecution, []ArtifactID{id}, fmt.Sprintf("current spec is blocked by %v", blockers))
