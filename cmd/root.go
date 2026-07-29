@@ -8,15 +8,17 @@ import (
 	"strings"
 
 	"brain/internal/app"
+	"brain/internal/modules"
 
 	"github.com/spf13/cobra"
 )
 
 type rootOptions struct {
-	in      io.Reader
-	out     io.Writer
-	errOut  io.Writer
-	appLoad func(configPath, projectPath string, jsonOutput bool, out io.Writer, errOut io.Writer) (*app.App, error)
+	in                  io.Reader
+	out                 io.Writer
+	errOut              io.Writer
+	appLoad             func(configPath, projectPath string, jsonOutput bool, out io.Writer, errOut io.Writer) (*app.App, error)
+	moduleRegistrations []modules.Registration
 }
 
 type rootFlagsState struct {
@@ -29,8 +31,11 @@ type appLoader func(projectPath ...string) (*app.App, error)
 
 var rootCmd = newRootCommand(rootOptions{})
 
-func Execute() error {
-	return rootCmd.Execute()
+func Execute(registrations ...modules.Registration) error {
+	if len(registrations) == 0 {
+		return rootCmd.Execute()
+	}
+	return newRootCommand(rootOptions{moduleRegistrations: registrations}).Execute()
 }
 
 func newRootCommand(opts rootOptions) *cobra.Command {
@@ -46,8 +51,9 @@ func newRootCommand(opts rootOptions) *cobra.Command {
 	if opts.appLoad == nil {
 		opts.appLoad = func(configPath, projectPath string, jsonOutput bool, out io.Writer, errOut io.Writer) (*app.App, error) {
 			return app.New(configPath, projectPath, jsonOutput, app.Options{
-				Stdout: out,
-				Stderr: errOut,
+				Stdout:              out,
+				Stderr:              errOut,
+				ModuleRegistrations: append([]modules.Registration(nil), opts.moduleRegistrations...),
 			})
 		}
 	}
@@ -118,6 +124,7 @@ func addCommands(root *cobra.Command, flags *rootFlagsState, loadApp appLoader) 
 	addSessionCommand(root, flags, loadApp)
 	addSkillsCommand(root, flags, loadApp)
 	addModulesCommand(root, flags, loadApp)
+	addPlanningCommand(root, flags, loadApp)
 }
 
 func parseMeta(entries []string) (map[string]any, error) {

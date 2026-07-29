@@ -2,7 +2,8 @@
 
 ## Status
 
-Approved direction; not implemented.
+Approved direction. Storage-neutral domain and bounded local module vertical
+slice implemented; broader workflow compatibility and adapters remain phased.
 
 Brain Planning is an official optional Brain module. It turns rough work into
 reviewed, executable planning artifacts while consuming Brain's context, memory,
@@ -30,13 +31,15 @@ It cannot require GitHub, Linear, Jira, Brain Cloud, or another external service
 Conceptual experience:
 
 ```text
-brain modules enable planning --project .
+brain modules grant official.planning planning.read planning.brainstorm project.context.read --project .
+brain modules enable official.planning --project .
 brain plan brainstorm start --project . "Authentication overhaul"
 brain plan spec show --project . authentication-overhaul
 brain plan status --project .
 ```
 
-Exact syntax is deferred to Phase 1/3 CLI review.
+The current native surface is status, brainstorm list/show/start, and spec
+list/show. Full standalone command mapping remains Phase 4.
 
 When disabled, Planning creates no storage or configuration, injects no context,
 grants no permissions, and direct Planning commands explain how to enable it.

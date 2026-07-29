@@ -186,6 +186,12 @@ func printModuleDetails(w io.Writer, report modules.Report) error {
 		{"permissions", strings.Join(report.Permissions, ", ")},
 		{"grants", strings.Join(report.Grants, ", ")},
 	}
+	if len(report.Commands) > 0 {
+		lines = append(lines, [2]string{"commands", strings.Join(report.Commands, ", ")})
+	}
+	if len(report.Events) > 0 {
+		lines = append(lines, [2]string{"events", strings.Join(report.Events, ", ")})
+	}
 	if report.Health != nil {
 		lines = append(lines, [2]string{"health", string(report.Health.Status)})
 	}

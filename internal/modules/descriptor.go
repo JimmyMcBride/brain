@@ -10,8 +10,10 @@ import (
 const BrainAPIMajor = 1
 
 var (
-	moduleIDPattern = regexp.MustCompile(`^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$`)
-	semverPattern   = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$`)
+	moduleIDPattern    = regexp.MustCompile(`^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$`)
+	semverPattern      = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$`)
+	commandNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+	eventNamePattern   = regexp.MustCompile(`^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$`)
 )
 
 type Descriptor struct {
@@ -22,6 +24,8 @@ type Descriptor struct {
 	ConfigVersion int      `json:"config_version"`
 	Capabilities  []string `json:"capabilities,omitempty"`
 	Permissions   []string `json:"permissions,omitempty"`
+	Commands      []string `json:"commands,omitempty"`
+	Events        []string `json:"events,omitempty"`
 }
 
 func (d Descriptor) Validate() error {
@@ -46,7 +50,26 @@ func (d Descriptor) Validate() error {
 	if err := validateDeclarations(d.ID, "capability", d.Capabilities); err != nil {
 		return err
 	}
-	return validateDeclarations(d.ID, "permission", d.Permissions)
+	if err := validateDeclarations(d.ID, "permission", d.Permissions); err != nil {
+		return err
+	}
+	if err := validateDeclarations(d.ID, "command", d.Commands); err != nil {
+		return err
+	}
+	for _, command := range d.Commands {
+		if !commandNamePattern.MatchString(command) {
+			return fmt.Errorf("module %s declares invalid command %q", d.ID, command)
+		}
+	}
+	if err := validateDeclarations(d.ID, "event", d.Events); err != nil {
+		return err
+	}
+	for _, event := range d.Events {
+		if !eventNamePattern.MatchString(event) {
+			return fmt.Errorf("module %s declares invalid event %q", d.ID, event)
+		}
+	}
+	return nil
 }
 
 func validateDeclarations(moduleID, kind string, values []string) error {
