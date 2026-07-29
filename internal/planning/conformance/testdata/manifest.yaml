@@ -1,0 +1,479 @@
+schema_version: 1
+
+baseline:
+  repository: https://github.com/JimmyMcBride/plan
+  revision: 53ebd96bb954472d844651179bfe4e75baab96a0
+  command: plan
+  workspace_schema: 3
+
+normalization:
+  line_endings: lf
+  path_separator: /
+  project_root_token: "<PROJECT>"
+
+commands:
+  - id: init
+    standalone: [init]
+    disposition: transitional
+    target_phase: separate-lifecycle
+    behavior: workspace initialization
+    rationale: Workspace lifecycle migration requires separate approval.
+  - id: adopt
+    standalone: [adopt]
+    disposition: transitional
+    target_phase: separate-lifecycle
+    behavior: workspace adoption
+    rationale: Workspace lifecycle migration requires separate approval.
+  - id: update
+    standalone: [update]
+    disposition: transitional
+    target_phase: separate-lifecycle
+    behavior: workspace migration and update
+    rationale: Workspace lifecycle migration requires separate approval.
+  - id: help
+    standalone: [help]
+    disposition: transitional
+    target_phase: separate-lifecycle
+    behavior: standalone command navigation
+    rationale: Help remains host-owned and is not shared application behavior.
+  - id: completion
+    standalone: [completion]
+    disposition: transitional
+    target_phase: separate-lifecycle
+    behavior: standalone shell completion generation
+    rationale: Completion remains host-owned and is not shared application behavior.
+  - id: doctor
+    standalone: [doctor]
+    native: [plan, status]
+    disposition: shared
+    target_phase: phase-4
+    behavior: workspace diagnostics plus module health
+    rationale: Local workspace diagnostics belong to the shared Phase 4 workflow.
+  - id: status
+    standalone: [status]
+    native: [plan, status]
+    disposition: shared
+    target_phase: phase-4
+    behavior: aggregate local planning status
+    rationale: Status is the first read-only black-box compatibility baseline.
+  - id: check.project
+    standalone: [check, project]
+    native: [plan, check, project]
+    disposition: shared
+    target_phase: phase-4
+    behavior: local project readiness findings
+    rationale: Provider drift remains host-owned while local findings become shared.
+  - id: check.default
+    standalone: [check]
+    native: [plan, check]
+    disposition: shared
+    target_phase: phase-4
+    behavior: local project readiness findings
+    rationale: Bare check is the standalone default form of the project check.
+  - id: check.spec
+    standalone: [check, spec]
+    native: [plan, check, spec]
+    disposition: shared
+    target_phase: phase-4
+    behavior: local spec readiness findings
+    rationale: Spec readiness is part of the canonical local workflow.
+  - id: check.epic
+    standalone: [check, epic]
+    disposition: transitional
+    target_phase: phase-6
+    behavior: legacy epic findings
+    rationale: Epic compatibility remains standalone until legacy cleanup.
+  - id: check.story
+    standalone: [check, story]
+    disposition: transitional
+    target_phase: phase-6
+    behavior: legacy story findings
+    rationale: Story compatibility remains standalone until legacy cleanup.
+  - id: roadmap.show
+    standalone: [roadmap, show]
+    native: [plan, roadmap, show]
+    disposition: shared
+    target_phase: phase-4
+    behavior: read local roadmap Markdown
+    rationale: Roadmap reads are part of the local spec-first workflow.
+  - id: roadmap.edit
+    standalone: [roadmap, edit]
+    native: [plan, roadmap, edit]
+    disposition: shared
+    target_phase: phase-4
+    behavior: replace local roadmap Markdown through host editor policy
+    rationale: Roadmap edits can share artifact behavior while hosts retain editor policy.
+  - id: brainstorm.start
+    standalone: [brainstorm, start]
+    native: [plan, brainstorm, start]
+    disposition: shared
+    target_phase: phase-4
+    behavior: preview and create a local brainstorm
+    rationale: Brainstorm creation is part of the local discovery workflow.
+  - id: brainstorm.show
+    standalone: [brainstorm, show]
+    native: [plan, brainstorm, show]
+    disposition: shared
+    target_phase: phase-4
+    behavior: read a local brainstorm
+    rationale: Brainstorm reads are already supported by the native module.
+  - id: brainstorm.idea
+    standalone: [brainstorm, idea]
+    native: [plan, brainstorm, idea]
+    disposition: shared
+    target_phase: phase-4
+    behavior: add an idea to a local brainstorm
+    rationale: Idea capture belongs to local discovery.
+  - id: brainstorm.refine
+    standalone: [brainstorm, refine]
+    native: [plan, brainstorm, refine]
+    disposition: shared
+    target_phase: phase-4
+    behavior: refine local brainstorm content
+    rationale: Refinement belongs to local discovery.
+  - id: brainstorm.challenge
+    standalone: [brainstorm, challenge]
+    native: [plan, brainstorm, challenge]
+    disposition: shared
+    target_phase: phase-4
+    behavior: challenge local brainstorm content
+    rationale: Challenge review belongs to local discovery.
+  - id: brainstorm.resume
+    standalone: [brainstorm, resume]
+    native: [plan, brainstorm, resume]
+    disposition: shared
+    target_phase: phase-4
+    behavior: resume a guided local brainstorm session
+    rationale: Guided local sessions are mapped in Phase 4.
+  - id: brainstorm.sessions
+    standalone: [brainstorm, sessions]
+    native: [plan, brainstorm, sessions]
+    disposition: shared
+    target_phase: phase-4
+    behavior: list guided local brainstorm sessions
+    rationale: Guided local sessions are mapped in Phase 4.
+  - id: brainstorm.switch
+    standalone: [brainstorm, switch]
+    native: [plan, brainstorm, switch]
+    disposition: shared
+    target_phase: phase-4
+    behavior: switch the active guided local session
+    rationale: Guided local sessions are mapped in Phase 4.
+  - id: brainstorm.reopen
+    standalone: [brainstorm, reopen]
+    native: [plan, brainstorm, reopen]
+    disposition: shared
+    target_phase: phase-4
+    behavior: reopen a guided local stage
+    rationale: Guided local sessions are mapped in Phase 4.
+  - id: brainstorm.review
+    standalone: [brainstorm, review]
+    native: [plan, brainstorm, review]
+    disposition: shared
+    target_phase: phase-4
+    behavior: review guided local stages
+    rationale: Guided local sessions are mapped in Phase 4.
+  - id: brainstorm.park
+    standalone: [brainstorm, park]
+    native: [plan, brainstorm, park]
+    disposition: shared
+    target_phase: phase-4
+    behavior: park a local roadmap item
+    rationale: Guided local sessions are mapped in Phase 4.
+  - id: guide.current
+    standalone: [guide, current]
+    native: [plan, guide, current]
+    disposition: shared
+    target_phase: phase-4
+    behavior: render the current local guide packet
+    rationale: Versioned local guide packets are mapped in Phase 4.
+  - id: guide.show.local
+    standalone: [guide, show]
+    native: [plan, guide, show]
+    disposition: shared
+    target_phase: phase-4
+    behavior: render a local guide packet
+    rationale: Versioned local guide packets are mapped in Phase 4.
+  - id: guide.show.remote
+    standalone: [guide, show, --discussion]
+    disposition: deferred
+    target_phase: phase-5
+    behavior: render a GitHub-backed guide packet
+    rationale: Remote collaboration moves with the GitHub adapter.
+  - id: discuss.assess.local
+    standalone: [discuss, assess, --brainstorm]
+    native: [plan, brainstorm, assess]
+    disposition: shared
+    target_phase: phase-4
+    behavior: assess local brainstorm maturity
+    rationale: Local maturity assessment is required for direct spec promotion.
+  - id: discuss.promote.local
+    standalone: [discuss, promote, --brainstorm]
+    native: [plan, brainstorm, promote]
+    disposition: shared
+    target_phase: phase-4
+    behavior: preview and apply direct local spec promotion
+    rationale: Phase 4 intentionally removes the epic intermediate for local promotion.
+  - id: discuss.repair.local
+    standalone: [discuss, repair, --brainstorm]
+    native: [plan, brainstorm, repair]
+    disposition: shared
+    target_phase: phase-4
+    behavior: repair local promotion source structure
+    rationale: Local promotion repair is required before safe direct spec promotion.
+  - id: discuss.assess.remote
+    standalone: [discuss, assess, --discussion]
+    disposition: deferred
+    target_phase: phase-5
+    behavior: assess a GitHub Discussion
+    rationale: Remote collaboration moves with the GitHub adapter.
+  - id: discuss.promote.remote
+    standalone: [discuss, promote, --discussion]
+    disposition: deferred
+    target_phase: phase-5
+    behavior: promote a GitHub Discussion
+    rationale: Remote collaboration moves with the GitHub adapter.
+  - id: discuss.repair.remote
+    standalone: [discuss, repair, --discussion]
+    disposition: deferred
+    target_phase: phase-5
+    behavior: repair a GitHub Discussion source
+    rationale: Remote collaboration moves with the GitHub adapter.
+  - id: spec.show
+    standalone: [spec, show]
+    native: [plan, spec, show]
+    disposition: shared
+    target_phase: phase-4
+    behavior: read a canonical local spec
+    rationale: Spec reads are already supported by the native module.
+  - id: spec.edit
+    standalone: [spec, edit]
+    native: [plan, spec, edit]
+    disposition: shared
+    target_phase: phase-4
+    behavior: edit canonical spec content through host editor policy
+    rationale: Canonical spec mutation belongs to the local workflow.
+  - id: spec.status
+    standalone: [spec, status]
+    native: [plan, spec, status]
+    disposition: shared
+    target_phase: phase-4
+    behavior: transition canonical spec status
+    rationale: Spec lifecycle is part of the local workflow.
+  - id: spec.analyze
+    standalone: [spec, analyze]
+    native: [plan, spec, analyze]
+    disposition: shared
+    target_phase: phase-4
+    behavior: analyze canonical spec readiness
+    rationale: Spec analysis is part of the local readiness workflow.
+  - id: spec.checklist
+    standalone: [spec, checklist]
+    native: [plan, spec, checklist]
+    disposition: shared
+    target_phase: phase-4
+    behavior: apply a readiness checklist
+    rationale: Spec checklist behavior is part of the local readiness workflow.
+  - id: spec.initiative
+    standalone: [spec, initiative]
+    native: [plan, spec, initiative]
+    disposition: shared
+    target_phase: phase-4
+    behavior: set or clear local initiative metadata
+    rationale: Initiative metadata is storage-neutral local planning behavior.
+  - id: spec.execute
+    standalone: [spec, execute]
+    native: [plan, spec, execute]
+    disposition: shared
+    target_phase: phase-4
+    behavior: derive runtime slices and begin spec execution
+    rationale: Runtime-slice derivation is part of the canonical spec workflow.
+  - id: spec.handoff
+    standalone: [spec, handoff]
+    native: [plan, spec, handoff]
+    disposition: shared
+    target_phase: phase-4
+    behavior: render spec execution handoff
+    rationale: Handoff is part of the canonical local spec workflow.
+  - id: source.show
+    standalone: [source, show]
+    disposition: redesign
+    target_phase: phase-9
+    behavior: inspect planning ownership
+    rationale: Ownership diagnostics will be redesigned with adapter and hybrid ownership.
+  - id: source.set
+    standalone: [source, set]
+    disposition: redesign
+    target_phase: phase-9
+    behavior: change planning ownership
+    rationale: Ownership mutation waits for explicit adapter and hybrid contracts.
+  - id: source.set-linear
+    standalone: [source, set, linear]
+    disposition: retire
+    target_phase: phase-6
+    behavior: configure retired Linear ownership
+    rationale: Brain Planning never imports or implements Linear integration.
+  - id: github.enable
+    standalone: [github, enable]
+    disposition: deferred
+    target_phase: phase-5
+    behavior: enable GitHub story backend
+    rationale: GitHub behavior moves behind a Phase 5 adapter.
+  - id: github.reconcile
+    standalone: [github, reconcile]
+    disposition: deferred
+    target_phase: phase-5
+    behavior: reconcile GitHub planning state
+    rationale: GitHub behavior moves behind a Phase 5 adapter.
+  - id: github.adopt
+    standalone: [github, adopt]
+    disposition: deferred
+    target_phase: phase-5
+    behavior: adopt GitHub planning issues
+    rationale: GitHub behavior moves behind a Phase 5 adapter.
+  - id: github.status
+    standalone: [github, status]
+    disposition: deferred
+    target_phase: phase-5
+    behavior: inspect GitHub planning state
+    rationale: GitHub behavior moves behind a Phase 5 adapter.
+  - id: github.project.status
+    standalone: [github, project, status]
+    disposition: deferred
+    target_phase: phase-5
+    behavior: update GitHub Project status
+    rationale: GitHub behavior moves behind a Phase 5 adapter.
+  - id: epic.create
+    standalone: [epic, create]
+    disposition: retire
+    target_phase: phase-6
+    behavior: create legacy epic hierarchy
+    rationale: Epic creation is not part of the target spec-first workflow.
+  - id: epic.promote
+    standalone: [epic, promote]
+    disposition: retire
+    target_phase: phase-6
+    behavior: promote through a legacy epic
+    rationale: Local promotion targets specs directly.
+  - id: epic.list
+    standalone: [epic, list]
+    disposition: transitional
+    target_phase: phase-6
+    behavior: list legacy epic provenance
+    rationale: Read compatibility remains until legacy cleanup.
+  - id: epic.show
+    standalone: [epic, show]
+    disposition: transitional
+    target_phase: phase-6
+    behavior: show legacy epic provenance
+    rationale: Read compatibility remains until legacy cleanup.
+  - id: epic.shape
+    standalone: [epic, shape]
+    disposition: retire
+    target_phase: phase-6
+    behavior: shape legacy epic hierarchy
+    rationale: Epic shaping is not part of the target spec-first workflow.
+  - id: epic.handoff
+    standalone: [epic, handoff]
+    disposition: retire
+    target_phase: phase-6
+    behavior: hand off legacy epic hierarchy
+    rationale: Spec handoff replaces epic handoff.
+  - id: story.create
+    standalone: [story, create]
+    disposition: retire
+    target_phase: phase-6
+    behavior: create persisted legacy story hierarchy
+    rationale: Runtime slices replace persisted implementation stories.
+  - id: story.update
+    standalone: [story, update]
+    disposition: retire
+    target_phase: phase-6
+    behavior: update persisted legacy stories
+    rationale: Runtime slices replace persisted implementation stories.
+  - id: story.list
+    standalone: [story, list]
+    disposition: transitional
+    target_phase: phase-6
+    behavior: list legacy story evidence
+    rationale: Read compatibility remains until legacy cleanup.
+  - id: story.show
+    standalone: [story, show]
+    disposition: transitional
+    target_phase: phase-6
+    behavior: show legacy story evidence
+    rationale: Read compatibility remains until legacy cleanup.
+  - id: story.slice
+    standalone: [story, slice]
+    disposition: retire
+    target_phase: phase-6
+    behavior: persist legacy implementation slices
+    rationale: Phase 4 derives ephemeral runtime slices instead.
+  - id: story.critique
+    standalone: [story, critique]
+    disposition: transitional
+    target_phase: phase-6
+    behavior: critique legacy story readiness
+    rationale: Read and migration compatibility remains until legacy cleanup.
+  - id: skills.install
+    standalone: [skills, install]
+    disposition: redesign
+    target_phase: future-module-discovery
+    behavior: install Plan agent skills
+    rationale: Skill installation will use Brain module and agent-tool discovery.
+  - id: skills.targets
+    standalone: [skills, targets]
+    disposition: redesign
+    target_phase: future-module-discovery
+    behavior: list Plan skill targets
+    rationale: Skill target discovery will use Brain module and agent-tool discovery.
+
+cases:
+  - id: status.compatible
+    command: status
+    fixture: fixtures/schema-v3-compatible
+    args: [--project, "<PROJECT>", status]
+    expected:
+      exit_code: 0
+      stdout: golden/status-compatible.stdout
+      stderr: empty
+      files: unchanged
+      rerun: same
+    compare:
+      exit_code: exact
+      stdout: structural
+      stderr: structural
+      files: exact
+      rerun: exact
+  - id: status.missing
+    command: status
+    fixture: empty
+    args: [--project, "<PROJECT>", status]
+    expected:
+      exit_code: 1
+      stdout: empty
+      stderr: golden/status-missing.stderr
+      files: unchanged
+      rerun: same
+    compare:
+      exit_code: exact
+      stdout: structural
+      stderr: structural
+      files: exact
+      rerun: exact
+  - id: status.future-schema
+    command: status
+    fixture: fixtures/schema-v4-future
+    args: [--project, "<PROJECT>", status]
+    expected:
+      exit_code: 1
+      stdout: empty
+      stderr: golden/status-future-schema.stderr
+      files: unchanged
+      rerun: same
+    compare:
+      exit_code: exact
+      stdout: structural
+      stderr: structural
+      files: exact
+      rerun: exact

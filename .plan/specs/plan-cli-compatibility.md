@@ -3,10 +3,10 @@ created_at: "2026-07-29T08:41:16Z"
 project: brain
 slug: plan-cli-compatibility
 source_brainstorm: .plan/brainstorms/plan-cli-compatibility.md
-status: approved
+status: implementing
 title: Plan CLI Compatibility
 type: spec
-updated_at: "2026-07-29T08:50:15Z"
+updated_at: "2026-07-29T17:32:38Z"
 ---
 
 # Plan CLI Compatibility
