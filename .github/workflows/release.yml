@@ -86,7 +86,7 @@ jobs:
             ARCHIVE_EXT="zip"
           fi
           go build \
-            -ldflags="-s -w -X 'brain/internal/buildinfo.Version=${TAG}' -X 'brain/internal/buildinfo.Commit=${{ needs.resolve.outputs.sha }}' -X 'brain/internal/buildinfo.Date=$(date -u +%Y-%m-%dT%H:%M:%SZ)'" \
+            -ldflags="-s -w -X 'github.com/JimmyMcBride/brain/internal/buildinfo.Version=${TAG}' -X 'github.com/JimmyMcBride/brain/internal/buildinfo.Commit=${{ needs.resolve.outputs.sha }}' -X 'github.com/JimmyMcBride/brain/internal/buildinfo.Date=$(date -u +%Y-%m-%dT%H:%M:%SZ)'" \
             -o "${OUT_DIR}/brain/${BIN_NAME}" .
           if [ "${GOOS}" = "windows" ]; then
             (cd "${OUT_DIR}/brain" && zip -q "../../../dist/brain_${TAG}_${GOOS}_${GOARCH}.${ARCHIVE_EXT}" "${BIN_NAME}")

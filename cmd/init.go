@@ -2,10 +2,10 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/JimmyMcBride/brain/internal/output"
-	"github.com/JimmyMcBride/brain/internal/projectcontext"
 	"io"
 
+	"github.com/JimmyMcBride/brain/internal/output"
+	"github.com/JimmyMcBride/brain/internal/projectcontext"
 	"github.com/spf13/cobra"
 )
 

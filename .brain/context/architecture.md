@@ -1,5 +1,5 @@
 ---
-updated: "2026-07-28T05:43:17Z"
+updated: "2026-07-29T21:27:35Z"
 ---
 # Architecture
 
@@ -50,6 +50,6 @@ Use this file for the structural shape of the repository.
 - 2026-07-29: `internal/modules` now attributes command groups and typed events to compiled descriptors, rejects collisions, and gates command resolution through project enablement and exact grants. `main.go` registers `official.planning` at the outer composition root; disabled modules remain uninstantiated.
 - 2026-07-29: `internal/planning` remains the storage-neutral domain. `internal/planning/application` owns shared local use cases and mutation contracts. `internal/official/planning` owns the compiled module, while `internal/official/planning/local` owns schema-v3 `.plan/` detection, mapping, fixtures, and atomic idempotent writes.
 - 2026-07-29: `internal/planning/conformance` owns the Phase 4 pre-module-path compatibility manifest, the pinned standalone Plan revision, command dispositions, normalization rules, copied fixtures, and black-box goldens. It remains internal until the separately verified module-path and public-package slices.
-- 2026-07-29: Brain's canonical Go module path is `github.com/JimmyMcBride/brain`. The Phase 4 normalization changes imports and release linker targets only; Planning packages remain internal until the separately verified public-package slice.
+- 2026-07-29: Brain's canonical Go module path is `github.com/JimmyMcBride/brain`. The Phase 4 normalization changes imports plus linker targets in the release workflow and maintainer refresh scripts only; Planning packages remain internal until the separately verified public-package slice.
 - 2026-07-29: `cmd/plan.go` is a bounded native shell over the registered Planning application service. It exposes status, brainstorm list/show/start, and spec list/show; direct commands fail with `module_disabled` until `official.planning` is granted and enabled.
 - 2026-07-27: Planning is an official optional module. It retains `.plan/` for initial local compatibility and supports `local`, `github`, and `hybrid` migration sources; during standalone Plan migration, `hybrid` means split local/GitHub ownership. Brain Planning never imports or implements Linear integration; legacy Linear workspaces receive standalone Plan migration guidance. Planning uses review-first Brain memory proposals.
