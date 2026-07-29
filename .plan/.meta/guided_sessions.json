@@ -1,7 +1,7 @@
 {
   "schema_version": 3,
-  "last_active_chain": "brainstorm/integrate-planning-as-an-official-brain-module",
-  "last_updated_at": "2026-07-27T21:39:42Z",
+  "last_active_chain": "brainstorm/planning-domain-extraction",
+  "last_updated_at": "2026-07-28T21:16:20Z",
   "sessions": {
     "brainstorm/integrate-planning-as-an-official-brain-module": {
       "chain_id": "brainstorm/integrate-planning-as-an-official-brain-module",
@@ -16,6 +16,20 @@
       "next_action": "Review recap and continue into the epic stage when ready.",
       "created_at": "2026-07-27T21:38:28Z",
       "updated_at": "2026-07-27T21:39:42Z"
+    },
+    "brainstorm/planning-domain-extraction": {
+      "chain_id": "brainstorm/planning-domain-extraction",
+      "brainstorm": "planning-domain-extraction",
+      "current_stage": "brainstorm",
+      "current_cluster": 5,
+      "current_cluster_label": "handoff-epic",
+      "stage_statuses": {
+        "brainstorm": "in_progress"
+      },
+      "summary": "Recap:\nCurrent understanding: Planning behavior in standalone Plan is coupled to CLI, workspace files, and integration-specific types, so moving it directly into Brain would reproduce those dependencies and make later local, GitHub, and hybrid adapters hard to share or test. / Brain users gain an optional native Planning capability that stays local-first and integration-agnostic; standalone Plan can later share the same behavior through compatibility wrappers; maintainers get deterministic domain tests and clear adapter boundaries.\nKey decisions: appetite captured.\nUnresolved risks or questions: there are still open questions to review.\nParked items: none.\nRecommended next stage: Review recap and continue into the epic stage when ready.",
+      "next_action": "Review recap and continue into the epic stage when ready.",
+      "created_at": "2026-07-28T21:14:44Z",
+      "updated_at": "2026-07-28T21:16:20Z"
     }
   }
 }
