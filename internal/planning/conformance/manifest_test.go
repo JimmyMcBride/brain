@@ -4,6 +4,7 @@ import (
 	"io/fs"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -17,6 +18,18 @@ func TestManifestLoadsPinnedStandaloneBaseline(t *testing.T) {
 	}
 	if len(manifest.Commands) == 0 || len(manifest.Cases) == 0 {
 		t.Fatalf("expected populated manifest: %#v", manifest)
+	}
+}
+
+func TestManifestRevisionErrorIncludesInvalidValue(t *testing.T) {
+	manifest, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest.Baseline.Revision = "not-a-full-sha"
+	err = manifest.validate()
+	if err == nil || !strings.Contains(err.Error(), `"not-a-full-sha"`) {
+		t.Fatalf("expected invalid revision in validation error, got %v", err)
 	}
 }
 

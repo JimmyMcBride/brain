@@ -136,7 +136,7 @@ func (m Manifest) validate() error {
 		return fmt.Errorf("unexpected baseline repository %q", m.Baseline.Repository)
 	}
 	if !revisionPattern.MatchString(m.Baseline.Revision) {
-		return fmt.Errorf("baseline revision must be a full lowercase commit SHA")
+		return fmt.Errorf("baseline revision %q must be a full lowercase commit SHA", m.Baseline.Revision)
 	}
 	if m.Baseline.Command != "plan" {
 		return fmt.Errorf("unexpected baseline command %q", m.Baseline.Command)

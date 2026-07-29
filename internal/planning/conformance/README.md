@@ -11,11 +11,15 @@ command family into Brain-owned shared implementation.
 - normalization rules for paths and line endings
 - captured command cases and their output, filesystem, and rerun contracts
 
-Golden output is captured from a standalone binary built at the pinned revision.
-Each fixture is copied into an independent project root named `fixture`, the
-command is invoked with `--project <PROJECT>`, and the absolute project path is
-replaced with the manifest's `<PROJECT>` token. Line endings become LF and paths
-use `/` before comparison.
+Golden output is captured manually from a standalone binary built at the pinned
+revision. Each fixture is copied into an independent project root named
+`fixture`, the command is invoked with `--project <PROJECT>`, and the absolute
+project path is replaced with the manifest's `<PROJECT>` token. Line endings
+become LF and paths use `/` before comparison.
+
+This first slice embeds and validates the manifest, fixtures, and goldens. It
+does not fetch, build, or execute the pinned standalone repository during
+`go test`; PR verification records the explicit baseline replay separately.
 
 Human output starts with structural comparison. Exit codes, filesystem effects,
 and rerun behavior are exact. JSON will be exact when JSON-producing command
