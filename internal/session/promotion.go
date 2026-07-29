@@ -7,9 +7,9 @@ import (
 	"sort"
 	"strings"
 
-	"brain/internal/history"
-	"brain/internal/projectcontext"
-	"brain/internal/promotion"
+	"github.com/JimmyMcBride/brain/internal/history"
+	"github.com/JimmyMcBride/brain/internal/projectcontext"
+	"github.com/JimmyMcBride/brain/internal/promotion"
 )
 
 type PromotionSuggestion struct {

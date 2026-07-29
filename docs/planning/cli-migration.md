@@ -7,9 +7,11 @@ is merged. Phase 4's approved
 `.plan/specs/plan-cli-compatibility.md` defines the shared-package boundary,
 mapped local workflow, full command disposition, compatibility contract, and
 warning policy. Phase 4 implementation has started with a versioned conformance
-manifest pinned to standalone Plan revision `53ebd96`; it records every root
-command disposition and the first compatible, missing-workspace, and
-future-schema `status` baselines before module-path normalization.
+manifest pinned to standalone Plan revision `53ebd96`; PR #46 merged its root
+command disposition and first compatible, missing-workspace, and future-schema
+`status` baselines. The current isolated slice normalizes Brain's Go module path
+to `github.com/JimmyMcBride/brain` without exposing Planning packages or
+changing behavior.
 
 ## Command Families
 

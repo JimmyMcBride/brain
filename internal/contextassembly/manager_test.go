@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"brain/internal/livecontext"
-	"brain/internal/projectcontext"
-	"brain/internal/search"
-	"brain/internal/structure"
+	"github.com/JimmyMcBride/brain/internal/livecontext"
+	"github.com/JimmyMcBride/brain/internal/projectcontext"
+	"github.com/JimmyMcBride/brain/internal/search"
+	"github.com/JimmyMcBride/brain/internal/structure"
 )
 
 func TestAssembleReturnsStableEmptyPacketShape(t *testing.T) {

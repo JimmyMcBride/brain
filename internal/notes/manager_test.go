@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"brain/internal/backup"
-	"brain/internal/history"
-	"brain/internal/templates"
-	"brain/internal/workspace"
+	"github.com/JimmyMcBride/brain/internal/backup"
+	"github.com/JimmyMcBride/brain/internal/history"
+	"github.com/JimmyMcBride/brain/internal/templates"
+	"github.com/JimmyMcBride/brain/internal/workspace"
 )
 
 func newTestManager(t *testing.T) *Manager {

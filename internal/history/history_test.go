@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"brain/internal/backup"
-	"brain/internal/workspace"
+	"github.com/JimmyMcBride/brain/internal/backup"
+	"github.com/JimmyMcBride/brain/internal/workspace"
 )
 
 func TestLoggerListNewestFirst(t *testing.T) {

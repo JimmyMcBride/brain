@@ -9,8 +9,8 @@ import (
 	"sort"
 	"strings"
 
-	"brain/internal/projectcontext"
-	"brain/internal/session"
+	"github.com/JimmyMcBride/brain/internal/projectcontext"
+	"github.com/JimmyMcBride/brain/internal/session"
 )
 
 type VerificationRecipe struct {

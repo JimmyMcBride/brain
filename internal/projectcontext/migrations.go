@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"brain/internal/buildinfo"
+	"github.com/JimmyMcBride/brain/internal/buildinfo"
 )
 
 const (

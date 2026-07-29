@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	"brain/internal/modules"
+	"github.com/JimmyMcBride/brain/internal/modules"
 
 	"github.com/spf13/cobra"
 )

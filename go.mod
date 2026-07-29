@@ -1,4 +1,4 @@
-module brain
+module github.com/JimmyMcBride/brain
 
 go 1.26
 

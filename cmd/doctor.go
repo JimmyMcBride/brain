@@ -8,13 +8,13 @@ import (
 	"strconv"
 	"strings"
 
-	"brain/internal/config"
-	"brain/internal/embeddings"
-	"brain/internal/index"
-	"brain/internal/notes"
-	"brain/internal/output"
-	"brain/internal/projectcontext"
-	"brain/internal/workspace"
+	"github.com/JimmyMcBride/brain/internal/config"
+	"github.com/JimmyMcBride/brain/internal/embeddings"
+	"github.com/JimmyMcBride/brain/internal/index"
+	"github.com/JimmyMcBride/brain/internal/notes"
+	"github.com/JimmyMcBride/brain/internal/output"
+	"github.com/JimmyMcBride/brain/internal/projectcontext"
+	"github.com/JimmyMcBride/brain/internal/workspace"
 
 	"github.com/spf13/cobra"
 )

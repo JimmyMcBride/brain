@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"brain/internal/history"
-	"brain/internal/projectcontext"
+	"github.com/JimmyMcBride/brain/internal/history"
+	"github.com/JimmyMcBride/brain/internal/projectcontext"
 )
 
 func TestPathMatchesAny(t *testing.T) {

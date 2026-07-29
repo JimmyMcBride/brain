@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"brain/internal/embeddings"
-	"brain/internal/index"
+	"github.com/JimmyMcBride/brain/internal/embeddings"
+	"github.com/JimmyMcBride/brain/internal/index"
 )
 
 type Result struct {

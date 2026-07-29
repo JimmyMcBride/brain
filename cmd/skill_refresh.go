@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"brain/internal/projectcontext"
-	"brain/internal/skills"
+	"github.com/JimmyMcBride/brain/internal/projectcontext"
+	"github.com/JimmyMcBride/brain/internal/skills"
 )
 
 type skillRefreshResult struct {

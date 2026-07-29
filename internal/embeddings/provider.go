@@ -7,7 +7,7 @@ import (
 	"math"
 	"strings"
 
-	"brain/internal/config"
+	"github.com/JimmyMcBride/brain/internal/config"
 )
 
 type Provider interface {

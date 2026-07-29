@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"io"
 
-	"brain/internal/search"
-	"brain/internal/session"
+	"github.com/JimmyMcBride/brain/internal/search"
+	"github.com/JimmyMcBride/brain/internal/session"
 
 	"github.com/spf13/cobra"
 )

@@ -8,12 +8,12 @@ import (
 	"strings"
 	"testing"
 
-	"brain/internal/backup"
-	"brain/internal/history"
-	"brain/internal/notes"
-	"brain/internal/session"
-	"brain/internal/templates"
-	"brain/internal/workspace"
+	"github.com/JimmyMcBride/brain/internal/backup"
+	"github.com/JimmyMcBride/brain/internal/history"
+	"github.com/JimmyMcBride/brain/internal/notes"
+	"github.com/JimmyMcBride/brain/internal/session"
+	"github.com/JimmyMcBride/brain/internal/templates"
+	"github.com/JimmyMcBride/brain/internal/workspace"
 )
 
 func TestFromSessionRequiresActiveSession(t *testing.T) {

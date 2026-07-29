@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"brain/internal/modules"
-	"brain/internal/planning/application"
+	"github.com/JimmyMcBride/brain/internal/modules"
+	"github.com/JimmyMcBride/brain/internal/planning/application"
 )
 
 func TestRegistrationDeclaresBoundedPhaseThreeContract(t *testing.T) {

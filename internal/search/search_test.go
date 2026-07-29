@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"brain/internal/config"
-	"brain/internal/embeddings"
-	"brain/internal/index"
-	"brain/internal/workspace"
+	"github.com/JimmyMcBride/brain/internal/config"
+	"github.com/JimmyMcBride/brain/internal/embeddings"
+	"github.com/JimmyMcBride/brain/internal/index"
+	"github.com/JimmyMcBride/brain/internal/workspace"
 )
 
 func TestHybridSearchReturnsRelevantChunks(t *testing.T) {

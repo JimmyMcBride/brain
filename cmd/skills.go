@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	"brain/internal/skills"
+	"github.com/JimmyMcBride/brain/internal/skills"
 
 	"github.com/spf13/cobra"
 )

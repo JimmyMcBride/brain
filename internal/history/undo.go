@@ -5,21 +5,21 @@ import (
 	"fmt"
 	"os"
 
-	"brain/internal/backup"
-	"brain/internal/workspace"
+	"github.com/JimmyMcBride/brain/internal/backup"
+	"github.com/JimmyMcBride/brain/internal/workspace"
 )
 
 type Undoer struct {
-	Logger  *Logger
-	Backups *backup.Manager
-	Workspace   *workspace.Service
+	Logger    *Logger
+	Backups   *backup.Manager
+	Workspace *workspace.Service
 }
 
 func NewUndoer(logger *Logger, backups *backup.Manager, workspaceSvc *workspace.Service) *Undoer {
 	return &Undoer{
-		Logger:  logger,
-		Backups: backups,
-		Workspace:   workspaceSvc,
+		Logger:    logger,
+		Backups:   backups,
+		Workspace: workspaceSvc,
 	}
 }
 

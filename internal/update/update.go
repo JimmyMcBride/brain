@@ -21,8 +21,8 @@ import (
 	"strings"
 	"time"
 
-	"brain/internal/buildinfo"
-	"brain/internal/config"
+	"github.com/JimmyMcBride/brain/internal/buildinfo"
+	"github.com/JimmyMcBride/brain/internal/config"
 )
 
 const (

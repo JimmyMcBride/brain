@@ -8,9 +8,9 @@ import (
 	"sort"
 	"strings"
 
-	"brain/internal/livecontext"
-	"brain/internal/projectcontext"
-	"brain/internal/search"
+	"github.com/JimmyMcBride/brain/internal/livecontext"
+	"github.com/JimmyMcBride/brain/internal/projectcontext"
+	"github.com/JimmyMcBride/brain/internal/search"
 )
 
 func (m *Manager) BuildFingerprintInputs(req Request) (projectcontext.PacketFingerprintInputs, error) {

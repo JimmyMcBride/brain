@@ -15,9 +15,9 @@ import (
 	"strings"
 	"time"
 
-	"brain/internal/notes"
-	"brain/internal/session"
-	"brain/internal/structure"
+	"github.com/JimmyMcBride/brain/internal/notes"
+	"github.com/JimmyMcBride/brain/internal/session"
+	"github.com/JimmyMcBride/brain/internal/structure"
 )
 
 type Manager struct {
