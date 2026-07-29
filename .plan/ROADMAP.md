@@ -36,7 +36,7 @@ Goal: Extract storage-neutral Planning behavior, ship local `brain plan`, and ke
 the `plan` command as a shared compatibility wrapper.
 
 - [x] [Planning domain extraction](./specs/planning-domain-extraction.md)
-- [ ] [Local Planning module](./specs/local-planning-module.md): `.plan/`
+- [x] [Local Planning module](./specs/local-planning-module.md): `.plan/`
   adapter/fixtures plus native commands, permissions, and events
 - [ ] Plan CLI mapping and compatibility tests
 

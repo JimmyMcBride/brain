@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -157,6 +158,50 @@ func TestAdapterAtomicWriteFailureLeavesNoArtifact(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, ".plan", "brainstorms", "failed.md")); !os.IsNotExist(err) {
 		t.Fatalf("failed write left artifact: %v", err)
 	}
+}
+
+func TestAdapterConcurrentRerunsCreateOnce(t *testing.T) {
+	root := t.TempDir()
+	copyFixture(t, "compatible", root)
+	adapter := New(root)
+	artifact := planning.Brainstorm{ID: "concurrent", Title: "Concurrent"}
+	const callers = 8
+	actions := make(chan application.MutationAction, callers)
+	errs := make(chan error, callers)
+	var wait sync.WaitGroup
+	for range callers {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			_, action, err := adapter.CreateBrainstorm(context.Background(), artifact, time.Now())
+			actions <- action
+			errs <- err
+		}()
+	}
+	wait.Wait()
+	close(actions)
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	created := 0
+	unchanged := 0
+	for action := range actions {
+		switch action {
+		case application.MutationCreate:
+			created++
+		case application.MutationUnchanged:
+			unchanged++
+		default:
+			t.Fatalf("unexpected action %q", action)
+		}
+	}
+	if created != 1 || unchanged != callers-1 {
+		t.Fatalf("expected one create and %d unchanged, got create=%d unchanged=%d", callers-1, created, unchanged)
+	}
+	assertNoTemporaryFiles(t, filepath.Join(root, ".plan", "brainstorms"))
 }
 
 func TestAdapterRejectsWritesForUnsupportedWorkspace(t *testing.T) {

@@ -175,13 +175,14 @@ As the repo evolves, use `brain context audit --project .` to review whether Bra
 ## Optional Modules
 
 Brain includes a minimal internal module framework so teams can add compiled
-domain workflows without making them part of every installation. The production
-binary currently registers zero modules.
+domain workflows without making them part of every project. The production
+binary registers Planning as an official module, disabled by default.
 
-Planning is the first official optional module. It is not implemented in Brain
-yet. The standalone [`plan`](https://github.com/JimmyMcBride/plan) product remains
-the reference implementation and compatibility source while Brain gains module
-infrastructure and Planning migrates in controlled phases.
+Planning's first local vertical workflow can inspect compatible schema-v3
+`.plan/` workspaces, read brainstorms/specs, and preview or create brainstorms.
+The standalone [`plan`](https://github.com/JimmyMcBride/plan) product remains the
+reference implementation and compatibility source while broader command and
+adapter behavior migrates in controlled phases.
 
 The approved direction:
 
@@ -196,6 +197,22 @@ The approved direction:
 
 Use `brain modules list`, `show`, `grant`, `revoke`, `enable`, `disable`, and
 `health` to inspect and manage the compiled modules available in a given build.
+For the local Planning module:
+
+```bash
+brain modules grant --project . official.planning \
+  planning.read planning.brainstorm project.context.read
+brain modules enable --project . official.planning
+brain plan status --project .
+brain plan brainstorm list --project .
+brain plan brainstorm start --project . "Authentication overhaul"
+brain plan brainstorm start --project . "Authentication overhaul" --confirm
+brain plan spec list --project .
+```
+
+Planning opens a compatible local workspace in place. Missing, older, future,
+remote-owned, or retired-integration workspaces receive diagnostics and remain
+read-only; use standalone Plan for migration.
 
 See [Module Overview](docs/modules/overview.md),
 [Planning Vision](docs/planning/vision.md), and

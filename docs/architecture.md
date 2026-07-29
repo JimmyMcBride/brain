@@ -62,13 +62,14 @@ provides list/show, grant/revoke, enable/disable, and health commands. Tracked
 project intent lives in the project module configuration file; ignored local
 permission grants live in Brain's state directory.
 
-The production binary currently registers zero modules. The test-only module
-proves descriptor validation, compatibility, lifecycle, permission, persistence,
-and health behavior without importing Planning or changing Core behavior.
+The production binary registers `official.planning` at the outer composition
+root, disabled by default. The module proves controlled command/event
+declarations, local `.plan/` adapter boundaries, permissions, lifecycle, health,
+and disabled-state isolation without making Planning part of Core.
 
 Later stages remain:
 
-1. official compiled Go modules wired at the outer composition root
+1. broader official Planning compatibility and adapters
 2. future external-process community modules over a versioned protocol
 3. future Brain Cloud module services and trusted web surfaces
 

@@ -2,9 +2,10 @@
 
 ## Status
 
-Phase 1 internal runtime implemented. The production binary registers zero
-modules; Planning, external processes, cloud modules, and module-provided
-commands remain unimplemented.
+Phase 1 internal runtime and Phase 3's bounded local Planning module are
+implemented. The production binary registers `official.planning`, disabled by
+default. External processes, cloud modules, remote Planning adapters, and full
+Plan command compatibility remain unimplemented.
 
 Brain is an extensible context, memory, retrieval, and workflow platform. Modules
 adapt Brain to a domain or team without making that domain mandatory. Planning is
@@ -30,10 +31,10 @@ or compliance module could also use.
 
 ## Stages
 
-1. Internal compiled modules: the registry, explicit enablement, configuration,
-   permissions, declared capabilities, minimal lifecycle, health, and a
-   test-only module are implemented. Events and the first production official
-   module remain later work.
+1. Internal compiled modules: registry, explicit enablement, configuration,
+   permissions, declared capabilities/commands/events, minimal lifecycle,
+   health, a test module, and the first production official module are
+   implemented.
 2. External-process community modules: versioned protocol, independent releases,
    compatibility negotiation, permission mediation, crash isolation, logs, health,
    and lifecycle control. Transport remains undecided.
@@ -72,45 +73,32 @@ Disabled modules:
 Enabled modules feel native while retaining a visible module identity in
 provenance, audit, permissions, configuration, and health output.
 
-## Provisional Manifest
+## Current Planning Descriptor
 
 ```yaml
 id: official.planning
 name: Brain Planning
 version: 0.1.0
-brain_api: ">=1.0 <2.0"
-runtimes:
-  local: true
-  cloud: true
-  web: future
+brain_api_major: 1
+config_version: 1
 capabilities:
   - commands
-  - context_provider
-  - search_provider
-  - event_publisher
-  - event_consumer
-  - agent_tools
+  - context.read
+  - events.publish
+  - storage.local-plan
 permissions:
   - project.context.read
-  - memory.propose
   - planning.read
   - planning.brainstorm
-  - planning.spec.create
-  - planning.spec.edit
-  - planning.spec.approve
-  - planning.execute
-dependencies:
-  required: []
-  optional:
-    - official.git
-    - official.github
+commands:
+  - plan
+events:
+  - planning.brainstorm.created
 ```
 
-Schema is provisional. A complete contract must eventually cover stable ID,
-display name, version, compatible Brain API range, runtimes, capabilities,
-permissions, required and optional dependencies, configuration and data schemas,
-migration version, network/filesystem/secret declarations, publisher identity,
-checksums, signing, and distribution source.
+The descriptor declares only Phase 3 behavior. Memory, spec mutation/execution,
+integrations, cloud, agent tools, and community distribution remain future
+contracts.
 
 ## Non-Goals
 

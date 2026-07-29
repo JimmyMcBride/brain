@@ -2,15 +2,17 @@
 
 ## Status
 
-Approved staged compatibility direction; exact `brain plan` syntax and warning
-schedule remain implementation decisions.
+Approved staged compatibility direction. Phase 3's bounded local native surface
+is implemented; full command mapping and warning schedule remain Phase 4
+decisions.
 
 ## Command Families
 
 Target conceptual family:
 
 ```text
-brain modules enable planning --project .
+brain modules grant official.planning planning.read planning.brainstorm project.context.read --project .
+brain modules enable official.planning --project .
 brain plan ...
 ```
 
@@ -29,9 +31,9 @@ API.
 
 1. Current: standalone `plan` remains fully functional; Brain adds architecture
    and later module infrastructure without behavior changes.
-2. Shared domain/application services: code moves behind reusable packages where
-   practical; `plan` continues to call the same behavior; experimental
-   `brain plan` may appear.
+2. Shared domain/application services: implemented in Brain for local status,
+   brainstorm list/show/start, and spec list/show; standalone `plan` remains the
+   compatibility source until Phase 4 shares the implementation.
 3. Native primary command: `brain plan` becomes primary; `plan` is a compatibility
    wrapper and emits documented warnings.
 4. Distribution deprecation: workspace migration is stable; separate Plan release

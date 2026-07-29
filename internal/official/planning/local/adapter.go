@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -181,6 +182,11 @@ func (a *Adapter) CreateBrainstorm(
 	if findings := planning.ValidateBrainstorm(artifact); hasErrorFindings(findings) {
 		return application.BrainstormDocument{}, "", fmt.Errorf("invalid brainstorm artifact")
 	}
+	release, err := acquireCreationLock(ctx, filepath.Join(a.projectRoot, ".plan", "brainstorms", "."+string(artifact.ID)+".lock"))
+	if err != nil {
+		return application.BrainstormDocument{}, "", err
+	}
+	defer release()
 	if existing, found, err := a.FindBrainstorm(ctx, artifact.ID); err != nil {
 		return application.BrainstormDocument{}, "", err
 	} else if found {
@@ -268,6 +274,9 @@ func (a *Adapter) readBrainstorm(path string) (application.BrainstormDocument, e
 		return application.BrainstormDocument{}, err
 	}
 	id := artifactID(meta, path)
+	if kind := stringValue(meta["type"]); kind != string(planning.ArtifactBrainstorm) {
+		return application.BrainstormDocument{}, fmt.Errorf("invalid brainstorm type %q in %s", kind, relativePlanningPath(a.projectRoot, path))
+	}
 	artifact := planning.Brainstorm{
 		ID:      id,
 		Title:   stringValue(meta["title"]),
@@ -291,6 +300,12 @@ func (a *Adapter) readSpec(path string) (application.SpecDocument, error) {
 	}
 	id := artifactID(meta, path)
 	status := planning.SpecStatus(stringValue(meta["status"]))
+	if kind := stringValue(meta["type"]); kind != string(planning.ArtifactSpec) {
+		return application.SpecDocument{}, fmt.Errorf("invalid spec type %q in %s", kind, relativePlanningPath(a.projectRoot, path))
+	}
+	if status == "" {
+		status = planning.SpecDraft
+	}
 	approval := planning.Approval{State: planning.ApprovalPending}
 	if status != planning.SpecDraft {
 		approval = planning.Approval{State: planning.ApprovalApproved, Reason: "preserved local spec status"}
@@ -573,8 +588,12 @@ func atomicWriteFile(path string, data []byte, mode os.FileMode) (err error) {
 	if err = file.Chmod(mode); err != nil {
 		return err
 	}
-	if _, err = file.Write(data); err != nil {
+	written, err := file.Write(data)
+	if err != nil {
 		return err
+	}
+	if written != len(data) {
+		return io.ErrShortWrite
 	}
 	if err = file.Sync(); err != nil {
 		return err
@@ -586,4 +605,33 @@ func atomicWriteFile(path string, data []byte, mode os.FileMode) (err error) {
 		return err
 	}
 	return os.Chmod(path, mode)
+}
+
+func acquireCreationLock(ctx context.Context, path string) (func(), error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, fmt.Errorf("create brainstorm directory: %w", err)
+	}
+	timer := time.NewTimer(time.Second)
+	defer timer.Stop()
+	ticker := time.NewTicker(5 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if err == nil {
+			return func() {
+				_ = file.Close()
+				_ = os.Remove(path)
+			}, nil
+		}
+		if !os.IsExist(err) {
+			return nil, fmt.Errorf("create brainstorm lock: %w", err)
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-timer.C:
+			return nil, fmt.Errorf("timed out waiting for brainstorm creation lock")
+		case <-ticker.C:
+		}
+	}
 }

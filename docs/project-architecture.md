@@ -18,6 +18,7 @@ Use this file for the structural shape of the repository.
 - `internal/livecontext/`
 - `internal/modules/`
 - `internal/notes/`
+- `internal/official/`
 - `internal/output/`
 - `internal/planning/`
 - `internal/projectcontext/`

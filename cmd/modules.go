@@ -184,9 +184,13 @@ func printModuleDetails(w io.Writer, report modules.Report) error {
 		{"config version", fmt.Sprintf("%d", report.ConfigVersion)},
 		{"capabilities", strings.Join(report.Capabilities, ", ")},
 		{"permissions", strings.Join(report.Permissions, ", ")},
-		{"commands", strings.Join(report.Commands, ", ")},
-		{"events", strings.Join(report.Events, ", ")},
 		{"grants", strings.Join(report.Grants, ", ")},
+	}
+	if len(report.Commands) > 0 {
+		lines = append(lines, [2]string{"commands", strings.Join(report.Commands, ", ")})
+	}
+	if len(report.Events) > 0 {
+		lines = append(lines, [2]string{"events", strings.Join(report.Events, ", ")})
 	}
 	if report.Health != nil {
 		lines = append(lines, [2]string{"health", string(report.Health.Status)})

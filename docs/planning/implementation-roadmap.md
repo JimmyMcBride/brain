@@ -33,7 +33,8 @@ extract Linear code or types.
 
 ## Phase 3 — Local Planning Module
 
-Status: Approved and executing from `.plan/specs/local-planning-module.md`.
+Status: Implemented and verified from `.plan/specs/local-planning-module.md`;
+pending pull-request review and merge.
 
 Deliver module enablement, native command group, `.plan/` read/write compatibility,
 workspace detection/migration, Brain context access, Planning events/permissions,
@@ -95,6 +96,5 @@ lifecycle, diagnostics, and distribution direction.
 
 ## Exact Next Slice
 
-> Execute the approved Phase 3 Local Planning Module spec through its runtime
-> module/contracts, local adapter/fixtures, and native command/verification
-> slices, then review the complete implementation in one pull request.
+> Review and merge the completed Phase 3 Local Planning Module implementation,
+> then shape Phase 4 Plan CLI compatibility from a separately approved spec.

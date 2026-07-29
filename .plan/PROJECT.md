@@ -46,10 +46,11 @@ controlled migration.
 
 - Phase 0 architecture is documented in `docs/modules/`, `docs/planning/`, and
   ADRs 0001–0011.
-- Planning is not enabled or exposed in Brain yet.
+- Planning's bounded local Phase 3 command surface is implemented and verified
+  on the active spec branch; it remains optional and disabled by default.
 - Phase 1's minimal compiled internal module framework was merged into `develop`
   by PR #37. Phase 2's
   [Planning Domain Extraction](./specs/planning-domain-extraction.md) was merged
   by PR #38. Phase 3's
-  [Local Planning Module](./specs/local-planning-module.md) spec is approved and
-  executing.
+  [Local Planning Module](./specs/local-planning-module.md) spec is complete and
+  pending pull-request review.
