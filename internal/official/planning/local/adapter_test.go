@@ -111,18 +111,13 @@ func TestAdapterValidationErrorsIncludeFindingMessages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	specRaw = []byte(strings.Replace(
-		string(specRaw),
-		"- Run focused adapter tests.\n- Preserve stable ordering.\n",
-		"",
-		1,
-	))
+	specRaw = []byte(strings.Replace(string(specRaw), "status: approved", "status: invalid", 1))
 	if err := os.WriteFile(specPath, specRaw, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := adapter.GetSpec(context.Background(), "alpha-spec"); err == nil {
 		t.Fatal("expected invalid spec error")
-	} else if got, want := err.Error(), "invalid spec .plan/specs/alpha-spec.md: verification is required"; got != want {
+	} else if got, want := err.Error(), "invalid spec .plan/specs/alpha-spec.md: unknown spec status"; got != want {
 		t.Fatalf("unexpected spec validation error:\ngot:  %s\nwant: %s", got, want)
 	}
 }
