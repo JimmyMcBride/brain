@@ -23,8 +23,8 @@ Do not load external community processes. Do not migrate Planning domain code.
 
 ## Phase 2 — Planning Domain Extraction
 
-Status: Implemented by `.plan/specs/planning-domain-extraction.md`; pending
-review and merge.
+Status: Implemented by `.plan/specs/planning-domain-extraction.md` and merged
+by PR #38.
 
 Deliver storage-neutral brainstorm, spec, initiative, roadmap, readiness,
 approval, execution, queue, and runtime-slice models with unit tests. Keep Cobra,
@@ -32,6 +32,8 @@ filesystem, GitHub, and cloud dependencies outside domain packages. Do not
 extract Linear code or types.
 
 ## Phase 3 — Local Planning Module
+
+Status: Approved and executing from `.plan/specs/local-planning-module.md`.
 
 Deliver module enablement, native command group, `.plan/` read/write compatibility,
 workspace detection/migration, Brain context access, Planning events/permissions,
@@ -93,5 +95,6 @@ lifecycle, diagnostics, and distribution direction.
 
 ## Exact Next Slice
 
-> Review and merge the Phase 2 Planning domain extraction implementation, then
-> shape Phase 3 local Planning module work from a separately approved spec.
+> Execute the approved Phase 3 Local Planning Module spec through its runtime
+> module/contracts, local adapter/fixtures, and native command/verification
+> slices, then review the complete implementation in one pull request.
