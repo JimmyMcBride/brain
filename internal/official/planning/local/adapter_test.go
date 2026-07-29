@@ -79,6 +79,49 @@ func TestAdapterReadsSchemaV3BrainstormsAndSpecs(t *testing.T) {
 	}
 }
 
+func TestAdapterValidationErrorsIncludeFindingMessages(t *testing.T) {
+	root := t.TempDir()
+	copyFixture(t, "compatible", root)
+	adapter := New(root)
+
+	_, _, err := adapter.CreateBrainstorm(context.Background(), planning.Brainstorm{}, time.Now())
+	if err == nil {
+		t.Fatal("expected invalid brainstorm artifact error")
+	} else if got, want := err.Error(), "invalid brainstorm artifact: artifact identifier must be a canonical lowercase slug; title is required"; got != want {
+		t.Fatalf("unexpected create validation error:\ngot:  %s\nwant: %s", got, want)
+	}
+
+	brainstormPath := filepath.Join(root, ".plan", "brainstorms", "alpha.md")
+	brainstormRaw, err := os.ReadFile(brainstormPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	brainstormRaw = []byte(strings.Replace(string(brainstormRaw), "title: Alpha Brainstorm", `title: ""`, 1))
+	if err := os.WriteFile(brainstormPath, brainstormRaw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := adapter.GetBrainstorm(context.Background(), "alpha"); err == nil {
+		t.Fatal("expected invalid brainstorm error")
+	} else if got, want := err.Error(), "invalid brainstorm .plan/brainstorms/alpha.md: title is required"; got != want {
+		t.Fatalf("unexpected brainstorm validation error:\ngot:  %s\nwant: %s", got, want)
+	}
+
+	specPath := filepath.Join(root, ".plan", "specs", "alpha-spec.md")
+	specRaw, err := os.ReadFile(specPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	specRaw = []byte(strings.Replace(string(specRaw), "status: approved", "status: invalid", 1))
+	if err := os.WriteFile(specPath, specRaw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := adapter.GetSpec(context.Background(), "alpha-spec"); err == nil {
+		t.Fatal("expected invalid spec error")
+	} else if got, want := err.Error(), "invalid spec .plan/specs/alpha-spec.md: unknown spec status"; got != want {
+		t.Fatalf("unexpected spec validation error:\ngot:  %s\nwant: %s", got, want)
+	}
+}
+
 func TestAdapterCreatesPlanCompatibleBrainstormAtomicallyAndIdempotently(t *testing.T) {
 	root := t.TempDir()
 	copyFixture(t, "compatible", root)
