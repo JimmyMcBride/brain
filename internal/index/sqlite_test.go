@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"brain/internal/config"
-	"brain/internal/embeddings"
-	"brain/internal/workspace"
+	"github.com/JimmyMcBride/brain/internal/config"
+	"github.com/JimmyMcBride/brain/internal/embeddings"
+	"github.com/JimmyMcBride/brain/internal/workspace"
 )
 
 func TestReindexBuildsStatsAndSupportsSanitizedFTS(t *testing.T) {

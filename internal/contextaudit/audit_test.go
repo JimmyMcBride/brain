@@ -8,14 +8,14 @@ import (
 	"strings"
 	"testing"
 
-	"brain/internal/backup"
-	"brain/internal/history"
-	"brain/internal/index"
-	"brain/internal/notes"
-	"brain/internal/session"
-	"brain/internal/structure"
-	"brain/internal/templates"
-	"brain/internal/workspace"
+	"github.com/JimmyMcBride/brain/internal/backup"
+	"github.com/JimmyMcBride/brain/internal/history"
+	"github.com/JimmyMcBride/brain/internal/index"
+	"github.com/JimmyMcBride/brain/internal/notes"
+	"github.com/JimmyMcBride/brain/internal/session"
+	"github.com/JimmyMcBride/brain/internal/structure"
+	"github.com/JimmyMcBride/brain/internal/templates"
+	"github.com/JimmyMcBride/brain/internal/workspace"
 )
 
 func TestAuditWellCoveredRepoHasNoFindings(t *testing.T) {

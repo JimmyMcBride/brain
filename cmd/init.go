@@ -1,9 +1,9 @@
 package cmd
 
 import (
-	"brain/internal/output"
-	"brain/internal/projectcontext"
 	"fmt"
+	"github.com/JimmyMcBride/brain/internal/output"
+	"github.com/JimmyMcBride/brain/internal/projectcontext"
 	"io"
 
 	"github.com/spf13/cobra"

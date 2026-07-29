@@ -43,9 +43,11 @@ and local tests.
 ## Phase 4 — Plan CLI Compatibility
 
 Status: In progress from `.plan/specs/plan-cli-compatibility.md`. The first
-execution slice pins standalone Plan revision `53ebd96`, records the complete
-command disposition, and captures initial black-box `status` cases in
-`internal/planning/conformance`. Brain's module path has not changed.
+execution slice merged through PR #46: it pins standalone Plan revision
+`53ebd96`, records the complete command disposition, and captures initial
+black-box `status` cases in `internal/planning/conformance`. The second slice
+normalizes Brain's Go module path to `github.com/JimmyMcBride/brain` without
+moving packages, exposing APIs, or changing behavior.
 
 Deliver wrapper/shared implementation, command mapping, warning policy, docs, and
 script/exit/JSON compatibility tests.
@@ -101,6 +103,7 @@ lifecycle, diagnostics, and distribution direction.
 
 ## Exact Next Slice
 
-> Review and merge the Phase 4 conformance manifest, then normalize Brain's Go
-> module path in an isolated behavior-preserving slice before exposing any
-> public Planning package.
+> After the isolated module-path normalization merges, expose the smallest
+> Brain-owned Planning package required by the approved shared implementation
+> boundary. Prove it with an external-consumer compile test before moving any
+> additional Planning surface.

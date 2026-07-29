@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"brain/internal/planning"
+	"github.com/JimmyMcBride/brain/internal/planning"
 )
 
 type Service struct {

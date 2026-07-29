@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	"brain/internal/notes"
+	"github.com/JimmyMcBride/brain/internal/notes"
 
 	"github.com/spf13/cobra"
 )

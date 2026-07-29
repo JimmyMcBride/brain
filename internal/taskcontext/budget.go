@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"brain/internal/livecontext"
-	"brain/internal/projectcontext"
+	"github.com/JimmyMcBride/brain/internal/livecontext"
+	"github.com/JimmyMcBride/brain/internal/projectcontext"
 )
 
 const (

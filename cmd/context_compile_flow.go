@@ -5,12 +5,12 @@ import (
 	"errors"
 	"strings"
 
-	"brain/internal/app"
-	"brain/internal/livecontext"
-	"brain/internal/projectcontext"
-	"brain/internal/search"
-	"brain/internal/session"
-	"brain/internal/taskcontext"
+	"github.com/JimmyMcBride/brain/internal/app"
+	"github.com/JimmyMcBride/brain/internal/livecontext"
+	"github.com/JimmyMcBride/brain/internal/projectcontext"
+	"github.com/JimmyMcBride/brain/internal/search"
+	"github.com/JimmyMcBride/brain/internal/session"
+	"github.com/JimmyMcBride/brain/internal/taskcontext"
 )
 
 type compilePacketRequest struct {

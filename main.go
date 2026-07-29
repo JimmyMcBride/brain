@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"brain/cmd"
-	officialplanning "brain/internal/official/planning"
+	"github.com/JimmyMcBride/brain/cmd"
+	officialplanning "github.com/JimmyMcBride/brain/internal/official/planning"
 )
 
 func main() {

@@ -1,5 +1,5 @@
 ---
-updated: "2026-07-29T17:41:52Z"
+updated: "2026-07-29T21:08:36Z"
 ---
 <!-- brain:begin context-current-state -->
 This file is a deterministic snapshot of the repository state at the last refresh.
@@ -9,8 +9,8 @@ This file is a deterministic snapshot of the repository state at the last refres
 - Project: `brain`
 - Root: `.`
 - Runtime: `go`
-- Go module: `brain`
-- Current branch: `codex/plan-cli-conformance-manifest`
+- Go module: `github.com/JimmyMcBride/brain`
+- Current branch: `codex/normalize-brain-module-path`
 - Default branch: `develop`
 - Remote: `https://github.com/JimmyMcBride/brain.git`
 - Go test files: `38`
@@ -29,6 +29,7 @@ This file is a deterministic snapshot of the repository state at the last refres
 
 ## Local Notes
 
+- 2026-07-29: The Phase 4 conformance manifest merged through PR #46. The current isolated slice normalizes Brain's Go module path to `github.com/JimmyMcBride/brain` without package moves, public API exposure, or behavior changes; the next slice is the smallest externally compile-verified Planning package boundary.
 - 2026-07-29: Phase 4 is approved in `.plan/specs/plan-cli-compatibility.md`. The spec chooses a conformance-first transition to narrow Brain-owned importable Planning packages, maps the coherent local spec-first workflow, keeps standalone Plan independently usable during overlap, excludes GitHub/Linear/cloud/hybrid implementation, and derives execution slices only when implementation starts.
 - 2026-07-29: Phase 3 merged into `develop` through PR #39. Brain now ships the disabled-by-default `official.planning` module with schema-v3 local `.plan/` status, brainstorm list/show/start, and spec list/show commands. Read and write compatibility failures have distinct application errors, and stale brainstorm-creation lock timeouts identify the lock path. Ubuntu and Windows CI passed.
 - 2026-07-28: The approved Phase 1 spec at `.plan/specs/minimal-internal-module-framework.md` is implemented on its spec branch with descriptor/registry/runtime contracts, atomic project config and local grants, seven module administration commands, and cross-platform tests. The production binary still registers zero modules and Planning remains excluded.

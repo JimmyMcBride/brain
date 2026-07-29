@@ -6,11 +6,11 @@ import (
 	"io"
 	"strings"
 
-	"brain/internal/app"
-	"brain/internal/history"
-	"brain/internal/modules"
-	"brain/internal/planning"
-	"brain/internal/planning/application"
+	"github.com/JimmyMcBride/brain/internal/app"
+	"github.com/JimmyMcBride/brain/internal/history"
+	"github.com/JimmyMcBride/brain/internal/modules"
+	"github.com/JimmyMcBride/brain/internal/planning"
+	"github.com/JimmyMcBride/brain/internal/planning/application"
 
 	"github.com/spf13/cobra"
 )

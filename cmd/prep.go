@@ -6,9 +6,9 @@ import (
 	"io"
 	"strings"
 
-	"brain/internal/projectcontext"
-	"brain/internal/session"
-	"brain/internal/taskcontext"
+	"github.com/JimmyMcBride/brain/internal/projectcontext"
+	"github.com/JimmyMcBride/brain/internal/session"
+	"github.com/JimmyMcBride/brain/internal/taskcontext"
 
 	"github.com/spf13/cobra"
 )

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"sync"
 
-	"brain/internal/modules"
-	"brain/internal/official/planning/local"
-	"brain/internal/planning/application"
+	"github.com/JimmyMcBride/brain/internal/modules"
+	"github.com/JimmyMcBride/brain/internal/official/planning/local"
+	"github.com/JimmyMcBride/brain/internal/planning/application"
 )
 
 const (

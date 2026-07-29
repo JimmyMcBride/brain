@@ -16,9 +16,9 @@ import (
 	"strings"
 	"time"
 
-	"brain/internal/embeddings"
-	"brain/internal/notes"
-	"brain/internal/workspace"
+	"github.com/JimmyMcBride/brain/internal/embeddings"
+	"github.com/JimmyMcBride/brain/internal/notes"
+	"github.com/JimmyMcBride/brain/internal/workspace"
 
 	_ "modernc.org/sqlite"
 )

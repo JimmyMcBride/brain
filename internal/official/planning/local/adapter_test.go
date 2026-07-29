@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"brain/internal/planning"
-	"brain/internal/planning/application"
+	"github.com/JimmyMcBride/brain/internal/planning"
+	"github.com/JimmyMcBride/brain/internal/planning/application"
 )
 
 func TestWorkspaceStatusClassifiesCompatibilityWithoutMutation(t *testing.T) {

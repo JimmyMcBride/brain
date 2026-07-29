@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"brain/internal/app"
-	"brain/internal/modules"
+	"github.com/JimmyMcBride/brain/internal/app"
+	"github.com/JimmyMcBride/brain/internal/modules"
 
 	"github.com/spf13/cobra"
 )

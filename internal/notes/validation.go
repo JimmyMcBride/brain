@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"brain/internal/workspace"
+	"github.com/JimmyMcBride/brain/internal/workspace"
 )
 
 type RawNote struct {

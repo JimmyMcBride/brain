@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"io"
 
-	"brain/internal/output"
-	"brain/internal/projectcontext"
+	"github.com/JimmyMcBride/brain/internal/output"
+	"github.com/JimmyMcBride/brain/internal/projectcontext"
 
 	"github.com/spf13/cobra"
 )

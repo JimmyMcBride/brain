@@ -6,7 +6,7 @@ import (
 	"io"
 	"strings"
 
-	"brain/internal/session"
+	"github.com/JimmyMcBride/brain/internal/session"
 
 	"github.com/spf13/cobra"
 )

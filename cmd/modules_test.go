@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"brain/internal/app"
-	"brain/internal/modules"
-	"brain/internal/modules/testmodule"
+	"github.com/JimmyMcBride/brain/internal/app"
+	"github.com/JimmyMcBride/brain/internal/modules"
+	"github.com/JimmyMcBride/brain/internal/modules/testmodule"
 )
 
 func TestCLIModulesEmptyListCreatesNoModuleFiles(t *testing.T) {

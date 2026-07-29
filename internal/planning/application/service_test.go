@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"brain/internal/planning"
+	"github.com/JimmyMcBride/brain/internal/planning"
 )
 
 func TestCreateBrainstormRequiresConfirmationPermissionAndEventSink(t *testing.T) {

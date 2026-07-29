@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"brain/internal/modules"
-	officialplanning "brain/internal/official/planning"
-	"brain/internal/planning/application"
+	"github.com/JimmyMcBride/brain/internal/modules"
+	officialplanning "github.com/JimmyMcBride/brain/internal/official/planning"
+	"github.com/JimmyMcBride/brain/internal/planning/application"
 )
 
 func TestCLIPlanningLocalWorkflowAndIdempotentAudit(t *testing.T) {

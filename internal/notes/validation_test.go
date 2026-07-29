@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"brain/internal/workspace"
+	"github.com/JimmyMcBride/brain/internal/workspace"
 )
 
 func TestValidateWorkspaceMarkdownRejectsNestedFrontmatter(t *testing.T) {

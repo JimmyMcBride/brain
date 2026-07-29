@@ -3,7 +3,7 @@
 <!-- brain:begin context-overview -->
 Project: `brain`
 
-Go module: `brain`
+Go module: `github.com/JimmyMcBride/brain`
 
 Primary runtime: `go`
 

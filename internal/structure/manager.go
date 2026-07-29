@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"brain/internal/index"
-	"brain/internal/workspace"
+	"github.com/JimmyMcBride/brain/internal/index"
+	"github.com/JimmyMcBride/brain/internal/workspace"
 )
 
 type Manager struct {
