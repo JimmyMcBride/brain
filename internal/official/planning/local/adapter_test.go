@@ -1,0 +1,221 @@
+package local
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"brain/internal/planning"
+	"brain/internal/planning/application"
+)
+
+func TestWorkspaceStatusClassifiesCompatibilityWithoutMutation(t *testing.T) {
+	tests := []struct {
+		name     string
+		fixture  string
+		state    application.WorkspaceState
+		writable bool
+	}{
+		{name: "missing", state: application.WorkspaceMissing},
+		{name: "compatible", fixture: "compatible", state: application.WorkspaceCompatible, writable: true},
+		{name: "future", fixture: "future", state: application.WorkspaceFutureSchema},
+		{name: "migration", fixture: "migration", state: application.WorkspaceMigrationRequired},
+		{name: "legacy", fixture: "legacy", state: application.WorkspaceUnsupportedLegacy},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			if tt.fixture != "" {
+				copyFixture(t, tt.fixture, root)
+			}
+			before := snapshotFiles(t, root)
+			status, err := New(root).Status(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if status.State != tt.state || status.Writable != tt.writable {
+				t.Fatalf("unexpected status: %#v", status)
+			}
+			after := snapshotFiles(t, root)
+			if strings.Join(before, "\n") != strings.Join(after, "\n") {
+				t.Fatalf("status mutated workspace\nbefore=%v\nafter=%v", before, after)
+			}
+		})
+	}
+}
+
+func TestAdapterReadsSchemaV3BrainstormsAndSpecs(t *testing.T) {
+	root := t.TempDir()
+	copyFixture(t, "compatible", root)
+	adapter := New(root)
+
+	brainstorms, err := adapter.ListBrainstorms(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(brainstorms) != 1 || brainstorms[0].Artifact.ID != "alpha" ||
+		brainstorms[0].Artifact.Summary != "One compatible local brainstorm." {
+		t.Fatalf("unexpected brainstorms: %#v", brainstorms)
+	}
+	specs, err := adapter.ListSpecs(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(specs) != 1 || specs[0].Artifact.ID != "alpha-spec" ||
+		specs[0].Artifact.Status != planning.SpecApproved ||
+		len(specs[0].Artifact.Verification) != 2 {
+		t.Fatalf("unexpected specs: %#v", specs)
+	}
+	if findings := planning.ValidateBrainstorm(brainstorms[0].Artifact); hasErrorFindings(findings) {
+		t.Fatalf("brainstorm did not map into valid domain value: %#v", findings)
+	}
+	if findings := planning.ValidateSpec(specs[0].Artifact); hasErrorFindings(findings) {
+		t.Fatalf("spec did not map into valid domain value: %#v", findings)
+	}
+}
+
+func TestAdapterCreatesPlanCompatibleBrainstormAtomicallyAndIdempotently(t *testing.T) {
+	root := t.TempDir()
+	copyFixture(t, "compatible", root)
+	workspacePath := filepath.Join(root, ".plan", ".meta", "workspace.json")
+	workspaceBefore, err := os.ReadFile(workspacePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapter := New(root)
+	artifact := planning.Brainstorm{ID: "new-flow", Title: "New Flow"}
+	createdAt := time.Date(2026, 7, 29, 7, 15, 0, 0, time.UTC)
+
+	first, action, err := adapter.CreateBrainstorm(context.Background(), artifact, createdAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action != application.MutationCreate || first.Path != ".plan/brainstorms/new-flow.md" {
+		t.Fatalf("unexpected create: action=%s document=%#v", action, first)
+	}
+	raw, err := os.ReadFile(filepath.Join(root, first.Path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(raw)
+	for _, required := range []string{
+		"type: brainstorm",
+		"slug: new-flow",
+		"title: New Flow",
+		"# Brainstorm: New Flow",
+		"Started: 2026-07-29T07:15:00Z",
+		"## Refinement",
+		"## Challenge",
+	} {
+		if !strings.Contains(content, required) {
+			t.Fatalf("created brainstorm missing %q:\n%s", required, content)
+		}
+	}
+	second, action, err := adapter.CreateBrainstorm(context.Background(), artifact, createdAt.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action != application.MutationUnchanged || second.Path != first.Path {
+		t.Fatalf("unexpected idempotent create: action=%s document=%#v", action, second)
+	}
+	rawAfter, err := os.ReadFile(filepath.Join(root, first.Path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(rawAfter) != content {
+		t.Fatal("idempotent rerun changed brainstorm content")
+	}
+	workspaceAfter, err := os.ReadFile(workspacePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(workspaceAfter) != string(workspaceBefore) {
+		t.Fatal("brainstorm write changed workspace metadata")
+	}
+	assertNoTemporaryFiles(t, filepath.Join(root, ".plan", "brainstorms"))
+}
+
+func TestAdapterAtomicWriteFailureLeavesNoArtifact(t *testing.T) {
+	root := t.TempDir()
+	copyFixture(t, "compatible", root)
+	writeFailure := errors.New("write failed")
+	adapter := NewWithWriter(root, func(string, []byte, os.FileMode) error {
+		return writeFailure
+	})
+	_, _, err := adapter.CreateBrainstorm(
+		context.Background(),
+		planning.Brainstorm{ID: "failed", Title: "Failed"},
+		time.Now(),
+	)
+	if !errors.Is(err, writeFailure) {
+		t.Fatalf("expected write failure, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".plan", "brainstorms", "failed.md")); !os.IsNotExist(err) {
+		t.Fatalf("failed write left artifact: %v", err)
+	}
+}
+
+func TestAdapterRejectsWritesForUnsupportedWorkspace(t *testing.T) {
+	root := t.TempDir()
+	copyFixture(t, "future", root)
+	_, _, err := New(root).CreateBrainstorm(
+		context.Background(),
+		planning.Brainstorm{ID: "blocked", Title: "Blocked"},
+		time.Now(),
+	)
+	if !errors.Is(err, application.ErrWorkspaceNotWritable) {
+		t.Fatalf("expected writable gate, got %v", err)
+	}
+}
+
+func copyFixture(t *testing.T, name, root string) {
+	t.Helper()
+	source := filepath.Join("testdata", name)
+	if err := os.CopyFS(root, os.DirFS(source)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func snapshotFiles(t *testing.T, root string) []string {
+	t.Helper()
+	var out []string
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		out = append(out, filepath.ToSlash(rel)+"\x00"+string(raw))
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+func assertNoTemporaryFiles(t *testing.T, dir string) {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if strings.Contains(entry.Name(), ".tmp-") {
+			t.Fatalf("temporary file left behind: %s", entry.Name())
+		}
+	}
+}
