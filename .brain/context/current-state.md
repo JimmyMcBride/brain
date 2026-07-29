@@ -1,5 +1,5 @@
 ---
-updated: "2026-07-28T05:43:17Z"
+updated: "2026-07-29T07:47:49Z"
 ---
 <!-- brain:begin context-current-state -->
 This file is a deterministic snapshot of the repository state at the last refresh.
@@ -10,7 +10,7 @@ This file is a deterministic snapshot of the repository state at the last refres
 - Root: `.`
 - Runtime: `go`
 - Go module: `brain`
-- Current branch: `codex/local-planning-module-spec`
+- Current branch: `develop`
 - Default branch: `develop`
 - Remote: `https://github.com/JimmyMcBride/brain.git`
 - Go test files: `37`
@@ -29,6 +29,7 @@ This file is a deterministic snapshot of the repository state at the last refres
 
 ## Local Notes
 
+- 2026-07-29: Phase 3 merged into `develop` through PR #39. Brain now ships the disabled-by-default `official.planning` module with schema-v3 local `.plan/` status, brainstorm list/show/start, and spec list/show commands. Read and write compatibility failures have distinct application errors, and stale brainstorm-creation lock timeouts identify the lock path. Ubuntu and Windows CI passed.
 - 2026-07-28: The approved Phase 1 spec at `.plan/specs/minimal-internal-module-framework.md` is implemented on its spec branch with descriptor/registry/runtime contracts, atomic project config and local grants, seven module administration commands, and cross-platform tests. The production binary still registers zero modules and Planning remains excluded.
 - 2026-07-27: Approved future direction lives in `docs/modules/`, `docs/planning/`, and ADRs 0001–0011. No Brain module runtime or Planning implementation exists yet.
 - 2026-05-14: Added `brain context audit` as an advisory context-maintenance surface. It runs deterministic repo coverage checks, can add diff-focused findings from `--since` or a session baseline, reports missing coverage and stale references, and can write reviewed `.brain/resources/changes/context-audit-...md` proposals without directly editing durable docs.
