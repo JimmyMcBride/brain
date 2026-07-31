@@ -9,17 +9,20 @@ import (
 	"github.com/JimmyMcBride/brain/planning"
 )
 
+// Service coordinates shared Planning reads and guarded mutations.
 type Service struct {
 	repository Repository
 	moduleID   string
 	now        func() time.Time
 }
 
+// Options configures host identity and time for emitted events.
 type Options struct {
 	ModuleID string
 	Now      func() time.Time
 }
 
+// New creates a Planning application service over repository.
 func New(repository Repository, options Options) *Service {
 	now := options.Now
 	if now == nil {
@@ -32,6 +35,7 @@ func New(repository Repository, options Options) *Service {
 	}
 }
 
+// Status reports workspace compatibility without requiring it.
 func (s *Service) Status(ctx context.Context) (WorkspaceStatus, error) {
 	if s == nil || s.repository == nil {
 		return WorkspaceStatus{}, fmt.Errorf("planning repository is unavailable")
@@ -39,6 +43,7 @@ func (s *Service) Status(ctx context.Context) (WorkspaceStatus, error) {
 	return s.repository.Status(ctx)
 }
 
+// ListBrainstorms returns readable brainstorm documents.
 func (s *Service) ListBrainstorms(ctx context.Context) ([]BrainstormDocument, error) {
 	if err := s.requireReadable(ctx); err != nil {
 		return nil, err
@@ -46,6 +51,7 @@ func (s *Service) ListBrainstorms(ctx context.Context) ([]BrainstormDocument, er
 	return s.repository.ListBrainstorms(ctx)
 }
 
+// GetBrainstorm returns one readable brainstorm document.
 func (s *Service) GetBrainstorm(ctx context.Context, id planning.ArtifactID) (BrainstormDocument, error) {
 	if err := id.Validate(); err != nil {
 		return BrainstormDocument{}, err
@@ -56,6 +62,7 @@ func (s *Service) GetBrainstorm(ctx context.Context, id planning.ArtifactID) (Br
 	return s.repository.GetBrainstorm(ctx, id)
 }
 
+// ListSpecs returns readable validated spec documents.
 func (s *Service) ListSpecs(ctx context.Context) ([]SpecDocument, error) {
 	if err := s.requireReadable(ctx); err != nil {
 		return nil, err
@@ -63,6 +70,7 @@ func (s *Service) ListSpecs(ctx context.Context) ([]SpecDocument, error) {
 	return s.repository.ListSpecs(ctx)
 }
 
+// GetSpec returns one readable validated spec document.
 func (s *Service) GetSpec(ctx context.Context, id planning.ArtifactID) (SpecDocument, error) {
 	if err := id.Validate(); err != nil {
 		return SpecDocument{}, err
@@ -73,6 +81,7 @@ func (s *Service) GetSpec(ctx context.Context, id planning.ArtifactID) (SpecDocu
 	return s.repository.GetSpec(ctx, id)
 }
 
+// PreviewBrainstorm returns the mutation needed for a title without writing.
 func (s *Service) PreviewBrainstorm(ctx context.Context, title string) (BrainstormPreview, error) {
 	if err := s.requireWritable(ctx); err != nil {
 		return BrainstormPreview{}, err
@@ -100,6 +109,7 @@ func (s *Service) PreviewBrainstorm(ctx context.Context, title string) (Brainsto
 	}, nil
 }
 
+// CreateBrainstorm applies a confirmed, authorized, audited brainstorm mutation.
 func (s *Service) CreateBrainstorm(
 	ctx context.Context,
 	input CreateBrainstormInput,
@@ -150,14 +160,19 @@ func (s *Service) CreateBrainstorm(
 }
 
 func (s *Service) requireReadable(ctx context.Context) error {
+	_, err := s.readableWorkspace(ctx)
+	return err
+}
+
+func (s *Service) readableWorkspace(ctx context.Context) (WorkspaceStatus, error) {
 	status, err := s.Status(ctx)
 	if err != nil {
-		return err
+		return WorkspaceStatus{}, err
 	}
 	if status.State != WorkspaceCompatible {
-		return fmt.Errorf("%w: %s", ErrWorkspaceNotReadable, status.Message)
+		return WorkspaceStatus{}, fmt.Errorf("%w: %s", ErrWorkspaceNotReadable, status.Message)
 	}
-	return nil
+	return status, nil
 }
 
 func (s *Service) requireWritable(ctx context.Context) error {

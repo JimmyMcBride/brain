@@ -1,5 +1,5 @@
 ---
-updated: "2026-07-31T19:35:02Z"
+updated: "2026-07-31T20:00:05Z"
 ---
 # Workflows
 
@@ -64,6 +64,6 @@ After `brain adopt` creates starter context, the AI agent must scan the repo bef
 - 2026-04-20: Do not carry repo-owned proposal or context files back onto `develop`. Resolve `.brain/resources/changes/*`, `.brain/`, `docs/`, and contract-file leftovers on the feature branch by merging them in the active PR or intentionally removing them after review.
 - 2026-05-14: `scripts/next-release-tag.sh` is the release helper for calculating the next stable semver tag during release automation.
 - 2026-07-29: Planning implementation follows approved spec -> runtime slices -> one commit per completed slice -> one full-spec PR. Do not persist slice files during shaping.
-- 2026-07-31: Planning verification must cover public `planning`, `internal/planning/application`, `internal/official/planning`, `internal/official/planning/local`, and `cmd`; run focused tests, affected-package race/vet, whole-repo test/build, and `plan check`. Public-boundary changes must also pass canonical external-import, export-surface, stdlib-dependency, and no-`replace` gates.
-- 2026-07-29: Compatibility fixtures live under `internal/official/planning/local/testdata`. Verify missing/current/future/migration/unsupported states, atomic/idempotent writes, disabled-module isolation, and standalone Plan readability of Brain-written brainstorms.
+- 2026-07-31: Planning verification must cover public `planning`, `planning/application`, `planning/local`, `internal/planning/conformance`, `internal/official/planning`, and `cmd`; run focused tests, affected-package race/vet, whole-repo test/build, and `plan check`. Public-boundary changes must also pass canonical external-import, export-surface, dependency, and no-`replace` gates.
+- 2026-07-31: Public local-adapter fixtures live under `planning/local/testdata`; pinned cross-host fixtures and normalized output/file goldens live under `internal/planning/conformance/testdata`. Verify missing/current/future/migration/unsupported states, atomic/idempotent writes, disabled-module isolation, and standalone Plan readability of Brain-written artifacts.
 - 2026-07-29: Before migrating a Phase 4 command family, add its standalone invocation, fixture, normalized output, exit-code, filesystem, and rerun contracts to `internal/planning/conformance/testdata/manifest.yaml`. Keep the baseline pinned, run conformance package tests, and reject unexplained drift before moving implementation.

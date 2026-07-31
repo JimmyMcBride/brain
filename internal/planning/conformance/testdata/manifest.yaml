@@ -433,6 +433,7 @@ cases:
     command: status
     fixture: fixtures/schema-v3-compatible
     args: [--project, "<PROJECT>", status]
+    native_args: [--project, "<PROJECT>", plan, status]
     expected:
       exit_code: 0
       stdout: golden/status-compatible.stdout
@@ -449,6 +450,7 @@ cases:
     command: status
     fixture: empty
     args: [--project, "<PROJECT>", status]
+    native_args: [--project, "<PROJECT>", plan, status]
     expected:
       exit_code: 1
       stdout: empty
@@ -465,6 +467,7 @@ cases:
     command: status
     fixture: fixtures/schema-v4-future
     args: [--project, "<PROJECT>", status]
+    native_args: [--project, "<PROJECT>", plan, status]
     expected:
       exit_code: 1
       stdout: empty
@@ -477,3 +480,93 @@ cases:
       stderr: structural
       files: exact
       rerun: exact
+  - id: check.default.blocking
+    command: check.default
+    fixture: fixtures/schema-v3-compatible
+    args: [--project, "<PROJECT>", check]
+    native_args: [--project, "<PROJECT>", plan, check]
+    expected:
+      exit_code: 1
+      stdout: golden/check-project-blocking.stdout
+      stderr: golden/check-blocking.stderr
+      files: unchanged
+      rerun: same
+    compare:
+      exit_code: exact
+      stdout: structural
+      stderr: structural
+      files: exact
+      rerun: exact
+  - id: check.project.blocking
+    command: check.project
+    fixture: fixtures/schema-v3-compatible
+    args: [--project, "<PROJECT>", check, project, ignored]
+    native_args: [--project, "<PROJECT>", plan, check, project]
+    intentional_differences:
+      - Brain removes standalone Plan's ignored project slug argument.
+    expected:
+      exit_code: 1
+      stdout: golden/check-project-blocking.stdout
+      stderr: golden/check-blocking.stderr
+      files: unchanged
+      rerun: same
+    compare:
+      exit_code: exact
+      stdout: structural
+      stderr: structural
+      files: exact
+      rerun: exact
+  - id: check.spec.blocking
+    command: check.spec
+    fixture: fixtures/schema-v3-compatible
+    args: [--project, "<PROJECT>", check, spec, alpha-spec]
+    native_args: [--project, "<PROJECT>", plan, check, spec, alpha-spec]
+    expected:
+      exit_code: 1
+      stdout: golden/check-spec-blocking.stdout
+      stderr: golden/check-blocking.stderr
+      files: unchanged
+      rerun: same
+    compare:
+      exit_code: exact
+      stdout: structural
+      stderr: structural
+      files: exact
+      rerun: exact
+  - id: roadmap.show
+    command: roadmap.show
+    fixture: fixtures/schema-v3-compatible
+    args: [--project, "<PROJECT>", roadmap, show]
+    native_args: [--project, "<PROJECT>", plan, roadmap, show]
+    expected:
+      exit_code: 0
+      stdout: golden/roadmap-show.stdout
+      stderr: empty
+      files: unchanged
+      rerun: same
+    compare:
+      exit_code: exact
+      stdout: structural
+      stderr: structural
+      files: exact
+      rerun: exact
+  - id: roadmap.edit.body
+    command: roadmap.edit
+    fixture: fixtures/schema-v3-compatible
+    args: [--project, "<PROJECT>", roadmap, edit, --body, "# Roadmap\n\n## Overview\n\nUpdated fixture roadmap.\n"]
+    native_args: [--project, "<PROJECT>", plan, roadmap, edit, --body, "# Roadmap\n\n## Overview\n\nUpdated fixture roadmap.\n", --confirm]
+    intentional_differences:
+      - Brain requires explicit confirmation before replacing roadmap Markdown.
+      - Brain reports an unchanged rerun and emits no duplicate audit event.
+    expected:
+      exit_code: 0
+      stdout: golden/roadmap-edit.stdout
+      stderr: empty
+      files: golden/roadmap-edit.files
+      rerun: same
+    compare:
+      exit_code: exact
+      stdout: structural
+      stderr: structural
+      files: exact
+      rerun: structural

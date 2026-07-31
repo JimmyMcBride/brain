@@ -6,8 +6,8 @@ import (
 	"sync"
 
 	"github.com/JimmyMcBride/brain/internal/modules"
-	"github.com/JimmyMcBride/brain/internal/official/planning/local"
-	"github.com/JimmyMcBride/brain/internal/planning/application"
+	"github.com/JimmyMcBride/brain/planning/application"
+	"github.com/JimmyMcBride/brain/planning/local"
 )
 
 const (
@@ -35,10 +35,14 @@ func Registration() modules.Registration {
 			Permissions: []string{
 				application.PermissionRead,
 				application.PermissionBrainstorm,
+				application.PermissionRoadmap,
 				PermissionContextRead,
 			},
 			Commands: []string{CommandGroup},
-			Events:   []string{application.EventBrainstormCreated},
+			Events: []string{
+				application.EventBrainstormCreated,
+				application.EventRoadmapUpdated,
+			},
 		},
 		Factory: func() modules.Module {
 			return &Module{}

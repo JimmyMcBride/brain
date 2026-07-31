@@ -10,6 +10,7 @@ command family into Brain-owned shared implementation.
 - the native mapping for Phase 4 local commands
 - normalization rules for paths and line endings
 - captured command cases and their output, filesystem, and rerun contracts
+- native Brain arguments and any explicit host-policy differences
 
 Golden output is captured manually from a standalone binary built at the pinned
 revision. Each fixture is copied into an independent project root named
@@ -26,5 +27,10 @@ and rerun behavior are exact. JSON will be exact when JSON-producing command
 families enter the manifest.
 
 The initial cases freeze `plan status` against a compatible schema-v3 workspace,
-an empty project, and a future-schema workspace. Later Phase 4 slices add cases
-for their command families before moving implementation.
+an empty project, and a future-schema workspace. The next cases freeze local
+project/spec checks and roadmap reads/replacements. A file golden lists each
+changed relative path, followed by `---` and its complete normalized content.
+Roadmap writes record Brain's required confirmation and idempotent `unchanged`
+rerun as intentional host-policy differences from the standalone baseline.
+Later Phase 4 slices add cases for their command families before moving
+implementation.

@@ -1,3 +1,6 @@
+---
+updated: "2026-07-31T19:58:43Z"
+---
 # Planning Module Implementation Roadmap
 
 ## Phase 0 — Architecture and Inventory
@@ -42,15 +45,15 @@ and local tests.
 
 ## Phase 4 — Plan CLI Compatibility
 
-Status: In progress from `.plan/specs/plan-cli-compatibility.md`. The first
-execution slice merged through PR #46: it pins standalone Plan revision
-`53ebd96`, records the complete command disposition, and captures initial
-black-box `status` cases in `internal/planning/conformance`. The second slice
-normalizes Brain's Go module path to `github.com/JimmyMcBride/brain` without
-moving packages, exposing APIs, or changing behavior. The third slice exposes
-the storage-neutral domain at `github.com/JimmyMcBride/brain/planning`, locks
-its reviewed exports and stdlib-only dependencies, and leaves application,
-adapter, conformance, and CLI behavior internal and unchanged.
+Status: In progress from `.plan/specs/plan-cli-compatibility.md`. PR #46
+pinned standalone Plan revision `53ebd96`, recorded the complete command
+disposition, and captured initial black-box `status` cases. PR #47 normalized
+Brain's Go module path. PR #48 exposed the stdlib-only domain at
+`github.com/JimmyMcBride/brain/planning`. The fourth slice captures status,
+project/spec check, and roadmap contracts; exposes importable
+`planning/application` and `planning/local` packages with locked exports and
+dependencies; and migrates native aggregate status, check, and guarded roadmap
+commands behind shared conformance tests.
 
 Deliver wrapper/shared implementation, command mapping, warning policy, docs, and
 script/exit/JSON compatibility tests.
@@ -106,7 +109,7 @@ lifecycle, diagnostics, and distribution direction.
 
 ## Exact Next Slice
 
-> After the public domain boundary merges, capture the remaining workspace,
-> query, check, and roadmap contracts needed for the first shared command
-> family. Then expose only the application/local seams those cases require and
-> migrate that family behind passing conformance tests.
+> After workspace, query, check, and roadmap behavior merges, capture the local
+> brainstorm, guided-session, and direct-promotion contracts. Then expose only
+> the additional application/local seams those cases require and migrate that
+> family behind passing conformance tests.
