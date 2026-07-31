@@ -10,6 +10,7 @@ const executionPlaceholder = "define execution slices when implementation begins
 
 var nonSlugCharacters = regexp.MustCompile(`[^a-z0-9]+`)
 
+// SliceCandidate is an input candidate for runtime-slice derivation.
 type SliceCandidate struct {
 	ID           ArtifactID
 	Title        string
@@ -17,6 +18,7 @@ type SliceCandidate struct {
 	Verification []string
 }
 
+// ExecutionInput supplies an execution identity, candidate slices, and gates.
 type ExecutionInput struct {
 	ID                  ArtifactID
 	ExplicitCandidates  []SliceCandidate
@@ -26,20 +28,26 @@ type ExecutionInput struct {
 	Blockers            []ArtifactID
 }
 
+// SliceState identifies a runtime slice lifecycle state.
 type SliceState string
 
 const (
+	// SlicePending has not started.
 	SlicePending SliceState = "pending"
-	SliceActive  SliceState = "active"
-	SliceDone    SliceState = "done"
+	// SliceActive is the current execution unit.
+	SliceActive SliceState = "active"
+	// SliceDone completed with evidence.
+	SliceDone SliceState = "done"
 )
 
+// Evidence records verification for a completed runtime slice.
 type Evidence struct {
 	Kind      string
 	Summary   string
 	Reference string
 }
 
+// RuntimeSlice is an ephemeral, ordered execution unit.
 type RuntimeSlice struct {
 	ID           ArtifactID
 	Title        string
@@ -50,13 +58,17 @@ type RuntimeSlice struct {
 	Evidence     []Evidence
 }
 
+// ExecutionState identifies an execution plan lifecycle state.
 type ExecutionState string
 
 const (
-	ExecutionActive   ExecutionState = "active"
+	// ExecutionActive has an active runtime slice.
+	ExecutionActive ExecutionState = "active"
+	// ExecutionComplete has completed every runtime slice.
 	ExecutionComplete ExecutionState = "complete"
 )
 
+// ExecutionPlan is a deterministic ephemeral plan for one spec execution.
 type ExecutionPlan struct {
 	ID     ArtifactID
 	SpecID ArtifactID

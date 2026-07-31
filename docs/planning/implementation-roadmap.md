@@ -47,7 +47,10 @@ execution slice merged through PR #46: it pins standalone Plan revision
 `53ebd96`, records the complete command disposition, and captures initial
 black-box `status` cases in `internal/planning/conformance`. The second slice
 normalizes Brain's Go module path to `github.com/JimmyMcBride/brain` without
-moving packages, exposing APIs, or changing behavior.
+moving packages, exposing APIs, or changing behavior. The third slice exposes
+the storage-neutral domain at `github.com/JimmyMcBride/brain/planning`, locks
+its reviewed exports and stdlib-only dependencies, and leaves application,
+adapter, conformance, and CLI behavior internal and unchanged.
 
 Deliver wrapper/shared implementation, command mapping, warning policy, docs, and
 script/exit/JSON compatibility tests.
@@ -103,7 +106,7 @@ lifecycle, diagnostics, and distribution direction.
 
 ## Exact Next Slice
 
-> After the isolated module-path normalization merges, expose the smallest
-> Brain-owned Planning package required by the approved shared implementation
-> boundary. Prove it with an external-consumer compile test before moving any
-> additional Planning surface.
+> After the public domain boundary merges, capture the remaining workspace,
+> query, check, and roadmap contracts needed for the first shared command
+> family. Then expose only the application/local seams those cases require and
+> migrate that family behind passing conformance tests.

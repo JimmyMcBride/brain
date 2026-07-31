@@ -2,8 +2,10 @@
 
 ## Status
 
-Phase 2 is implemented in `internal/planning`. The package contains pure domain
-values and rules only; local persistence and module wiring remain Phase 3 work.
+Phase 2's pure domain values and rules are importable from
+`github.com/JimmyMcBride/brain/planning`. The package remains stdlib-only;
+application services, local persistence, conformance assets, and module wiring
+remain internal while their cross-host contracts are captured.
 
 ## Phase 2 Boundary
 

@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/JimmyMcBride/brain/internal/planning"
 	"github.com/JimmyMcBride/brain/internal/planning/application"
+	"github.com/JimmyMcBride/brain/planning"
 
 	"gopkg.in/yaml.v3"
 )
