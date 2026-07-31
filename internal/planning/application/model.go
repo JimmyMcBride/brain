@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/JimmyMcBride/brain/internal/planning"
+	"github.com/JimmyMcBride/brain/planning"
 )
 
 const (

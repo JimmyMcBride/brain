@@ -9,16 +9,26 @@ import (
 type ErrorCode string
 
 const (
+	// ErrInvalidIdentifier reports a non-canonical artifact identifier.
 	ErrInvalidIdentifier ErrorCode = "invalid_identifier"
-	ErrInvalidArtifact   ErrorCode = "invalid_artifact"
-	ErrInvalidOwnership  ErrorCode = "invalid_ownership"
+	// ErrInvalidArtifact reports invalid artifact content or relationships.
+	ErrInvalidArtifact ErrorCode = "invalid_artifact"
+	// ErrInvalidOwnership reports an unsupported ownership mode.
+	ErrInvalidOwnership ErrorCode = "invalid_ownership"
+	// ErrInvalidTransition reports an unsupported lifecycle transition.
 	ErrInvalidTransition ErrorCode = "invalid_transition"
-	ErrApprovalRequired  ErrorCode = "approval_required"
+	// ErrApprovalRequired reports a missing approval decision.
+	ErrApprovalRequired ErrorCode = "approval_required"
+	// ErrDependencyMissing reports a reference to an absent dependency.
 	ErrDependencyMissing ErrorCode = "dependency_missing"
-	ErrDependencyCycle   ErrorCode = "dependency_cycle"
-	ErrNotReady          ErrorCode = "not_ready"
-	ErrInvalidExecution  ErrorCode = "invalid_execution"
-	ErrInvalidSlice      ErrorCode = "invalid_slice"
+	// ErrDependencyCycle reports a cycle in the spec dependency graph.
+	ErrDependencyCycle ErrorCode = "dependency_cycle"
+	// ErrNotReady reports a spec that cannot begin execution.
+	ErrNotReady ErrorCode = "not_ready"
+	// ErrInvalidExecution reports inconsistent execution state.
+	ErrInvalidExecution ErrorCode = "invalid_execution"
+	// ErrInvalidSlice reports an invalid runtime slice or evidence record.
+	ErrInvalidSlice ErrorCode = "invalid_slice"
 )
 
 // DomainError carries a stable code plus domain identifiers and reasons.

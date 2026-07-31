@@ -5,21 +5,28 @@ import (
 	"slices"
 )
 
+// QueueState identifies a spec's computed position in an execution queue.
 type QueueState string
 
 const (
-	QueueReady   QueueState = "ready"
+	// QueueReady means the spec may become current.
+	QueueReady QueueState = "ready"
+	// QueueCurrent means the spec is actively implementing.
 	QueueCurrent QueueState = "current"
+	// QueueBlocked means the spec cannot execute yet.
 	QueueBlocked QueueState = "blocked"
-	QueueDone    QueueState = "done"
+	// QueueDone means the spec completed execution.
+	QueueDone QueueState = "done"
 )
 
+// QueueEntry is one computed spec queue record.
 type QueueEntry struct {
 	SpecID  ArtifactID
 	State   QueueState
 	Reasons []string
 }
 
+// Queue is a deterministic ordered view over specs.
 type Queue struct {
 	Entries []QueueEntry
 }

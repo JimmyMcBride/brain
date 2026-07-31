@@ -9,8 +9,8 @@ import (
 	"github.com/JimmyMcBride/brain/internal/app"
 	"github.com/JimmyMcBride/brain/internal/history"
 	"github.com/JimmyMcBride/brain/internal/modules"
-	"github.com/JimmyMcBride/brain/internal/planning"
 	"github.com/JimmyMcBride/brain/internal/planning/application"
+	"github.com/JimmyMcBride/brain/planning"
 
 	"github.com/spf13/cobra"
 )

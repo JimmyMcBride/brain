@@ -9,9 +9,10 @@ mapped local workflow, full command disposition, compatibility contract, and
 warning policy. Phase 4 implementation has started with a versioned conformance
 manifest pinned to standalone Plan revision `53ebd96`; PR #46 merged its root
 command disposition and first compatible, missing-workspace, and future-schema
-`status` baselines. The current isolated slice normalizes Brain's Go module path
-to `github.com/JimmyMcBride/brain` without exposing Planning packages or
-changing behavior.
+`status` baselines. PR #47 normalized Brain's Go module path. The current slice
+exposes the storage-neutral domain at `github.com/JimmyMcBride/brain/planning`
+with a locked export surface, stdlib-only dependency gate, and canonical
+external-package compile test. CLI behavior remains unchanged.
 
 ## Command Families
 

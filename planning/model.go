@@ -9,8 +9,10 @@ import (
 
 var artifactIDPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
+// ArtifactID is a canonical lowercase slug identifying a Planning artifact.
 type ArtifactID string
 
+// Validate reports whether the identifier is a canonical lowercase slug.
 func (id ArtifactID) Validate() error {
 	value := string(id)
 	if value == "" || strings.TrimSpace(value) != value || !artifactIDPattern.MatchString(value) {
@@ -19,13 +21,18 @@ func (id ArtifactID) Validate() error {
 	return nil
 }
 
+// ArtifactKind identifies a supported Planning aggregate.
 type ArtifactKind string
 
 const (
+	// ArtifactBrainstorm identifies a brainstorm.
 	ArtifactBrainstorm ArtifactKind = "brainstorm"
-	ArtifactSpec       ArtifactKind = "spec"
+	// ArtifactSpec identifies a spec.
+	ArtifactSpec ArtifactKind = "spec"
+	// ArtifactInitiative identifies an initiative.
 	ArtifactInitiative ArtifactKind = "initiative"
-	ArtifactRoadmap    ArtifactKind = "roadmap"
+	// ArtifactRoadmap identifies a roadmap.
+	ArtifactRoadmap ArtifactKind = "roadmap"
 )
 
 func (kind ArtifactKind) valid() bool {
@@ -37,11 +44,13 @@ func (kind ArtifactKind) valid() bool {
 	}
 }
 
+// ArtifactRef identifies an artifact by kind and ID.
 type ArtifactRef struct {
 	Kind ArtifactKind
 	ID   ArtifactID
 }
 
+// Validate reports whether the reference has a supported kind and valid ID.
 func (ref ArtifactRef) Validate() error {
 	if !ref.Kind.valid() {
 		return domainError(ErrInvalidArtifact, []ArtifactID{ref.ID}, fmt.Sprintf("unknown artifact kind %q", ref.Kind))
@@ -49,6 +58,7 @@ func (ref ArtifactRef) Validate() error {
 	return ref.ID.Validate()
 }
 
+// SourceReference records provenance for a Planning artifact.
 type SourceReference struct {
 	URI        string
 	Revision   string
@@ -71,14 +81,19 @@ func validateSources(kind ArtifactKind, owner ArtifactID, sources []SourceRefere
 	return findings
 }
 
+// OwnershipMode identifies the supported source-of-truth arrangement.
 type OwnershipMode string
 
 const (
-	OwnershipLocal  OwnershipMode = "local"
+	// OwnershipLocal keeps Planning artifacts in the local workspace.
+	OwnershipLocal OwnershipMode = "local"
+	// OwnershipGitHub keeps the relevant Planning layer in GitHub.
 	OwnershipGitHub OwnershipMode = "github"
+	// OwnershipHybrid splits ownership explicitly between local and GitHub layers.
 	OwnershipHybrid OwnershipMode = "hybrid"
 )
 
+// Validate reports whether the ownership mode is supported.
 func (mode OwnershipMode) Validate() error {
 	switch mode {
 	case OwnershipLocal, OwnershipGitHub, OwnershipHybrid:
@@ -88,13 +103,18 @@ func (mode OwnershipMode) Validate() error {
 	}
 }
 
+// SpecStatus identifies a spec lifecycle state.
 type SpecStatus string
 
 const (
-	SpecDraft        SpecStatus = "draft"
-	SpecApproved     SpecStatus = "approved"
+	// SpecDraft is editable and not approved for execution.
+	SpecDraft SpecStatus = "draft"
+	// SpecApproved is approved and ready for execution when otherwise unblocked.
+	SpecApproved SpecStatus = "approved"
+	// SpecImplementing has an active execution plan.
 	SpecImplementing SpecStatus = "implementing"
-	SpecDone         SpecStatus = "done"
+	// SpecDone has completed execution.
+	SpecDone SpecStatus = "done"
 )
 
 func (status SpecStatus) valid() bool {
@@ -106,14 +126,19 @@ func (status SpecStatus) valid() bool {
 	}
 }
 
+// ApprovalState identifies the current Planning approval decision.
 type ApprovalState string
 
 const (
-	ApprovalPending  ApprovalState = "pending"
+	// ApprovalPending means no approval decision has been made.
+	ApprovalPending ApprovalState = "pending"
+	// ApprovalApproved permits the approved transition or execution.
 	ApprovalApproved ApprovalState = "approved"
+	// ApprovalRejected records an explicit rejection.
 	ApprovalRejected ApprovalState = "rejected"
 )
 
+// Approval records a Planning approval decision and optional reason.
 type Approval struct {
 	State  ApprovalState
 	Reason string
@@ -128,6 +153,7 @@ func (approval Approval) valid() bool {
 	}
 }
 
+// Brainstorm is a storage-neutral discovery artifact.
 type Brainstorm struct {
 	ID      ArtifactID
 	Title   string
@@ -135,6 +161,7 @@ type Brainstorm struct {
 	Sources []SourceReference
 }
 
+// Spec is a canonical storage-neutral execution contract.
 type Spec struct {
 	ID                  ArtifactID
 	Title               string
@@ -148,6 +175,7 @@ type Spec struct {
 	UnresolvedQuestions []string
 }
 
+// Initiative groups related specs without replacing them as canonical contracts.
 type Initiative struct {
 	ID      ArtifactID
 	Title   string
@@ -156,6 +184,7 @@ type Initiative struct {
 	Sources []SourceReference
 }
 
+// Roadmap is an ordered view of spec and initiative intent.
 type Roadmap struct {
 	ID      ArtifactID
 	Title   string
@@ -163,19 +192,25 @@ type Roadmap struct {
 	Sources []SourceReference
 }
 
+// RoadmapEntry references one roadmap item and its completion state.
 type RoadmapEntry struct {
 	Ref  ArtifactRef
 	Done bool
 }
 
+// FindingSeverity identifies the impact of a domain finding.
 type FindingSeverity string
 
 const (
-	SeverityInfo    FindingSeverity = "info"
+	// SeverityInfo reports contextual information.
+	SeverityInfo FindingSeverity = "info"
+	// SeverityWarning reports a non-blocking concern.
 	SeverityWarning FindingSeverity = "warning"
-	SeverityError   FindingSeverity = "error"
+	// SeverityError reports a domain validation failure.
+	SeverityError FindingSeverity = "error"
 )
 
+// Finding describes a stable domain validation result.
 type Finding struct {
 	Code     ErrorCode
 	Severity FindingSeverity
@@ -183,11 +218,13 @@ type Finding struct {
 	Artifact ArtifactRef
 }
 
+// ValidateBrainstorm returns deterministic findings for a brainstorm.
 func ValidateBrainstorm(brainstorm Brainstorm) []Finding {
 	findings := validateIdentity(ArtifactBrainstorm, brainstorm.ID, brainstorm.Title)
 	return append(findings, validateSources(ArtifactBrainstorm, brainstorm.ID, brainstorm.Sources)...)
 }
 
+// ValidateSpec returns deterministic findings for a spec.
 func ValidateSpec(spec Spec) []Finding {
 	findings := validateIdentity(ArtifactSpec, spec.ID, spec.Title)
 	if !spec.Status.valid() {
@@ -237,6 +274,7 @@ func ValidateSpec(spec Spec) []Finding {
 	return append(findings, validateSources(ArtifactSpec, spec.ID, spec.Sources)...)
 }
 
+// ValidateInitiative returns deterministic findings for an initiative.
 func ValidateInitiative(initiative Initiative) []Finding {
 	findings := validateIdentity(ArtifactInitiative, initiative.ID, initiative.Title)
 	seen := map[ArtifactID]struct{}{}
@@ -253,6 +291,7 @@ func ValidateInitiative(initiative Initiative) []Finding {
 	return append(findings, validateSources(ArtifactInitiative, initiative.ID, initiative.Sources)...)
 }
 
+// ValidateRoadmap returns deterministic findings for a roadmap.
 func ValidateRoadmap(roadmap Roadmap) []Finding {
 	findings := validateIdentity(ArtifactRoadmap, roadmap.ID, roadmap.Title)
 	seen := map[ArtifactRef]struct{}{}

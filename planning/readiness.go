@@ -6,16 +6,23 @@ import (
 	"strings"
 )
 
+// ReadinessState identifies a computed spec-readiness result.
 type ReadinessState string
 
 const (
-	ReadinessClarifying      ReadinessState = "clarifying"
-	ReadinessReady           ReadinessState = "ready"
-	ReadinessBlocked         ReadinessState = "blocked"
+	// ReadinessClarifying means unresolved questions remain.
+	ReadinessClarifying ReadinessState = "clarifying"
+	// ReadinessReady means execution may begin.
+	ReadinessReady ReadinessState = "ready"
+	// ReadinessBlocked means dependencies or external blockers prevent execution.
+	ReadinessBlocked ReadinessState = "blocked"
+	// ReadinessNeedsRefinement means the spec or approval is incomplete.
 	ReadinessNeedsRefinement ReadinessState = "needs_refinement"
-	ReadinessDone            ReadinessState = "done"
+	// ReadinessDone means execution already completed.
+	ReadinessDone ReadinessState = "done"
 )
 
+// Readiness is a computed state with deterministic reasons.
 type Readiness struct {
 	State   ReadinessState
 	Reasons []string

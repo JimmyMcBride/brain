@@ -20,6 +20,7 @@ Primary runtime: `go`
 - `cmd/`
 - `docs/`
 - `internal/`
+- `planning/`
 - `scripts/`
 - `skills/`
 - `templates/`
