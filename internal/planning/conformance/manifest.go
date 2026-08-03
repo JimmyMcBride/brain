@@ -105,7 +105,11 @@ func ReadGolden(name string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("read conformance golden %s: %w", name, err)
 	}
-	return string(raw), nil
+	return normalizeGolden(string(raw)), nil
+}
+
+func normalizeGolden(value string) string {
+	return strings.ReplaceAll(value, "\r\n", "\n")
 }
 
 func Fixture(name string) (fs.FS, error) {

@@ -33,6 +33,12 @@ func TestManifestRevisionErrorIncludesInvalidValue(t *testing.T) {
 	}
 }
 
+func TestNormalizeGoldenUsesManifestLineEndings(t *testing.T) {
+	if got, want := normalizeGolden("first\r\nsecond\r\n"), "first\nsecond\n"; got != want {
+		t.Fatalf("unexpected normalized golden: got %q want %q", got, want)
+	}
+}
+
 func TestManifestCoversPhaseFourMappedCommands(t *testing.T) {
 	manifest, err := Load()
 	if err != nil {

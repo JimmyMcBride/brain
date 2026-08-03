@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -121,8 +122,10 @@ func TestAdapterReadsCheckDocumentsAndReplacesRoadmapAtomically(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := info.Mode().Perm(); got != 0o600 {
-		t.Fatalf("roadmap mode changed: got %o want 600", got)
+	if runtime.GOOS != "windows" {
+		if got := info.Mode().Perm(); got != 0o600 {
+			t.Fatalf("roadmap mode changed: got %o want 600", got)
+		}
 	}
 	assertNoTemporaryFiles(t, filepath.Join(root, ".plan"))
 }

@@ -119,7 +119,7 @@ func addPlanningCommand(root *cobra.Command, _ *rootFlagsState, loadApp appLoade
 	roadmapEditCmd := &cobra.Command{
 		Use: "edit", Short: "Edit ROADMAP.md via --body, --stdin, or an editor", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return withPlanningService(cmd, loadApp, application.PermissionRoadmap, func(appCtx *app.App, service *application.Service, authorizer planningAuthorizer, _ string) error {
+			return withPlanningService(cmd, loadApp, application.PermissionRead, func(appCtx *app.App, service *application.Service, authorizer planningAuthorizer, _ string) error {
 				usingEditor := !roadmapStdin && roadmapBody == ""
 				if usingEditor && !confirmRoadmap {
 					return fmt.Errorf("%w: pass --confirm before opening the roadmap editor", application.ErrConfirmationRequired)
@@ -339,16 +339,24 @@ func resolvePlanningCheckInput(args []string) (application.CheckInput, error) {
 	case 0:
 		return application.CheckInput{}, nil
 	case 1:
-		if args[0] == "project" {
+		switch args[0] {
+		case "project":
 			return application.CheckInput{}, nil
-		}
-		return application.CheckInput{}, fmt.Errorf("unsupported check scope %q", args[0])
-	case 2:
-		if args[0] != "spec" {
+		case "spec":
+			return application.CheckInput{}, errors.New("check spec requires a slug")
+		default:
 			return application.CheckInput{}, fmt.Errorf("unsupported check scope %q", args[0])
 		}
-		id := planning.ArtifactID(args[1])
-		return application.CheckInput{SpecID: &id}, nil
+	case 2:
+		switch args[0] {
+		case "project":
+			return application.CheckInput{}, errors.New("check project does not accept arguments")
+		case "spec":
+			id := planning.ArtifactID(args[1])
+			return application.CheckInput{SpecID: &id}, nil
+		default:
+			return application.CheckInput{}, fmt.Errorf("unsupported check scope %q", args[0])
+		}
 	default:
 		return application.CheckInput{}, fmt.Errorf("invalid check scope")
 	}
@@ -405,7 +413,10 @@ func editPlanningText(initial, editor string) (string, error) {
 	if err := file.Close(); err != nil {
 		return "", err
 	}
-	parts := strings.Fields(command)
+	parts, err := splitEditorCommand(command)
+	if err != nil {
+		return "", err
+	}
 	process := exec.Command(parts[0], append(parts[1:], path)...)
 	process.Stdin = os.Stdin
 	process.Stdout = os.Stdout
@@ -418,6 +429,50 @@ func editPlanningText(initial, editor string) (string, error) {
 		return "", err
 	}
 	return string(raw), nil
+}
+
+func splitEditorCommand(command string) ([]string, error) {
+	var parts []string
+	var part strings.Builder
+	var quote rune
+	hasPart := false
+	flush := func() {
+		if !hasPart {
+			return
+		}
+		parts = append(parts, part.String())
+		part.Reset()
+		hasPart = false
+	}
+	for _, char := range command {
+		if quote != 0 {
+			if char == quote {
+				quote = 0
+				continue
+			}
+			part.WriteRune(char)
+			hasPart = true
+			continue
+		}
+		switch {
+		case char == '\'' || char == '"':
+			quote = char
+			hasPart = true
+		case char == ' ' || char == '\t' || char == '\r' || char == '\n':
+			flush()
+		default:
+			part.WriteRune(char)
+			hasPart = true
+		}
+	}
+	if quote != 0 {
+		return nil, errors.New("editor command has an unterminated quote")
+	}
+	flush()
+	if len(parts) == 0 || parts[0] == "" {
+		return nil, errors.New("editor command has no executable")
+	}
+	return parts, nil
 }
 
 type planningArtifactOutput struct {

@@ -181,6 +181,55 @@ func TestCLIPlanningFutureSchemaIsReadOnly(t *testing.T) {
 	}
 }
 
+func TestResolvePlanningCheckInputReportsScopeArity(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "spec missing slug", args: []string{"spec"}, want: "check spec requires a slug"},
+		{name: "project extra argument", args: []string{"project", "extra"}, want: "check project does not accept arguments"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := resolvePlanningCheckInput(tt.args)
+			if err == nil || err.Error() != tt.want {
+				t.Fatalf("got %v want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestSplitEditorCommandPreservesQuotedPaths(t *testing.T) {
+	tests := []struct {
+		name    string
+		command string
+		want    []string
+	}{
+		{
+			name:    "windows path",
+			command: `"C:\Program Files\Microsoft VS Code\bin\code.exe" --wait`,
+			want:    []string{`C:\Program Files\Microsoft VS Code\bin\code.exe`, "--wait"},
+		},
+		{
+			name:    "unix path",
+			command: `'/opt/Visual Editor/bin/editor' -f`,
+			want:    []string{"/opt/Visual Editor/bin/editor", "-f"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := splitEditorCommand(tt.command)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Join(got, "\x00") != strings.Join(tt.want, "\x00") {
+				t.Fatalf("got %#v want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
 func runPlanningCLI(t *testing.T, env *cliEnv, stdin string, args ...string) cliResult {
 	t.Helper()
 	var stdout bytes.Buffer
