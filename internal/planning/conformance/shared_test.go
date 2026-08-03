@@ -78,6 +78,7 @@ func TestSharedWorkspaceQueryAndRoadmapBehaviorMatchesCapturedBaseline(t *testin
 
 func assertGolden(t *testing.T, name, got string) {
 	t.Helper()
+	got = normalizeGolden(got)
 	want, err := ReadGolden(name)
 	if err != nil {
 		t.Fatal(err)
