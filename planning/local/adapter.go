@@ -1015,7 +1015,7 @@ func acquireMutationLock(ctx context.Context, path string) (func(), error) {
 				_ = os.Remove(path)
 			}, nil
 		}
-		if !os.IsExist(err) {
+		if !isMutationLockContention(err) {
 			return nil, fmt.Errorf("create Planning lock: %w", err)
 		}
 		select {

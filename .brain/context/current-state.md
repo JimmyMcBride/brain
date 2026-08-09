@@ -1,5 +1,5 @@
 ---
-updated: "2026-08-09T08:25:47Z"
+updated: "2026-08-09T08:36:11Z"
 ---
 <!-- brain:begin context-current-state -->
 This file is a deterministic snapshot of the repository state at the last refresh.
@@ -29,6 +29,7 @@ This file is a deterministic snapshot of the repository state at the last refres
 
 ## Local Notes
 
+- 2026-08-09: Planning local mutation locks treat Windows `ERROR_ACCESS_DENIED` and sharing violations from exclusive lock-file creation as contention, retrying through the existing one-second timeout just as Unix retries `EEXIST`. Other lock creation errors still fail immediately.
 - 2026-08-09: Phase 4's fifth slice captures pinned standalone local brainstorm, guided-session, guide-packet, maturity, repair, and promotion contracts. Shared `planning/application` and `planning/local` behavior now backs native idea/refinement/challenge updates, session navigation, roadmap parking, and confirmed direct brainstorm-to-spec promotion with permission, audit, atomic-write, and idempotency gates. Promotion creates no epic or persisted execution-slice intermediate. The public promotion JSON deliberately retains standalone Plan's `proposed_spec_issues` key during the compatibility window. If guided-session persistence fails after brainstorm creation, the application rolls back only the exact brainstorm created by that mutation and surfaces any rollback failure. The next slice captures and migrates canonical local spec mutation, readiness, approval, execution, and handoff behavior.
 - 2026-07-29: Phase 4's conformance manifest merged through PR #46, followed by canonical Go module-path normalization through PR #47. Both slices preserved CLI behavior and `.plan/` artifacts.
 - 2026-07-29: Phase 4 is approved in `.plan/specs/plan-cli-compatibility.md`. The spec chooses a conformance-first transition to narrow Brain-owned importable Planning packages, maps the coherent local spec-first workflow, keeps standalone Plan independently usable during overlap, excludes GitHub/Linear/cloud/hybrid implementation, and derives execution slices only when implementation starts.
