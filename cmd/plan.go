@@ -2,15 +2,19 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/JimmyMcBride/brain/internal/app"
 	"github.com/JimmyMcBride/brain/internal/history"
 	"github.com/JimmyMcBride/brain/internal/modules"
-	"github.com/JimmyMcBride/brain/internal/planning/application"
 	"github.com/JimmyMcBride/brain/planning"
+	"github.com/JimmyMcBride/brain/planning/application"
 
 	"github.com/spf13/cobra"
 )
@@ -25,37 +29,40 @@ func addPlanningCommand(root *cobra.Command, _ *rootFlagsState, loadApp appLoade
 
 	statusCmd := &cobra.Command{
 		Use:   "status",
-		Short: "Inspect local Planning workspace compatibility",
+		Short: "Show overall local Planning status",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return withPlanningService(cmd, loadApp, application.PermissionRead, func(appCtx *app.App, service *application.Service, _ planningAuthorizer, _ string) error {
-				status, err := service.Status(cmd.Context())
+				status, err := service.ProjectStatus(cmd.Context())
 				if err != nil {
 					return err
 				}
 				return appCtx.Output.Print(status, func(w io.Writer) error {
-					if _, err := fmt.Fprintf(w, "state: %s\n", status.State); err != nil {
+					if _, err := fmt.Fprintf(w, "project: %s\n", status.Project); err != nil {
 						return err
 					}
-					if _, err := fmt.Fprintf(w, "writable: %t\n", status.Writable); err != nil {
+					if _, err := fmt.Fprintf(w, "planning_model: %s\n", status.PlanningModel); err != nil {
 						return err
 					}
-					if status.SchemaVersion != 0 {
-						if _, err := fmt.Fprintf(w, "schema version: %d\n", status.SchemaVersion); err != nil {
+					if _, err := fmt.Fprintf(w, "source_mode: %s\n", status.SourceMode); err != nil {
+						return err
+					}
+					if _, err := fmt.Fprintf(w, "specs: %d total, %d draft, %d approved, %d implementing, %d done\n",
+						status.TotalSpecs, status.DraftSpecs, status.ApprovedSpecs, status.ImplementingSpecs, status.DoneSpecs); err != nil {
+						return err
+					}
+					if len(status.ReadySpecs) > 0 {
+						if _, err := fmt.Fprintf(w, "ready_specs: %d\n", len(status.ReadySpecs)); err != nil {
 							return err
 						}
-					}
-					if status.Ownership != "" {
-						if _, err := fmt.Fprintf(w, "ownership: %s\n", status.Ownership); err != nil {
-							return err
-						}
-					}
-					if _, err := fmt.Fprintf(w, "message: %s\n", status.Message); err != nil {
-						return err
-					}
-					for _, guidance := range status.Guidance {
-						if _, err := fmt.Fprintf(w, "guidance: %s\n", guidance); err != nil {
-							return err
+						for _, spec := range status.ReadySpecs {
+							initiative := ""
+							if spec.Initiative != nil {
+								initiative = " initiative=" + string(*spec.Initiative)
+							}
+							if _, err := fmt.Fprintf(w, "  - %s%s status=%s\n", spec.Title, initiative, spec.Status); err != nil {
+								return err
+							}
 						}
 					}
 					return nil
@@ -63,6 +70,106 @@ func addPlanningCommand(root *cobra.Command, _ *rootFlagsState, loadApp appLoade
 			})
 		},
 	}
+
+	checkCmd := &cobra.Command{
+		Use:   "check [project|spec] [slug]",
+		Short: "Run local Planning quality checks",
+		Args:  cobra.RangeArgs(0, 2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			input, err := resolvePlanningCheckInput(args)
+			if err != nil {
+				return err
+			}
+			return withPlanningService(cmd, loadApp, application.PermissionRead, func(appCtx *app.App, service *application.Service, _ planningAuthorizer, _ string) error {
+				report, err := service.Check(cmd.Context(), input)
+				if err != nil {
+					return err
+				}
+				if err := appCtx.Output.Print(report, func(w io.Writer) error { return printPlanningCheckReport(w, report) }); err != nil {
+					return err
+				}
+				if report.HasErrors() {
+					return fmt.Errorf("planning check found %d blocking issue(s)", report.ErrorCount())
+				}
+				return nil
+			})
+		},
+	}
+
+	roadmapCmd := &cobra.Command{Use: "roadmap", Short: "Show or edit local Planning roadmap Markdown"}
+	roadmapShowCmd := &cobra.Command{
+		Use: "show", Short: "Show ROADMAP.md", Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return withPlanningService(cmd, loadApp, application.PermissionRead, func(appCtx *app.App, service *application.Service, _ planningAuthorizer, _ string) error {
+				document, err := service.ReadRoadmap(cmd.Context())
+				if err != nil {
+					return err
+				}
+				return appCtx.Output.Print(document, func(w io.Writer) error {
+					_, err := fmt.Fprintf(w, "%s\n\n%s", document.Path, document.Body)
+					return err
+				})
+			})
+		},
+	}
+	var roadmapBody string
+	var roadmapStdin bool
+	var roadmapEditor string
+	var confirmRoadmap bool
+	roadmapEditCmd := &cobra.Command{
+		Use: "edit", Short: "Edit ROADMAP.md via --body, --stdin, or an editor", Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return withPlanningService(cmd, loadApp, application.PermissionRead, func(appCtx *app.App, service *application.Service, authorizer planningAuthorizer, _ string) error {
+				usingEditor := !roadmapStdin && roadmapBody == ""
+				if usingEditor && !confirmRoadmap {
+					return fmt.Errorf("%w: pass --confirm before opening the roadmap editor", application.ErrConfirmationRequired)
+				}
+				body, err := readBody(cmd.InOrStdin(), roadmapBody, roadmapStdin)
+				if err != nil {
+					return err
+				}
+				if usingEditor {
+					current, err := service.ReadRoadmap(cmd.Context())
+					if err != nil {
+						return err
+					}
+					body, err = editPlanningText(current.Body, roadmapEditor)
+					if err != nil {
+						return err
+					}
+				}
+				preview, err := service.PreviewRoadmap(cmd.Context(), body)
+				if err != nil {
+					return err
+				}
+				if !confirmRoadmap || preview.Action == application.MutationUnchanged {
+					return appCtx.Output.Print(preview, func(w io.Writer) error {
+						if _, err := fmt.Fprintf(w, "%s\t%s\n", preview.Action, preview.Document.Path); err != nil {
+							return err
+						}
+						if preview.Action == application.MutationUpdate {
+							_, err := fmt.Fprintln(w, "Preview only. Rerun with --confirm to write.")
+							return err
+						}
+						return nil
+					})
+				}
+				result, err := service.UpdateRoadmap(cmd.Context(), application.UpdateRoadmapInput{Body: body, Confirmed: true}, authorizer, planningEventSink{history: appCtx.History})
+				if err != nil {
+					return err
+				}
+				return appCtx.Output.Print(result, func(w io.Writer) error {
+					_, err := fmt.Fprintf(w, "%s\t%s\n", result.Action, result.Document.Path)
+					return err
+				})
+			})
+		},
+	}
+	roadmapEditCmd.Flags().StringVarP(&roadmapBody, "body", "b", "", "replacement body")
+	roadmapEditCmd.Flags().BoolVar(&roadmapStdin, "stdin", false, "read replacement body from stdin")
+	roadmapEditCmd.Flags().StringVar(&roadmapEditor, "editor", "", "editor command")
+	roadmapEditCmd.Flags().BoolVar(&confirmRoadmap, "confirm", false, "confirm the roadmap write")
+	roadmapCmd.AddCommand(roadmapShowCmd, roadmapEditCmd)
 
 	brainstormCmd := &cobra.Command{
 		Use:   "brainstorm",
@@ -223,8 +330,149 @@ func addPlanningCommand(root *cobra.Command, _ *rootFlagsState, loadApp appLoade
 	}
 	specCmd.AddCommand(specListCmd, specShowCmd)
 
-	planCmd.AddCommand(statusCmd, brainstormCmd, specCmd)
+	planCmd.AddCommand(statusCmd, checkCmd, roadmapCmd, brainstormCmd, specCmd)
 	root.AddCommand(planCmd)
+}
+
+func resolvePlanningCheckInput(args []string) (application.CheckInput, error) {
+	switch len(args) {
+	case 0:
+		return application.CheckInput{}, nil
+	case 1:
+		switch args[0] {
+		case "project":
+			return application.CheckInput{}, nil
+		case "spec":
+			return application.CheckInput{}, errors.New("check spec requires a slug")
+		default:
+			return application.CheckInput{}, fmt.Errorf("unsupported check scope %q", args[0])
+		}
+	case 2:
+		switch args[0] {
+		case "project":
+			return application.CheckInput{}, errors.New("check project does not accept arguments")
+		case "spec":
+			id := planning.ArtifactID(args[1])
+			return application.CheckInput{SpecID: &id}, nil
+		default:
+			return application.CheckInput{}, fmt.Errorf("unsupported check scope %q", args[0])
+		}
+	default:
+		return application.CheckInput{}, fmt.Errorf("invalid check scope")
+	}
+}
+
+func printPlanningCheckReport(w io.Writer, report application.CheckReport) error {
+	if _, err := fmt.Fprintf(w, "check_scope: %s\n", report.Scope); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "findings: %d total, %d blocking, %d guidance\n", len(report.Findings), report.ErrorCount(), report.WarningCount()); err != nil {
+		return err
+	}
+	if len(report.Findings) == 0 {
+		_, err := fmt.Fprintln(w, "status: ok")
+		return err
+	}
+	for _, finding := range report.Findings {
+		if _, err := fmt.Fprintf(w, "- [%s] %s %s :: %s\n", finding.Severity, finding.ArtifactType, finding.ArtifactPath, finding.Section); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "  %s\n", finding.Message); err != nil {
+			return err
+		}
+		if finding.Suggestion != "" {
+			if _, err := fmt.Fprintf(w, "  fix: %s\n", finding.Suggestion); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func editPlanningText(initial, editor string) (string, error) {
+	command := strings.TrimSpace(editor)
+	if command == "" {
+		command = strings.TrimSpace(os.Getenv("VISUAL"))
+	}
+	if command == "" {
+		command = strings.TrimSpace(os.Getenv("EDITOR"))
+	}
+	if command == "" {
+		return "", errors.New("no editor configured (set $EDITOR or use --editor)")
+	}
+	file, err := os.CreateTemp("", "brain-plan-roadmap-*.md")
+	if err != nil {
+		return "", err
+	}
+	path := file.Name()
+	defer os.Remove(path)
+	if _, err := file.WriteString(initial); err != nil {
+		file.Close()
+		return "", err
+	}
+	if err := file.Close(); err != nil {
+		return "", err
+	}
+	parts, err := splitEditorCommand(command)
+	if err != nil {
+		return "", err
+	}
+	process := exec.Command(parts[0], append(parts[1:], path)...)
+	process.Stdin = os.Stdin
+	process.Stdout = os.Stdout
+	process.Stderr = os.Stderr
+	if err := process.Run(); err != nil {
+		return "", fmt.Errorf("editor %s: %w", parts[0], err)
+	}
+	raw, err := os.ReadFile(filepath.Clean(path))
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+func splitEditorCommand(command string) ([]string, error) {
+	var parts []string
+	var part strings.Builder
+	var quote rune
+	hasPart := false
+	flush := func() {
+		if !hasPart {
+			return
+		}
+		parts = append(parts, part.String())
+		part.Reset()
+		hasPart = false
+	}
+	for _, char := range command {
+		if quote != 0 {
+			if char == quote {
+				quote = 0
+				continue
+			}
+			part.WriteRune(char)
+			hasPart = true
+			continue
+		}
+		switch {
+		case char == '\'' || char == '"':
+			quote = char
+			hasPart = true
+		case char == ' ' || char == '\t' || char == '\r' || char == '\n':
+			flush()
+		default:
+			part.WriteRune(char)
+			hasPart = true
+		}
+	}
+	if quote != 0 {
+		return nil, errors.New("editor command has an unterminated quote")
+	}
+	flush()
+	if len(parts) == 0 || parts[0] == "" {
+		return nil, errors.New("editor command has no executable")
+	}
+	return parts, nil
 }
 
 type planningArtifactOutput struct {
@@ -275,6 +523,10 @@ func specOutput(document application.SpecDocument, includeBody bool) planningArt
 
 type planningRun func(*app.App, *application.Service, planningAuthorizer, string) error
 
+type planningServiceProvider interface {
+	PlanningService() *application.Service
+}
+
 func withPlanningService(cmd *cobra.Command, loadApp appLoader, permission string, run planningRun) error {
 	appCtx, err := loadApp()
 	if err != nil {
@@ -285,7 +537,7 @@ func withPlanningService(cmd *cobra.Command, loadApp appLoader, permission strin
 	if err != nil {
 		return err
 	}
-	provider, ok := resolution.Module.(application.ServiceProvider)
+	provider, ok := resolution.Module.(planningServiceProvider)
 	if !ok || provider.PlanningService() == nil {
 		return fmt.Errorf("module %s does not provide Planning services", resolution.ModuleID)
 	}
@@ -318,13 +570,19 @@ func (s planningEventSink) Publish(_ context.Context, event application.Event) e
 		return fmt.Errorf("Planning audit history is unavailable")
 	}
 	target := string(event.Artifact.ID)
+	file := ".plan/brainstorms/" + target + ".md"
+	summary := "Planning brainstorm created"
+	if event.Artifact.Kind == planning.ArtifactRoadmap {
+		file = ".plan/ROADMAP.md"
+		summary = "Planning roadmap updated"
+	}
 	return s.history.Append(history.Entry{
 		ID:        strings.Join([]string{event.ModuleID, event.Name, target, fmt.Sprintf("%d", event.OccurredAt.UnixNano())}, ":"),
 		Timestamp: event.OccurredAt,
 		Operation: event.Name,
-		File:      ".plan/brainstorms/" + target + ".md",
+		File:      file,
 		Target:    target,
-		Summary:   "Planning brainstorm created",
+		Summary:   summary,
 		Metadata: map[string]any{
 			"module_id":     event.ModuleID,
 			"artifact_kind": event.Artifact.Kind,

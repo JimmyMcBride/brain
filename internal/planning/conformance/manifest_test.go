@@ -33,6 +33,12 @@ func TestManifestRevisionErrorIncludesInvalidValue(t *testing.T) {
 	}
 }
 
+func TestNormalizeGoldenUsesManifestLineEndings(t *testing.T) {
+	if got, want := normalizeGolden("first\r\nsecond\r\n"), "first\nsecond\n"; got != want {
+		t.Fatalf("unexpected normalized golden: got %q want %q", got, want)
+	}
+}
+
 func TestManifestCoversPhaseFourMappedCommands(t *testing.T) {
 	manifest, err := Load()
 	if err != nil {
@@ -155,7 +161,7 @@ func TestInitialStatusCasesReferenceReadableAssets(t *testing.T) {
 	for _, testCase := range manifest.Cases {
 		wantExit, exists := wantCases[testCase.ID]
 		if !exists {
-			t.Fatalf("unexpected initial conformance case %s", testCase.ID)
+			continue
 		}
 		delete(wantCases, testCase.ID)
 		if testCase.Command != "status" || testCase.Expected.ExitCode != wantExit {
@@ -179,5 +185,41 @@ func TestInitialStatusCasesReferenceReadableAssets(t *testing.T) {
 	}
 	if len(wantCases) != 0 {
 		t.Fatalf("missing initial status cases: %v", wantCases)
+	}
+}
+
+func TestWorkspaceQueryAndRoadmapCasesReferenceReadableAssets(t *testing.T) {
+	manifest, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantCases := map[string]struct{}{
+		"check.default.blocking": {},
+		"check.project.blocking": {},
+		"check.spec.blocking":    {},
+		"roadmap.show":           {},
+		"roadmap.edit.body":      {},
+	}
+	for _, testCase := range manifest.Cases {
+		if _, exists := wantCases[testCase.ID]; !exists {
+			continue
+		}
+		delete(wantCases, testCase.ID)
+		if testCase.Fixture != "fixtures/schema-v3-compatible" {
+			t.Fatalf("unexpected fixture for %s: %s", testCase.ID, testCase.Fixture)
+		}
+		for _, asset := range []string{testCase.Expected.Stdout, testCase.Expected.Stderr} {
+			if _, err := ReadGolden(asset); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if testCase.Expected.Files != "unchanged" {
+			if _, err := ReadGolden(testCase.Expected.Files); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if len(wantCases) != 0 {
+		t.Fatalf("missing workspace/query/roadmap cases: %v", wantCases)
 	}
 }

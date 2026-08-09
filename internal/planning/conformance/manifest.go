@@ -51,12 +51,14 @@ type Command struct {
 }
 
 type Case struct {
-	ID       string     `yaml:"id"`
-	Command  string     `yaml:"command"`
-	Fixture  string     `yaml:"fixture"`
-	Args     []string   `yaml:"args"`
-	Expected Expected   `yaml:"expected"`
-	Compare  Comparison `yaml:"compare"`
+	ID                     string     `yaml:"id"`
+	Command                string     `yaml:"command"`
+	Fixture                string     `yaml:"fixture"`
+	Args                   []string   `yaml:"args"`
+	NativeArgs             []string   `yaml:"native_args,omitempty"`
+	IntentionalDifferences []string   `yaml:"intentional_differences,omitempty"`
+	Expected               Expected   `yaml:"expected"`
+	Compare                Comparison `yaml:"compare"`
 }
 
 type Expected struct {
@@ -103,7 +105,11 @@ func ReadGolden(name string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("read conformance golden %s: %w", name, err)
 	}
-	return string(raw), nil
+	return normalizeGolden(string(raw)), nil
+}
+
+func normalizeGolden(value string) string {
+	return strings.ReplaceAll(value, "\r\n", "\n")
 }
 
 func Fixture(name string) (fs.FS, error) {
@@ -194,6 +200,14 @@ func (m Manifest) validate() error {
 		if len(testCase.Args) == 0 {
 			return fmt.Errorf("conformance case %s has no arguments", testCase.ID)
 		}
+		if len(testCase.NativeArgs) == 0 {
+			return fmt.Errorf("conformance case %s has no native arguments", testCase.ID)
+		}
+		for _, difference := range testCase.IntentionalDifferences {
+			if strings.TrimSpace(difference) == "" {
+				return fmt.Errorf("conformance case %s has an empty intentional difference", testCase.ID)
+			}
+		}
 		if _, err := Fixture(testCase.Fixture); err != nil {
 			return fmt.Errorf("conformance case %s: %w", testCase.ID, err)
 		}
@@ -203,8 +217,15 @@ func (m Manifest) validate() error {
 		if _, err := ReadGolden(testCase.Expected.Stderr); err != nil {
 			return fmt.Errorf("conformance case %s stderr: %w", testCase.ID, err)
 		}
-		if testCase.Expected.Files != "unchanged" || testCase.Expected.Rerun != "same" {
-			return fmt.Errorf("initial conformance case %s must preserve files and rerun behavior", testCase.ID)
+		if testCase.Expected.Files != "unchanged" {
+			if _, err := ReadGolden(testCase.Expected.Files); err != nil {
+				return fmt.Errorf("conformance case %s files: %w", testCase.ID, err)
+			}
+		}
+		if testCase.Expected.Rerun != "same" {
+			if _, err := ReadGolden(testCase.Expected.Rerun); err != nil {
+				return fmt.Errorf("conformance case %s rerun: %w", testCase.ID, err)
+			}
 		}
 		for field, mode := range map[string]string{
 			"exit_code": testCase.Compare.ExitCode,

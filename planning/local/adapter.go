@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/JimmyMcBride/brain/internal/planning/application"
 	"github.com/JimmyMcBride/brain/planning"
+	"github.com/JimmyMcBride/brain/planning/application"
 
 	"gopkg.in/yaml.v3"
 )
@@ -24,23 +24,29 @@ const (
 	currentPlanningModel = "spec_first_v1"
 )
 
-type AtomicWriter func(string, []byte, os.FileMode) error
+type atomicWriter func(string, []byte, os.FileMode) error
 
+// Adapter persists shared Planning application behavior in a schema-v3 .plan workspace.
 type Adapter struct {
 	projectRoot string
-	writeAtomic AtomicWriter
+	writeAtomic atomicWriter
 }
 
+// New creates a schema-v3 local adapter rooted at projectRoot.
 func New(projectRoot string) *Adapter {
-	return NewWithWriter(projectRoot, atomicWriteFile)
+	return newWithWriter(projectRoot, atomicWriteFile)
 }
 
-func NewWithWriter(projectRoot string, writer AtomicWriter) *Adapter {
+func newWithWriter(projectRoot string, writer atomicWriter) *Adapter {
 	if writer == nil {
 		writer = atomicWriteFile
 	}
+	root := filepath.Clean(projectRoot)
+	if absolute, err := filepath.Abs(root); err == nil {
+		root = absolute
+	}
 	return &Adapter{
-		projectRoot: filepath.Clean(projectRoot),
+		projectRoot: root,
 		writeAtomic: writer,
 	}
 }
@@ -51,6 +57,7 @@ type workspaceMeta struct {
 	SourceMode    string `json:"source_mode"`
 }
 
+// Status classifies workspace schema and ownership compatibility without mutation.
 func (a *Adapter) Status(context.Context) (application.WorkspaceStatus, error) {
 	planDir := filepath.Join(a.projectRoot, ".plan")
 	if _, err := os.Stat(planDir); err != nil {
@@ -89,6 +96,7 @@ func (a *Adapter) Status(context.Context) (application.WorkspaceStatus, error) {
 	}
 
 	status := application.WorkspaceStatus{
+		Project:       filepath.Base(a.projectRoot),
 		SchemaVersion: meta.SchemaVersion,
 		PlanningModel: meta.PlanningModel,
 		Writable:      false,
@@ -125,6 +133,7 @@ func (a *Adapter) Status(context.Context) (application.WorkspaceStatus, error) {
 	return status, nil
 }
 
+// ListBrainstorms returns local brainstorm documents in deterministic order.
 func (a *Adapter) ListBrainstorms(ctx context.Context) ([]application.BrainstormDocument, error) {
 	if err := a.requireCompatible(ctx); err != nil {
 		return nil, err
@@ -150,6 +159,7 @@ func (a *Adapter) ListBrainstorms(ctx context.Context) ([]application.Brainstorm
 	return out, nil
 }
 
+// GetBrainstorm returns one local brainstorm document.
 func (a *Adapter) GetBrainstorm(ctx context.Context, id planning.ArtifactID) (application.BrainstormDocument, error) {
 	if err := a.requireCompatible(ctx); err != nil {
 		return application.BrainstormDocument{}, err
@@ -160,6 +170,7 @@ func (a *Adapter) GetBrainstorm(ctx context.Context, id planning.ArtifactID) (ap
 	return a.readBrainstorm(filepath.Join(a.projectRoot, ".plan", "brainstorms", string(id)+".md"))
 }
 
+// FindBrainstorm returns one local brainstorm document when it exists.
 func (a *Adapter) FindBrainstorm(ctx context.Context, id planning.ArtifactID) (application.BrainstormDocument, bool, error) {
 	document, err := a.GetBrainstorm(ctx, id)
 	if err == nil {
@@ -171,6 +182,7 @@ func (a *Adapter) FindBrainstorm(ctx context.Context, id planning.ArtifactID) (a
 	return application.BrainstormDocument{}, false, err
 }
 
+// CreateBrainstorm atomically creates a local brainstorm or reports it unchanged.
 func (a *Adapter) CreateBrainstorm(
 	ctx context.Context,
 	artifact planning.Brainstorm,
@@ -185,7 +197,7 @@ func (a *Adapter) CreateBrainstorm(
 			joinErrorFindingMessages(findings),
 		)
 	}
-	release, err := acquireCreationLock(ctx, filepath.Join(a.projectRoot, ".plan", "brainstorms", "."+string(artifact.ID)+".lock"))
+	release, err := acquireMutationLock(ctx, filepath.Join(a.projectRoot, ".plan", "brainstorms", "."+string(artifact.ID)+".lock"))
 	if err != nil {
 		return application.BrainstormDocument{}, "", err
 	}
@@ -225,6 +237,7 @@ func (a *Adapter) CreateBrainstorm(
 	return document, application.MutationCreate, nil
 }
 
+// ListSpecs returns validated local spec documents in deterministic order.
 func (a *Adapter) ListSpecs(ctx context.Context) ([]application.SpecDocument, error) {
 	if err := a.requireCompatible(ctx); err != nil {
 		return nil, err
@@ -250,6 +263,7 @@ func (a *Adapter) ListSpecs(ctx context.Context) ([]application.SpecDocument, er
 	return out, nil
 }
 
+// GetSpec returns one validated local spec document.
 func (a *Adapter) GetSpec(ctx context.Context, id planning.ArtifactID) (application.SpecDocument, error) {
 	if err := a.requireCompatible(ctx); err != nil {
 		return application.SpecDocument{}, err
@@ -258,6 +272,89 @@ func (a *Adapter) GetSpec(ctx context.Context, id planning.ArtifactID) (applicat
 		return application.SpecDocument{}, err
 	}
 	return a.readSpec(filepath.Join(a.projectRoot, ".plan", "specs", string(id)+".md"))
+}
+
+// QuerySpecs returns minimally parsed specs for aggregate status and quality checks.
+func (a *Adapter) QuerySpecs(ctx context.Context, id *planning.ArtifactID) ([]application.SpecQueryDocument, error) {
+	if err := a.requireCompatible(ctx); err != nil {
+		return nil, err
+	}
+	var paths []string
+	if id != nil {
+		if err := id.Validate(); err != nil {
+			return nil, err
+		}
+		paths = []string{filepath.Join(a.projectRoot, ".plan", "specs", string(*id)+".md")}
+	} else {
+		var err error
+		paths, err = markdownFiles(filepath.Join(a.projectRoot, ".plan", "specs"))
+		if err != nil {
+			return nil, err
+		}
+	}
+	documents := make([]application.SpecQueryDocument, 0, len(paths))
+	for _, path := range paths {
+		meta, body, err := readDocument(path)
+		if err != nil {
+			return nil, err
+		}
+		status := stringValue(meta["status"])
+		if status == "" {
+			status = string(planning.SpecDraft)
+		}
+		var initiativeID *planning.ArtifactID
+		if value := strings.TrimSpace(stringValue(meta["initiative"])); value != "" {
+			initiative := planning.ArtifactID(value)
+			initiativeID = &initiative
+		}
+		documents = append(documents, application.SpecQueryDocument{
+			ID: artifactID(meta, path), Title: stringValue(meta["title"]), Status: status,
+			Initiative: initiativeID, Path: relativePlanningPath(a.projectRoot, path), Body: body,
+		})
+	}
+	return documents, nil
+}
+
+// ReadRoadmap returns complete local roadmap Markdown.
+func (a *Adapter) ReadRoadmap(ctx context.Context) (application.RoadmapDocument, error) {
+	if err := a.requireCompatible(ctx); err != nil {
+		return application.RoadmapDocument{}, err
+	}
+	path := filepath.Join(a.projectRoot, ".plan", "ROADMAP.md")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return application.RoadmapDocument{}, err
+	}
+	return application.RoadmapDocument{Path: ".plan/ROADMAP.md", Body: string(raw)}, nil
+}
+
+// ReplaceRoadmap atomically replaces roadmap Markdown or reports it unchanged.
+func (a *Adapter) ReplaceRoadmap(ctx context.Context, body string) (application.RoadmapDocument, application.MutationAction, error) {
+	if err := a.requireCompatible(ctx); err != nil {
+		return application.RoadmapDocument{}, "", err
+	}
+	path := filepath.Join(a.projectRoot, ".plan", "ROADMAP.md")
+	release, err := acquireMutationLock(ctx, filepath.Join(a.projectRoot, ".plan", ".roadmap.lock"))
+	if err != nil {
+		return application.RoadmapDocument{}, "", err
+	}
+	defer release()
+	current, err := os.ReadFile(path)
+	if err != nil {
+		return application.RoadmapDocument{}, "", err
+	}
+	document := application.RoadmapDocument{Path: ".plan/ROADMAP.md", Body: body}
+	if string(current) == body {
+		return document, application.MutationUnchanged, nil
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return application.RoadmapDocument{}, "", err
+	}
+	if err := a.writeAtomic(path, []byte(body), info.Mode().Perm()); err != nil {
+		return application.RoadmapDocument{}, "", fmt.Errorf("write roadmap atomically: %w", err)
+	}
+	return document, application.MutationUpdate, nil
 }
 
 func (a *Adapter) requireCompatible(ctx context.Context) error {
@@ -322,6 +419,11 @@ func (a *Adapter) readSpec(path string) (application.SpecDocument, error) {
 		value := planning.ArtifactID(string(id) + "-execution")
 		executionID = &value
 	}
+	var initiativeID *planning.ArtifactID
+	if value := strings.TrimSpace(stringValue(meta["initiative"])); value != "" {
+		initiative := planning.ArtifactID(value)
+		initiativeID = &initiative
+	}
 	artifact := planning.Spec{
 		ID:           id,
 		Title:        stringValue(meta["title"]),
@@ -329,6 +431,7 @@ func (a *Adapter) readSpec(path string) (application.SpecDocument, error) {
 		Approval:     approval,
 		Dependencies: metadataIDs(meta, "dependencies", "blocked_by"),
 		Verification: bulletItems(extractSection(body, "Verification")),
+		Initiative:   initiativeID,
 		ExecutionID:  executionID,
 	}
 	if findings := planning.ValidateSpec(artifact); hasErrorFindings(findings) {
@@ -628,9 +731,9 @@ func atomicWriteFile(path string, data []byte, mode os.FileMode) (err error) {
 	return os.Chmod(path, mode)
 }
 
-func acquireCreationLock(ctx context.Context, path string) (func(), error) {
+func acquireMutationLock(ctx context.Context, path string) (func(), error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, fmt.Errorf("create brainstorm directory: %w", err)
+		return nil, fmt.Errorf("create Planning lock directory: %w", err)
 	}
 	timer := time.NewTimer(time.Second)
 	defer timer.Stop()
@@ -645,13 +748,13 @@ func acquireCreationLock(ctx context.Context, path string) (func(), error) {
 			}, nil
 		}
 		if !os.IsExist(err) {
-			return nil, fmt.Errorf("create brainstorm lock: %w", err)
+			return nil, fmt.Errorf("create Planning lock: %w", err)
 		}
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-timer.C:
-			return nil, fmt.Errorf("timed out waiting for brainstorm creation lock: %s", path)
+			return nil, fmt.Errorf("timed out waiting for Planning lock: %s", path)
 		case <-ticker.C:
 		}
 	}

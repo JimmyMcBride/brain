@@ -5,13 +5,14 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/JimmyMcBride/brain/internal/planning/application"
 	"github.com/JimmyMcBride/brain/planning"
+	"github.com/JimmyMcBride/brain/planning/application"
 )
 
 func TestWorkspaceStatusClassifiesCompatibilityWithoutMutation(t *testing.T) {
@@ -76,6 +77,123 @@ func TestAdapterReadsSchemaV3BrainstormsAndSpecs(t *testing.T) {
 	}
 	if findings := planning.ValidateSpec(specs[0].Artifact); hasErrorFindings(findings) {
 		t.Fatalf("spec did not map into valid domain value: %#v", findings)
+	}
+}
+
+func TestAdapterReadsCheckDocumentsAndReplacesRoadmapAtomically(t *testing.T) {
+	root := t.TempDir()
+	copyFixture(t, "compatible", root)
+	adapter := New(root)
+
+	documents, err := adapter.QuerySpecs(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(documents) != 1 || documents[0].Path != ".plan/specs/alpha-spec.md" || documents[0].Title != "Alpha Spec" {
+		t.Fatalf("unexpected check documents: %#v", documents)
+	}
+	roadmap, err := adapter.ReadRoadmap(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if roadmap.Path != ".plan/ROADMAP.md" || !strings.Contains(roadmap.Body, "Deliver the fixture workflow") {
+		t.Fatalf("unexpected roadmap: %#v", roadmap)
+	}
+	updated := "# Roadmap\n\n## Overview\n\nUpdated fixture roadmap.\n"
+	roadmapPath := filepath.Join(root, ".plan", "ROADMAP.md")
+	if err := os.Chmod(roadmapPath, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	roadmap, action, err := adapter.ReplaceRoadmap(context.Background(), updated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action != application.MutationUpdate || roadmap.Body != updated {
+		t.Fatalf("unexpected roadmap update: action=%s document=%#v", action, roadmap)
+	}
+	_, action, err = adapter.ReplaceRoadmap(context.Background(), updated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action != application.MutationUnchanged {
+		t.Fatalf("expected unchanged rerun, got %s", action)
+	}
+	info, err := os.Stat(roadmapPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" {
+		if got := info.Mode().Perm(); got != 0o600 {
+			t.Fatalf("roadmap mode changed: got %o want 600", got)
+		}
+	}
+	assertNoTemporaryFiles(t, filepath.Join(root, ".plan"))
+}
+
+func TestAdapterResolvesRelativeProjectRoot(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "fixture")
+	if err := os.Mkdir(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	copyFixture(t, "compatible", root)
+	oldWorkingDirectory, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(parent); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWorkingDirectory) })
+
+	status, err := New("fixture").Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Project != "fixture" || status.State != application.WorkspaceCompatible {
+		t.Fatalf("unexpected relative-root status: %#v", status)
+	}
+}
+
+func TestAdapterConcurrentRoadmapRerunsUpdateOnce(t *testing.T) {
+	root := t.TempDir()
+	copyFixture(t, "compatible", root)
+	adapter := New(root)
+	const callers = 8
+	actions := make(chan application.MutationAction, callers)
+	errs := make(chan error, callers)
+	var wait sync.WaitGroup
+	for range callers {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			_, action, err := adapter.ReplaceRoadmap(context.Background(), "# Concurrent Roadmap\n")
+			actions <- action
+			errs <- err
+		}()
+	}
+	wait.Wait()
+	close(actions)
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	updates := 0
+	unchanged := 0
+	for action := range actions {
+		switch action {
+		case application.MutationUpdate:
+			updates++
+		case application.MutationUnchanged:
+			unchanged++
+		default:
+			t.Fatalf("unexpected action %q", action)
+		}
+	}
+	if updates != 1 || unchanged != callers-1 {
+		t.Fatalf("expected one update and %d unchanged, got update=%d unchanged=%d", callers-1, updates, unchanged)
 	}
 }
 
@@ -187,7 +305,7 @@ func TestAdapterAtomicWriteFailureLeavesNoArtifact(t *testing.T) {
 	root := t.TempDir()
 	copyFixture(t, "compatible", root)
 	writeFailure := errors.New("write failed")
-	adapter := NewWithWriter(root, func(string, []byte, os.FileMode) error {
+	adapter := newWithWriter(root, func(string, []byte, os.FileMode) error {
 		return writeFailure
 	})
 	_, _, err := adapter.CreateBrainstorm(
@@ -201,6 +319,32 @@ func TestAdapterAtomicWriteFailureLeavesNoArtifact(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, ".plan", "brainstorms", "failed.md")); !os.IsNotExist(err) {
 		t.Fatalf("failed write left artifact: %v", err)
 	}
+}
+
+func TestAdapterRoadmapWriteFailurePreservesExistingFile(t *testing.T) {
+	root := t.TempDir()
+	copyFixture(t, "compatible", root)
+	path := filepath.Join(root, ".plan", "ROADMAP.md")
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFailure := errors.New("write failed")
+	adapter := newWithWriter(root, func(string, []byte, os.FileMode) error {
+		return writeFailure
+	})
+	_, _, err = adapter.ReplaceRoadmap(context.Background(), "# Failed Roadmap\n")
+	if !errors.Is(err, writeFailure) {
+		t.Fatalf("expected write failure, got %v", err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatal("failed roadmap write changed existing content")
+	}
+	assertNoTemporaryFiles(t, filepath.Join(root, ".plan"))
 }
 
 func TestAdapterConcurrentRerunsCreateOnce(t *testing.T) {
@@ -253,7 +397,7 @@ func TestCreationLockTimeoutIdentifiesLockPath(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := acquireCreationLock(context.Background(), lockPath)
+	_, err := acquireMutationLock(context.Background(), lockPath)
 	if err == nil || !strings.Contains(err.Error(), lockPath) {
 		t.Fatalf("expected timeout to identify lock path %q, got %v", lockPath, err)
 	}

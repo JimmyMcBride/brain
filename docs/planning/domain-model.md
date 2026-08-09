@@ -1,11 +1,15 @@
+---
+updated: "2026-07-31T19:59:14Z"
+---
 # Planning Domain Model
 
 ## Status
 
 Phase 2's pure domain values and rules are importable from
-`github.com/JimmyMcBride/brain/planning`. The package remains stdlib-only;
-application services, local persistence, conformance assets, and module wiring
-remain internal while their cross-host contracts are captured.
+`github.com/JimmyMcBride/brain/planning` and remain stdlib-only. Phase 4 also
+exposes the narrow `planning/application` service/port boundary and schema-v3
+`planning/local` adapter used by both command hosts. Conformance assets and
+Brain module/CLI wiring remain internal.
 
 ## Phase 2 Boundary
 
@@ -75,7 +79,14 @@ runtime/external work-item records, but must preserve original content and links
 - Planning approval and Brain memory approval are separate.
 - Every Brain source reference retains provenance and freshness.
 
-## Candidate Ports
+## Application and Adapter Boundary
+
+The public application package now owns the repository port proven by the
+schema-v3 local adapter, plus workspace diagnostics, aggregate status, local
+spec checks, roadmap read/replace, existing brainstorm/spec reads, and guarded
+mutation contracts. The local adapter depends only on the Planning domain,
+application contracts, standard library, and YAML parsing. Cobra, Brain module
+runtime, GitHub, Linear, and cloud types remain outside both packages.
 
 Future adapter responsibilities remain provisional:
 
@@ -87,9 +98,9 @@ Future adapter responsibilities remain provisional:
 - readiness check and approval provider
 - Brain context requester and memory proposal sink
 
-Phase 2 intentionally added none of these ports. Do not add provider abstractions
-solely to preserve retired Linear code. Introduce a port only when a concrete
-later adapter proves a genuine variation.
+Do not add provider abstractions solely to preserve retired Linear code. Extend
+the repository port only when a mapped command family proves a concrete shared
+need.
 
 ## Source References
 

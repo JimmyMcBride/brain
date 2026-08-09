@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,12 +11,12 @@ import (
 
 	"github.com/JimmyMcBride/brain/internal/modules"
 	officialplanning "github.com/JimmyMcBride/brain/internal/official/planning"
-	"github.com/JimmyMcBride/brain/internal/planning/application"
+	"github.com/JimmyMcBride/brain/planning/application"
 )
 
 func TestCLIPlanningLocalWorkflowAndIdempotentAudit(t *testing.T) {
 	env := newCLIEnv(t)
-	fixture := filepath.Join(env.moduleRoot, "internal", "official", "planning", "local", "testdata", "compatible")
+	fixture := filepath.Join(env.moduleRoot, "planning", "local", "testdata", "compatible")
 	if err := os.CopyFS(env.project, os.DirFS(fixture)); err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +36,7 @@ func TestCLIPlanningLocalWorkflowAndIdempotentAudit(t *testing.T) {
 	requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "modules", "enable", officialplanning.ID))
 
 	status := requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "status"))
-	for _, expected := range []string{"state: compatible", "writable: true", "schema version: 3", "ownership: local"} {
+	for _, expected := range []string{"project: project", "planning_model: spec_first_v1", "source_mode: local", "specs: 1 total, 0 draft, 1 approved, 0 implementing, 0 done"} {
 		if !strings.Contains(status, expected) {
 			t.Fatalf("status missing %q:\n%s", expected, status)
 		}
@@ -55,6 +56,41 @@ func TestCLIPlanningLocalWorkflowAndIdempotentAudit(t *testing.T) {
 	spec := requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "spec", "show", "alpha-spec"))
 	if !strings.Contains(spec, "# Alpha Spec") {
 		t.Fatalf("unexpected spec show:\n%s", spec)
+	}
+	check := runPlanningCLI(t, env, "", "--project", env.project, "plan", "check", "spec", "alpha-spec")
+	if check.err == nil || !strings.Contains(check.err.Error(), "4 blocking issue(s)") ||
+		!strings.Contains(check.stdout, "check_scope: spec:alpha-spec") ||
+		!strings.Contains(check.stdout, "spec .plan/specs/alpha-spec.md :: Problem") {
+		t.Fatalf("unexpected spec check: %#v", check)
+	}
+	roadmap := requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "roadmap", "show"))
+	if !strings.Contains(roadmap, ".plan/ROADMAP.md\n\n# Roadmap") {
+		t.Fatalf("unexpected roadmap show:\n%s", roadmap)
+	}
+	editorWithoutConfirmation := runPlanningCLI(t, env, "", "--project", env.project, "plan", "roadmap", "edit", "--editor", "unused")
+	if editorWithoutConfirmation.err == nil || !errors.Is(editorWithoutConfirmation.err, application.ErrConfirmationRequired) {
+		t.Fatalf("expected editor confirmation error, got %#v", editorWithoutConfirmation)
+	}
+	updatedRoadmap := "# Roadmap\n\n## Overview\n\nUpdated from Brain.\n"
+	roadmapPreview := requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "roadmap", "edit", "--body", updatedRoadmap))
+	if !strings.Contains(roadmapPreview, "update\t.plan/ROADMAP.md") || !strings.Contains(roadmapPreview, "Preview only") {
+		t.Fatalf("unexpected roadmap preview:\n%s", roadmapPreview)
+	}
+	roadmapPath := filepath.Join(env.project, ".plan", "ROADMAP.md")
+	beforeRoadmap, err := os.ReadFile(roadmapPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(beforeRoadmap), "Updated from Brain") {
+		t.Fatal("roadmap preview changed the file")
+	}
+	roadmapUpdate := requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "roadmap", "edit", "--body", updatedRoadmap, "--confirm"))
+	if !strings.Contains(roadmapUpdate, "update\t.plan/ROADMAP.md") {
+		t.Fatalf("unexpected roadmap update:\n%s", roadmapUpdate)
+	}
+	roadmapRerun := requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "roadmap", "edit", "--body", updatedRoadmap, "--confirm"))
+	if !strings.Contains(roadmapRerun, "unchanged\t.plan/ROADMAP.md") {
+		t.Fatalf("unexpected roadmap rerun:\n%s", roadmapRerun)
 	}
 
 	preview := requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "brainstorm", "start", "CLI Flow"))
@@ -99,6 +135,9 @@ func TestCLIPlanningLocalWorkflowAndIdempotentAudit(t *testing.T) {
 	if count := strings.Count(string(history), application.EventBrainstormCreated); count != 2 {
 		t.Fatalf("expected one event record with operation and ID references, got count=%d:\n%s", count, history)
 	}
+	if count := strings.Count(string(history), application.EventRoadmapUpdated); count != 2 {
+		t.Fatalf("expected one roadmap event record with operation and ID references, got count=%d:\n%s", count, history)
+	}
 
 	before, err := os.ReadFile(createdPath)
 	if err != nil {
@@ -123,7 +162,7 @@ func TestCLIPlanningLocalWorkflowAndIdempotentAudit(t *testing.T) {
 
 func TestCLIPlanningFutureSchemaIsReadOnly(t *testing.T) {
 	env := newCLIEnv(t)
-	fixture := filepath.Join(env.moduleRoot, "internal", "official", "planning", "local", "testdata", "future")
+	fixture := filepath.Join(env.moduleRoot, "planning", "local", "testdata", "future")
 	if err := os.CopyFS(env.project, os.DirFS(fixture)); err != nil {
 		t.Fatal(err)
 	}
@@ -132,13 +171,62 @@ func TestCLIPlanningFutureSchemaIsReadOnly(t *testing.T) {
 	args = append(args, permissions...)
 	requireOK(t, runPlanningCLI(t, env, "", args...))
 	requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "modules", "enable", officialplanning.ID))
-	status := requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "status"))
-	if !strings.Contains(status, "state: future_schema") || !strings.Contains(status, "writable: false") {
-		t.Fatalf("unexpected future status:\n%s", status)
+	status := runPlanningCLI(t, env, "", "--project", env.project, "plan", "status")
+	if status.err == nil || !strings.Contains(status.err.Error(), "newer than supported schema 3") || status.stdout != "" {
+		t.Fatalf("unexpected future status: %#v", status)
 	}
 	result := runPlanningCLI(t, env, "", "--project", env.project, "plan", "brainstorm", "start", "Blocked", "--confirm")
 	if result.err == nil || !strings.Contains(result.err.Error(), application.ErrWorkspaceNotWritable.Error()) {
 		t.Fatalf("expected future-schema write refusal, got %#v", result)
+	}
+}
+
+func TestResolvePlanningCheckInputReportsScopeArity(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "spec missing slug", args: []string{"spec"}, want: "check spec requires a slug"},
+		{name: "project extra argument", args: []string{"project", "extra"}, want: "check project does not accept arguments"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := resolvePlanningCheckInput(tt.args)
+			if err == nil || err.Error() != tt.want {
+				t.Fatalf("got %v want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestSplitEditorCommandPreservesQuotedPaths(t *testing.T) {
+	tests := []struct {
+		name    string
+		command string
+		want    []string
+	}{
+		{
+			name:    "windows path",
+			command: `"C:\Program Files\Microsoft VS Code\bin\code.exe" --wait`,
+			want:    []string{`C:\Program Files\Microsoft VS Code\bin\code.exe`, "--wait"},
+		},
+		{
+			name:    "unix path",
+			command: `'/opt/Visual Editor/bin/editor' -f`,
+			want:    []string{"/opt/Visual Editor/bin/editor", "-f"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := splitEditorCommand(tt.command)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Join(got, "\x00") != strings.Join(tt.want, "\x00") {
+				t.Fatalf("got %#v want %#v", got, tt.want)
+			}
+		})
 	}
 }
 

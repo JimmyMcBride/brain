@@ -1,3 +1,6 @@
+---
+updated: "2026-07-31T19:59:02Z"
+---
 # Planning CLI Migration
 
 ## Status
@@ -6,20 +9,22 @@ Approved staged compatibility direction. Phase 3's bounded local native surface
 is merged. Phase 4's approved
 `.plan/specs/plan-cli-compatibility.md` defines the shared-package boundary,
 mapped local workflow, full command disposition, compatibility contract, and
-warning policy. Phase 4 implementation has started with a versioned conformance
-manifest pinned to standalone Plan revision `53ebd96`; PR #46 merged its root
-command disposition and first compatible, missing-workspace, and future-schema
-`status` baselines. PR #47 normalized Brain's Go module path. The current slice
-exposes the storage-neutral domain at `github.com/JimmyMcBride/brain/planning`
-with a locked export surface, stdlib-only dependency gate, and canonical
-external-package compile test. CLI behavior remains unchanged.
+warning policy. Phase 4 now has a versioned conformance manifest pinned to
+standalone Plan revision `53ebd96`; PR #46 captured root-command disposition
+and initial `status` baselines, PR #47 normalized Brain's Go module path, and PR
+#48 exposed the storage-neutral domain. The current slice captures aggregate
+status, project/spec checks, and roadmap read/replace behavior; exposes
+`planning/application` and `planning/local`; and migrates `brain plan status`,
+`brain plan check`, and `brain plan roadmap`. Brain roadmap writes intentionally
+add explicit confirmation, audit events, atomic replacement, and unchanged
+reruns.
 
 ## Command Families
 
 Target conceptual family:
 
 ```text
-brain modules grant official.planning planning.read planning.brainstorm project.context.read --project .
+brain modules grant official.planning planning.read planning.brainstorm planning.roadmap project.context.read --project .
 brain modules enable official.planning --project .
 brain plan ...
 ```
@@ -39,9 +44,10 @@ API.
 
 1. Current: standalone `plan` remains fully functional; Brain adds architecture
    and later module infrastructure without behavior changes.
-2. Shared domain/application services: implemented in Brain for local status,
-   brainstorm list/show/start, and spec list/show; standalone `plan` remains the
-   compatibility source until Phase 4 shares the implementation.
+2. Shared domain/application services: Brain owns importable local status,
+   check, roadmap, brainstorm list/show/start, and spec list/show behavior.
+   Standalone `plan` remains the pinned compatibility source until its mapped
+   local families switch to these packages.
 3. Native primary command: `brain plan` becomes primary; `plan` is a compatibility
    wrapper and emits documented warnings.
 4. Distribution deprecation: workspace migration is stable; separate Plan release
