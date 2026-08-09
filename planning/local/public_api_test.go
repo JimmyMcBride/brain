@@ -72,9 +72,10 @@ func TestPublicPlanningLocalExportSurface(t *testing.T) {
 	}
 	slices.Sort(got)
 	want := []string{
-		"Adapter", "Adapter.CreateBrainstorm", "Adapter.FindBrainstorm", "Adapter.GetBrainstorm", "Adapter.GetSpec",
-		"Adapter.ListBrainstorms", "Adapter.ListSpecs", "Adapter.QuerySpecs", "Adapter.ReadRoadmap",
-		"Adapter.ReplaceRoadmap", "Adapter.Status", "New",
+		"Adapter", "Adapter.CreateBrainstorm", "Adapter.FindBrainstorm", "Adapter.FindSpec", "Adapter.GetBrainstorm",
+		"Adapter.GetSpec", "Adapter.ListBrainstorms", "Adapter.ListSpecs", "Adapter.QuerySpecs",
+		"Adapter.ReadGuidedSessions", "Adapter.ReadRoadmap", "Adapter.ReplaceBrainstorm",
+		"Adapter.ReplaceGuidedSessions", "Adapter.ReplaceRoadmap", "Adapter.Status", "Adapter.WritePromotionSpecs", "New",
 	}
 	slices.Sort(want)
 	if !slices.Equal(got, want) {

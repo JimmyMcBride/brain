@@ -1,0 +1,35 @@
+{
+  "schema_version": 3,
+  "last_active_chain": "brainstorm/local-promotion",
+  "last_updated_at": "2026-07-01T00:00:00Z",
+  "sessions": {
+    "brainstorm/local-promotion": {
+      "chain_id": "brainstorm/local-promotion",
+      "brainstorm": "local-promotion",
+      "current_stage": "brainstorm",
+      "current_cluster": 4,
+      "current_cluster_label": "clarify-open-approaches",
+      "stage_statuses": {
+        "brainstorm": "in_progress"
+      },
+      "summary": "Vision captured. Supporting material recorded.",
+      "next_action": "Continue guided brainstorm clarification.",
+      "created_at": "2026-07-01T00:00:00Z",
+      "updated_at": "2026-07-01T00:00:00Z"
+    },
+    "brainstorm/secondary": {
+      "chain_id": "brainstorm/secondary",
+      "brainstorm": "secondary",
+      "current_stage": "brainstorm",
+      "current_cluster": 1,
+      "current_cluster_label": "vision-intake",
+      "stage_statuses": {
+        "brainstorm": "in_progress"
+      },
+      "summary": "Vision still missing. No supporting material recorded yet.",
+      "next_action": "Capture the user's vision in plain language.",
+      "created_at": "2026-07-01T00:00:00Z",
+      "updated_at": "2026-07-01T00:00:00Z"
+    }
+  }
+}

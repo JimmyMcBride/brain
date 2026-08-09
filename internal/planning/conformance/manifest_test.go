@@ -34,8 +34,44 @@ func TestManifestRevisionErrorIncludesInvalidValue(t *testing.T) {
 }
 
 func TestNormalizeGoldenUsesManifestLineEndings(t *testing.T) {
-	if got, want := normalizeGolden("first\r\nsecond\r\n"), "first\nsecond\n"; got != want {
+	if got, want := normalizeGolden("first\r\n2026-08-09T07:45:22Z\r\n"), "first\n<TIMESTAMP>\n"; got != want {
 		t.Fatalf("unexpected normalized golden: got %q want %q", got, want)
+	}
+}
+
+func TestGuidedAndPromotionCasesReferenceReadableAssets(t *testing.T) {
+	manifest, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantCases := map[string]struct{}{
+		"brainstorm.idea.append":        {},
+		"brainstorm.sessions.guided":    {},
+		"guide.current.local":           {},
+		"discuss.assess.local.ready":    {},
+		"discuss.promote.local.preview": {},
+	}
+	for _, testCase := range manifest.Cases {
+		if _, exists := wantCases[testCase.ID]; !exists {
+			continue
+		}
+		delete(wantCases, testCase.ID)
+		if testCase.Fixture != "fixtures/schema-v3-guided" {
+			t.Fatalf("unexpected fixture for %s: %s", testCase.ID, testCase.Fixture)
+		}
+		for _, asset := range []string{testCase.Expected.Stdout, testCase.Expected.Stderr} {
+			if _, err := ReadGolden(asset); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if testCase.Expected.Files != "unchanged" {
+			if _, err := ReadGolden(testCase.Expected.Files); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if len(wantCases) != 0 {
+		t.Fatalf("missing guided/promotion cases: %v", wantCases)
 	}
 }
 

@@ -1,0 +1,8 @@
+kind: maturity_assessment
+schema_version: 1
+source: local-promotion
+state: ready_single_spec
+confidence: high
+recommended_path: single_spec
+spec: Local Promotion
+generated_at: <TIMESTAMP>

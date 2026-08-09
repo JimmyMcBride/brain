@@ -276,6 +276,7 @@ func addPlanningCommand(root *cobra.Command, _ *rootFlagsState, loadApp appLoade
 	}
 	brainstormStartCmd.Flags().BoolVar(&confirmBrainstorm, "confirm", false, "confirm the brainstorm write")
 	brainstormCmd.AddCommand(brainstormListCmd, brainstormShowCmd, brainstormStartCmd)
+	addPlanningBrainstormWorkflowCommands(brainstormCmd, loadApp)
 
 	specCmd := &cobra.Command{
 		Use:   "spec",
@@ -330,8 +331,392 @@ func addPlanningCommand(root *cobra.Command, _ *rootFlagsState, loadApp appLoade
 	}
 	specCmd.AddCommand(specListCmd, specShowCmd)
 
-	planCmd.AddCommand(statusCmd, checkCmd, roadmapCmd, brainstormCmd, specCmd)
+	guideCmd := newPlanningGuideCommand(loadApp)
+	planCmd.AddCommand(statusCmd, checkCmd, roadmapCmd, brainstormCmd, guideCmd, specCmd)
 	root.AddCommand(planCmd)
+}
+
+func addPlanningBrainstormWorkflowCommands(brainstormCmd *cobra.Command, loadApp appLoader) {
+	var ideaBody string
+	var ideaStdin bool
+	var ideaSection string
+	var confirmIdea bool
+	ideaCmd := &cobra.Command{
+		Use: "idea <brainstorm-slug>", Short: "Preview or append an idea to a local brainstorm", Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			body, err := readBody(cmd.InOrStdin(), ideaBody, ideaStdin)
+			if err != nil {
+				return err
+			}
+			input := application.BrainstormUpdateInput{ID: planning.ArtifactID(args[0]), Section: ideaSection, Body: body, Confirmed: confirmIdea}
+			return withPlanningService(cmd, loadApp, application.PermissionRead, func(appCtx *app.App, service *application.Service, authorizer planningAuthorizer, _ string) error {
+				preview, err := service.PreviewBrainstormUpdate(cmd.Context(), input)
+				if err != nil {
+					return err
+				}
+				if !confirmIdea || preview.Action == application.MutationUnchanged {
+					return printBrainstormMutation(appCtx, preview, !confirmIdea)
+				}
+				result, err := service.UpdateBrainstorm(cmd.Context(), input, authorizer, planningEventSink{history: appCtx.History})
+				if err != nil {
+					return err
+				}
+				return printBrainstormMutation(appCtx, result, false)
+			})
+		},
+	}
+	ideaCmd.Flags().StringVarP(&ideaBody, "body", "b", "", "idea body")
+	ideaCmd.Flags().BoolVar(&ideaStdin, "stdin", false, "read idea body from stdin")
+	ideaCmd.Flags().StringVar(&ideaSection, "section", "ideas", "brainstorm section")
+	ideaCmd.Flags().BoolVar(&confirmIdea, "confirm", false, "confirm the brainstorm write")
+
+	var refinement application.BrainstormRefinementInput
+	refineCmd := &cobra.Command{
+		Use: "refine <brainstorm-slug>", Short: "Preview or apply structured brainstorm refinement", Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			refinement.ID = planning.ArtifactID(args[0])
+			return withPlanningService(cmd, loadApp, application.PermissionRead, func(appCtx *app.App, service *application.Service, authorizer planningAuthorizer, _ string) error {
+				preview, err := service.PreviewBrainstormRefinement(cmd.Context(), refinement)
+				if err != nil {
+					return err
+				}
+				if !refinement.Confirmed || preview.Action == application.MutationUnchanged {
+					return printBrainstormMutation(appCtx, preview, !refinement.Confirmed)
+				}
+				result, err := service.RefineBrainstorm(cmd.Context(), refinement, authorizer, planningEventSink{history: appCtx.History})
+				if err != nil {
+					return err
+				}
+				return printBrainstormMutation(appCtx, result, false)
+			})
+		},
+	}
+	refineCmd.Flags().StringVar(&refinement.Problem, "problem", "", "core problem")
+	refineCmd.Flags().StringVar(&refinement.UserValue, "user-value", "", "user and value")
+	refineCmd.Flags().StringVar(&refinement.Constraints, "constraints", "", "newline-separated constraints")
+	refineCmd.Flags().StringVar(&refinement.Appetite, "appetite", "", "scope appetite")
+	refineCmd.Flags().StringVar(&refinement.RemainingOpenQuestions, "open-questions", "", "newline-separated open questions")
+	refineCmd.Flags().StringVar(&refinement.CandidateApproaches, "approaches", "", "newline-separated candidate approaches")
+	refineCmd.Flags().StringVar(&refinement.DecisionSnapshot, "decision", "", "decision snapshot")
+	refineCmd.Flags().BoolVar(&refinement.Confirmed, "confirm", false, "confirm the brainstorm write")
+
+	var challenge application.BrainstormChallengeInput
+	challengeCmd := &cobra.Command{
+		Use: "challenge <brainstorm-slug>", Short: "Preview or apply a structured challenge pass", Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			challenge.ID = planning.ArtifactID(args[0])
+			return withPlanningService(cmd, loadApp, application.PermissionRead, func(appCtx *app.App, service *application.Service, authorizer planningAuthorizer, _ string) error {
+				preview, err := service.PreviewBrainstormChallenge(cmd.Context(), challenge)
+				if err != nil {
+					return err
+				}
+				if !challenge.Confirmed || preview.Action == application.MutationUnchanged {
+					return printBrainstormMutation(appCtx, preview, !challenge.Confirmed)
+				}
+				result, err := service.ChallengeBrainstorm(cmd.Context(), challenge, authorizer, planningEventSink{history: appCtx.History})
+				if err != nil {
+					return err
+				}
+				return printBrainstormMutation(appCtx, result, false)
+			})
+		},
+	}
+	challengeCmd.Flags().StringVar(&challenge.RabbitHoles, "rabbit-holes", "", "newline-separated rabbit holes")
+	challengeCmd.Flags().StringVar(&challenge.NoGos, "no-gos", "", "newline-separated no-gos")
+	challengeCmd.Flags().StringVar(&challenge.Assumptions, "assumptions", "", "newline-separated assumptions")
+	challengeCmd.Flags().StringVar(&challenge.LikelyOverengineering, "overengineering", "", "likely overengineering")
+	challengeCmd.Flags().StringVar(&challenge.SimplerAlternative, "simpler-alternative", "", "simpler alternative")
+	challengeCmd.Flags().BoolVar(&challenge.Confirmed, "confirm", false, "confirm the brainstorm write")
+
+	resumeCmd := &cobra.Command{
+		Use: "resume [brainstorm-slug]", Short: "Show the active guided brainstorm session", Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return withPlanningService(cmd, loadApp, application.PermissionRead, func(appCtx *app.App, service *application.Service, _ planningAuthorizer, _ string) error {
+				var session application.GuidedSessionRecord
+				var err error
+				if len(args) == 1 {
+					session, err = service.GetGuidedSession(cmd.Context(), args[0])
+				} else {
+					session, err = service.CurrentGuidedSession(cmd.Context())
+				}
+				if err != nil {
+					return err
+				}
+				return appCtx.Output.Print(session, func(w io.Writer) error {
+					_, err := fmt.Fprintf(w, "Resuming %s\nSummary: %s\nNext: %s\n", session.ChainID, session.Summary, session.NextAction)
+					return err
+				})
+			})
+		},
+	}
+
+	sessionsCmd := &cobra.Command{
+		Use: "sessions", Short: "List guided brainstorm sessions", Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return withPlanningService(cmd, loadApp, application.PermissionRead, func(appCtx *app.App, service *application.Service, _ planningAuthorizer, _ string) error {
+				sessions, err := service.ListGuidedSessions(cmd.Context())
+				if err != nil {
+					return err
+				}
+				current, _ := service.CurrentGuidedSession(cmd.Context())
+				return appCtx.Output.Print(sessions, func(w io.Writer) error {
+					for _, session := range sessions {
+						marker := " "
+						if session.ChainID == current.ChainID {
+							marker = "*"
+						}
+						if _, err := fmt.Fprintf(w, "%s %s stage=%s next=%s\n", marker, session.ChainID, session.CurrentStage, session.NextAction); err != nil {
+							return err
+						}
+					}
+					return nil
+				})
+			})
+		},
+	}
+
+	brainstormCmd.AddCommand(ideaCmd, refineCmd, challengeCmd, resumeCmd, sessionsCmd)
+	addPlanningGuidedMutationCommands(brainstormCmd, loadApp)
+	addPlanningPromotionCommands(brainstormCmd, loadApp)
+}
+
+func addPlanningGuidedMutationCommands(brainstormCmd *cobra.Command, loadApp appLoader) {
+	var confirmSwitch bool
+	switchCmd := &cobra.Command{
+		Use: "switch <brainstorm-slug>", Short: "Switch the active guided session", Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return withPlanningService(cmd, loadApp, application.PermissionRead, func(appCtx *app.App, service *application.Service, authorizer planningAuthorizer, _ string) error {
+				if !confirmSwitch {
+					session, err := service.GetGuidedSession(cmd.Context(), args[0])
+					if err != nil {
+						return err
+					}
+					return appCtx.Output.Print(session, func(w io.Writer) error {
+						_, err := fmt.Fprintf(w, "Preview switch to %s. Rerun with --confirm.\n", session.ChainID)
+						return err
+					})
+				}
+				result, err := service.SwitchGuidedSession(cmd.Context(), application.GuidedSessionMutationInput{ChainID: args[0], Confirmed: true}, authorizer, planningEventSink{history: appCtx.History})
+				if err != nil {
+					return err
+				}
+				return appCtx.Output.Print(result, func(w io.Writer) error {
+					_, err := fmt.Fprintf(w, "%s\t%s\n", result.Action, result.Session.ChainID)
+					return err
+				})
+			})
+		},
+	}
+	switchCmd.Flags().BoolVar(&confirmSwitch, "confirm", false, "confirm the guided-session write")
+
+	var confirmReopen bool
+	reopenCmd := &cobra.Command{
+		Use: "reopen <brainstorm-slug> <stage>", Short: "Reopen a stage and mark downstream review", Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !confirmReopen {
+				return fmt.Errorf("%w: rerun guided stage reopen with --confirm", application.ErrConfirmationRequired)
+			}
+			return withPlanningService(cmd, loadApp, application.PermissionRead, func(appCtx *app.App, service *application.Service, authorizer planningAuthorizer, _ string) error {
+				result, err := service.ReopenGuidedSession(cmd.Context(), application.GuidedSessionMutationInput{ChainID: args[0], Stage: args[1], Confirmed: true}, authorizer, planningEventSink{history: appCtx.History})
+				if err != nil {
+					return err
+				}
+				return appCtx.Output.Print(result, func(w io.Writer) error {
+					_, err := fmt.Fprintf(w, "%s\t%s impacted=%s\n", result.Action, result.Session.ChainID, strings.Join(result.Impacted, ","))
+					return err
+				})
+			})
+		},
+	}
+	reopenCmd.Flags().BoolVar(&confirmReopen, "confirm", false, "confirm the guided-session write")
+
+	var confirmReview bool
+	reviewCmd := &cobra.Command{
+		Use: "review <brainstorm-slug>", Short: "Review downstream guided stages", Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !confirmReview {
+				return fmt.Errorf("%w: rerun guided stage review with --confirm", application.ErrConfirmationRequired)
+			}
+			return withPlanningService(cmd, loadApp, application.PermissionRead, func(appCtx *app.App, service *application.Service, authorizer planningAuthorizer, _ string) error {
+				result, err := service.ReviewGuidedSession(cmd.Context(), application.GuidedSessionMutationInput{ChainID: args[0], Confirmed: true}, authorizer, planningEventSink{history: appCtx.History})
+				if err != nil {
+					return err
+				}
+				return appCtx.Output.Print(result, func(w io.Writer) error {
+					_, err := fmt.Fprintf(w, "%s\t%s reviewed=%s\n", result.Action, result.Session.ChainID, strings.Join(result.Impacted, ","))
+					return err
+				})
+			})
+		},
+	}
+	reviewCmd.Flags().BoolVar(&confirmReview, "confirm", false, "confirm the guided-session write")
+
+	var parkValue, parkReason, parkUnlock string
+	var confirmPark bool
+	parkCmd := &cobra.Command{
+		Use: "park <brainstorm-slug> <title>", Short: "Preview or park a roadmap idea", Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			input := application.RoadmapParkingInput{BrainstormID: planning.ArtifactID(args[0]), Title: args[1], Value: parkValue, Reason: parkReason, Unlock: parkUnlock, Confirmed: confirmPark}
+			return withPlanningService(cmd, loadApp, application.PermissionRead, func(appCtx *app.App, service *application.Service, authorizer planningAuthorizer, _ string) error {
+				preview, err := service.PreviewRoadmapParking(cmd.Context(), input)
+				if err != nil {
+					return err
+				}
+				if !confirmPark || preview.Action == application.MutationUnchanged {
+					return appCtx.Output.Print(preview, func(w io.Writer) error {
+						_, err := fmt.Fprintf(w, "%s\t%s\n", preview.Action, preview.Document.Path)
+						return err
+					})
+				}
+				result, err := service.ParkRoadmap(cmd.Context(), input, authorizer, planningEventSink{history: appCtx.History})
+				if err != nil {
+					return err
+				}
+				return appCtx.Output.Print(result, func(w io.Writer) error {
+					_, err := fmt.Fprintf(w, "%s\t%s\n", result.Action, result.Document.Path)
+					return err
+				})
+			})
+		},
+	}
+	parkCmd.Flags().StringVar(&parkValue, "value", "", "future value")
+	parkCmd.Flags().StringVar(&parkReason, "reason", "", "why parked")
+	parkCmd.Flags().StringVar(&parkUnlock, "unlock", "", "unlock condition")
+	parkCmd.Flags().BoolVar(&confirmPark, "confirm", false, "confirm the roadmap write")
+	brainstormCmd.AddCommand(switchCmd, reopenCmd, reviewCmd, parkCmd)
+}
+
+func addPlanningPromotionCommands(brainstormCmd *cobra.Command, loadApp appLoader) {
+	assessCmd := &cobra.Command{
+		Use: "assess <brainstorm-slug>", Short: "Assess local brainstorm promotion maturity", Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return withPlanningService(cmd, loadApp, application.PermissionRead, func(appCtx *app.App, service *application.Service, _ planningAuthorizer, _ string) error {
+				assessment, err := service.AssessLocalBrainstorm(cmd.Context(), planning.ArtifactID(args[0]))
+				if err != nil {
+					return err
+				}
+				return appCtx.Output.Print(assessment, func(w io.Writer) error {
+					_, err := fmt.Fprintf(w, "%s\t%s\n", assessment.Decision.State, assessment.Decision.Reason)
+					return err
+				})
+			})
+		},
+	}
+	var confirmPromote bool
+	promoteCmd := &cobra.Command{
+		Use: "promote <brainstorm-slug>", Short: "Preview or apply direct local spec promotion", Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			id := planning.ArtifactID(args[0])
+			return withPlanningService(cmd, loadApp, application.PermissionRead, func(appCtx *app.App, service *application.Service, authorizer planningAuthorizer, _ string) error {
+				if !confirmPromote {
+					draft, err := service.PreviewLocalPromotion(cmd.Context(), id)
+					if err != nil {
+						return err
+					}
+					return appCtx.Output.Print(draft, func(w io.Writer) error {
+						_, err := fmt.Fprintf(w, "%s\t%d spec action(s)\n", draft.PromotionDecision, len(draft.ProposedSpecs))
+						return err
+					})
+				}
+				result, err := service.PromoteLocalBrainstorm(cmd.Context(), application.LocalPromotionInput{BrainstormID: id, Confirmed: true}, authorizer, planningEventSink{history: appCtx.History})
+				if err != nil {
+					return err
+				}
+				return appCtx.Output.Print(result, func(w io.Writer) error {
+					_, err := fmt.Fprintf(w, "%s\t%d spec(s)\n", result.Action, len(result.Specs))
+					return err
+				})
+			})
+		},
+	}
+	promoteCmd.Flags().BoolVar(&confirmPromote, "confirm", false, "confirm direct local spec writes")
+
+	var repairSpecs []string
+	var confirmRepair bool
+	repairCmd := &cobra.Command{
+		Use: "repair <brainstorm-slug>", Short: "Preview or repair the local spec split", Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return withPlanningService(cmd, loadApp, application.PermissionRead, func(appCtx *app.App, service *application.Service, authorizer planningAuthorizer, _ string) error {
+				input := application.LocalPromotionRepairInput{BrainstormID: planning.ArtifactID(args[0]), Specs: repairSpecs, Confirmed: confirmRepair}
+				if !confirmRepair {
+					result, err := service.PreviewLocalPromotionRepair(cmd.Context(), input)
+					if err != nil {
+						return err
+					}
+					return appCtx.Output.Print(result, func(w io.Writer) error {
+						if _, err := fmt.Fprintf(w, "%s\t%s\n", result.Action, result.UpdatedPath); err != nil {
+							return err
+						}
+						if result.Action != application.MutationUnchanged {
+							_, err := fmt.Fprintln(w, "Preview only. Rerun with --confirm to write.")
+							return err
+						}
+						return nil
+					})
+				}
+				result, err := service.RepairLocalPromotionSource(cmd.Context(), application.LocalPromotionRepairInput{BrainstormID: planning.ArtifactID(args[0]), Specs: repairSpecs, Confirmed: true}, authorizer, planningEventSink{history: appCtx.History})
+				if err != nil {
+					return err
+				}
+				return appCtx.Output.Print(result, func(w io.Writer) error {
+					_, err := fmt.Fprintf(w, "%s\t%s\n", result.Action, result.UpdatedPath)
+					return err
+				})
+			})
+		},
+	}
+	repairCmd.Flags().StringArrayVar(&repairSpecs, "spec", nil, "spec title; repeat for each spec")
+	repairCmd.Flags().BoolVar(&confirmRepair, "confirm", false, "confirm the brainstorm write")
+	brainstormCmd.AddCommand(assessCmd, promoteCmd, repairCmd)
+}
+
+func newPlanningGuideCommand(loadApp appLoader) *cobra.Command {
+	guideCmd := &cobra.Command{Use: "guide", Short: "Render local Planning guide packets"}
+	currentCmd := &cobra.Command{
+		Use: "current", Short: "Render the current local guide packet", Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return withPlanningService(cmd, loadApp, application.PermissionRead, func(appCtx *app.App, service *application.Service, _ planningAuthorizer, _ string) error {
+				packet, err := service.CurrentGuidePacket(cmd.Context())
+				if err != nil {
+					return err
+				}
+				return appCtx.Output.Print(packet, func(w io.Writer) error { _, err := fmt.Fprintln(w, packet.RenderedPrompt); return err })
+			})
+		},
+	}
+	var chainID, checkpoint string
+	showCmd := &cobra.Command{
+		Use: "show", Short: "Render one local guide packet", Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if strings.TrimSpace(chainID) == "" {
+				return fmt.Errorf("guide show requires --chain")
+			}
+			return withPlanningService(cmd, loadApp, application.PermissionRead, func(appCtx *app.App, service *application.Service, _ planningAuthorizer, _ string) error {
+				packet, err := service.GuidePacketForChain(cmd.Context(), chainID, checkpoint)
+				if err != nil {
+					return err
+				}
+				return appCtx.Output.Print(packet, func(w io.Writer) error { _, err := fmt.Fprintln(w, packet.RenderedPrompt); return err })
+			})
+		},
+	}
+	showCmd.Flags().StringVar(&chainID, "chain", "", "guided session chain id")
+	showCmd.Flags().StringVar(&checkpoint, "checkpoint", "", "guide checkpoint override")
+	guideCmd.AddCommand(currentCmd, showCmd)
+	return guideCmd
+}
+
+func printBrainstormMutation(appCtx *app.App, result application.BrainstormMutationResult, preview bool) error {
+	return appCtx.Output.Print(result, func(w io.Writer) error {
+		if _, err := fmt.Fprintf(w, "%s\t%s\n", result.Action, result.Document.Path); err != nil {
+			return err
+		}
+		if preview && result.Action != application.MutationUnchanged {
+			_, err := fmt.Fprintln(w, "Preview only. Rerun with --confirm to write.")
+			return err
+		}
+		return nil
+	})
 }
 
 func resolvePlanningCheckInput(args []string) (application.CheckInput, error) {
@@ -572,9 +957,17 @@ func (s planningEventSink) Publish(_ context.Context, event application.Event) e
 	target := string(event.Artifact.ID)
 	file := ".plan/brainstorms/" + target + ".md"
 	summary := "Planning brainstorm created"
-	if event.Artifact.Kind == planning.ArtifactRoadmap {
+	switch event.Name {
+	case application.EventRoadmapUpdated:
 		file = ".plan/ROADMAP.md"
 		summary = "Planning roadmap updated"
+	case application.EventBrainstormUpdated:
+		summary = "Planning brainstorm updated"
+	case application.EventGuidedSessionUpdated:
+		file = ".plan/.meta/guided_sessions.json"
+		summary = "Planning guided session updated"
+	case application.EventBrainstormPromoted:
+		summary = "Planning brainstorm promoted directly to local spec"
 	}
 	return s.history.Append(history.Entry{
 		ID:        strings.Join([]string{event.ModuleID, event.Name, target, fmt.Sprintf("%d", event.OccurredAt.UnixNano())}, ":"),

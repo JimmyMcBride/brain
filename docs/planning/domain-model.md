@@ -1,5 +1,5 @@
 ---
-updated: "2026-07-31T19:59:14Z"
+updated: "2026-08-09T07:52:41Z"
 ---
 # Planning Domain Model
 
@@ -83,8 +83,10 @@ runtime/external work-item records, but must preserve original content and links
 
 The public application package now owns the repository port proven by the
 schema-v3 local adapter, plus workspace diagnostics, aggregate status, local
-spec checks, roadmap read/replace, existing brainstorm/spec reads, and guarded
-mutation contracts. The local adapter depends only on the Planning domain,
+spec checks, roadmap read/replace/parking, brainstorm capture/refinement/challenge,
+guided-session state and packets, maturity/source repair, direct local spec
+promotion, existing brainstorm/spec reads, and guarded mutation contracts. The
+local adapter depends only on the Planning domain,
 application contracts, standard library, and YAML parsing. Cobra, Brain module
 runtime, GitHub, Linear, and cloud types remain outside both packages.
 
@@ -101,6 +103,11 @@ Future adapter responsibilities remain provisional:
 Do not add provider abstractions solely to preserve retired Linear code. Extend
 the repository port only when a mapped command family proves a concrete shared
 need.
+
+Direct local promotion preserves the target model: a mature brainstorm becomes
+one spec, or an explicit set of specs, without an epic intermediate. A confirmed
+rerun reconciles by stable spec slug and source brainstorm, returning
+`unchanged` or `reuse` instead of duplicating artifacts.
 
 ## Source References
 

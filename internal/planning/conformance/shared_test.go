@@ -7,8 +7,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/JimmyMcBride/brain/planning"
 	"github.com/JimmyMcBride/brain/planning/application"
 	"github.com/JimmyMcBride/brain/planning/local"
 )
@@ -76,6 +79,92 @@ func TestSharedWorkspaceQueryAndRoadmapBehaviorMatchesCapturedBaseline(t *testin
 	}
 }
 
+func TestSharedGuidedBrainstormAndDirectPromotionBehaviorMatchesCapturedBaseline(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "fixture")
+	if err := os.Mkdir(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fixture, err := Fixture("fixtures/schema-v3-guided")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.CopyFS(root, fixture); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 8, 9, 7, 45, 22, 0, time.UTC)
+	service := application.New(local.New(root), application.Options{
+		ModuleID: "conformance", ProjectRoot: root, Now: func() time.Time { return now },
+	})
+	ctx := context.Background()
+	events := &recordingSink{}
+
+	sessions, err := service.ListGuidedSessions(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := service.CurrentGuidedSession(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertGolden(t, "golden/brainstorm-sessions.stdout", renderGuidedSessions(sessions, current.ChainID))
+
+	packet, err := service.CurrentGuidePacket(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertGolden(t, "golden/guide-current.structural", renderGuideProjection(packet))
+
+	id := planning.ArtifactID("local-promotion")
+	assessment, err := service.AssessLocalBrainstorm(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertGolden(t, "golden/brainstorm-assess.structural", renderAssessmentProjection(assessment))
+	draft, err := service.PreviewLocalPromotion(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertGolden(t, "golden/brainstorm-promote.structural", renderPromotionProjection(draft))
+
+	idea, err := service.UpdateBrainstorm(ctx, application.BrainstormUpdateInput{
+		ID: id, Section: "ideas", Body: "Keep the guide packet stable.", Confirmed: true,
+	}, allowAll{}, events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if idea.Action != application.MutationUpdate {
+		t.Fatalf("unexpected idea action: %s", idea.Action)
+	}
+	assertGolden(t, "golden/brainstorm-idea.stdout", "Updated brainstorm "+idea.Document.Path+"\n")
+	assertGolden(t, "golden/brainstorm-idea.files", renderBrainstormIdeaProjection(idea.Document))
+	ideaRerun, err := service.UpdateBrainstorm(ctx, application.BrainstormUpdateInput{
+		ID: id, Section: "ideas", Body: "Keep the guide packet stable.", Confirmed: true,
+	}, allowAll{}, events)
+	if err != nil || ideaRerun.Action != application.MutationUnchanged || ideaRerun.Event != nil {
+		t.Fatalf("idea rerun was not idempotent: %#v err=%v", ideaRerun, err)
+	}
+
+	promoted, err := service.PromoteLocalBrainstorm(ctx, application.LocalPromotionInput{BrainstormID: id, Confirmed: true}, allowAll{}, events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if promoted.Action != application.MutationCreate || len(promoted.Specs) != 1 || promoted.Specs[0].Artifact.ID != id {
+		t.Fatalf("unexpected direct promotion: %#v", promoted)
+	}
+	for _, legacy := range []string{"epics", "stories"} {
+		if _, err := os.Stat(filepath.Join(root, ".plan", legacy)); !os.IsNotExist(err) {
+			t.Fatalf("direct promotion created legacy %s hierarchy: %v", legacy, err)
+		}
+	}
+	promotionRerun, err := service.PromoteLocalBrainstorm(ctx, application.LocalPromotionInput{BrainstormID: id, Confirmed: true}, allowAll{}, events)
+	if err != nil || promotionRerun.Action != application.MutationUnchanged || promotionRerun.Event != nil {
+		t.Fatalf("promotion rerun was not idempotent: %#v err=%v", promotionRerun, err)
+	}
+	if len(events.events) != 2 {
+		t.Fatalf("expected one idea and one promotion event, got %d", len(events.events))
+	}
+}
+
 func assertGolden(t *testing.T, name, got string) {
 	t.Helper()
 	got = normalizeGolden(got)
@@ -112,6 +201,73 @@ func renderCheckReport(report application.CheckReport) string {
 	var out bytes.Buffer
 	writeCheckReport(&out, report)
 	return out.String()
+}
+
+func renderGuidedSessions(sessions []application.GuidedSessionRecord, current string) string {
+	var out bytes.Buffer
+	for _, session := range sessions {
+		marker := " "
+		if session.ChainID == current {
+			marker = "*"
+		}
+		fmt.Fprintf(&out, "%s %s stage=%s next=%s\n", marker, session.ChainID, session.CurrentStage, session.NextAction)
+	}
+	return out.String()
+}
+
+func renderGuideProjection(packet application.GuidePacket) string {
+	return fmt.Sprintf("kind: %s\nschema_version: %d\nchain_id: %v\nartifact: %v\ncheckpoint: %v\npass: %v\nownership: %v\ngenerated_at: %s\n",
+		packet.Kind, packet.SchemaVersion, packet.Session["chain_id"], packet.Artifact["slug"], packet.Mode["checkpoint"],
+		packet.Mode["pass"], packet.Ownership["mode"], packet.GeneratedAt)
+}
+
+func renderAssessmentProjection(assessment application.CollaborationAssessment) string {
+	title := firstString(assessment.Decision.SuggestedTitles["specs"])
+	return fmt.Sprintf("kind: %s\nschema_version: %d\nsource: %v\nstate: %s\nconfidence: %s\nrecommended_path: %s\nspec: %s\ngenerated_at: %s\n",
+		assessment.Kind, assessment.SchemaVersion, assessment.Source["brainstorm_slug"], assessment.Decision.State,
+		assessment.Decision.Confidence, assessment.Decision.RecommendedPath, title, assessment.GeneratedAt)
+}
+
+func renderPromotionProjection(draft application.LocalPromotionDraft) string {
+	var spec application.PromotionSpecDraft
+	if len(draft.ProposedSpecs) > 0 {
+		spec = draft.ProposedSpecs[0]
+	}
+	return fmt.Sprintf("kind: %s\nschema_version: %d\nsource: %v\nstate: %s\npromotion_decision: %s\nspec: %s\nspec_kind: %s\nspec_action: %s\nconfirmation_required: %t\ngenerated_at: %s\n",
+		draft.Kind, draft.SchemaVersion, draft.Source["brainstorm_slug"], draft.Assessment.State, draft.PromotionDecision,
+		spec.Title, spec.Kind, spec.Action, draft.ConfirmationRequired, draft.GeneratedAt)
+}
+
+func renderBrainstormIdeaProjection(document application.BrainstormDocument) string {
+	return fmt.Sprintf("%s\nupdated_at: %v\n## Ideas\n%s\n", document.Path, document.Metadata["updated_at"], strings.TrimSpace(extractProjectedSection(document.Body, "Ideas")))
+}
+
+func extractProjectedSection(body, heading string) string {
+	marker := "## " + heading
+	start := strings.Index(body, marker)
+	if start < 0 {
+		return ""
+	}
+	value := body[start+len(marker):]
+	if end := strings.Index(value, "\n## "); end >= 0 {
+		value = value[:end]
+	}
+	return strings.TrimSpace(value)
+}
+
+func firstString(value any) string {
+	switch values := value.(type) {
+	case []string:
+		if len(values) > 0 {
+			return values[0]
+		}
+	case []any:
+		if len(values) > 0 {
+			text, _ := values[0].(string)
+			return text
+		}
+	}
+	return ""
 }
 
 func writeCheckReport(out io.Writer, report application.CheckReport) {

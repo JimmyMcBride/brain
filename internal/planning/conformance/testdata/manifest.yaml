@@ -10,6 +10,7 @@ normalization:
   line_endings: lf
   path_separator: /
   project_root_token: "<PROJECT>"
+  timestamps: rfc3339_token
 
 commands:
   - id: init
@@ -568,5 +569,99 @@ cases:
       exit_code: exact
       stdout: structural
       stderr: structural
+      files: exact
+      rerun: structural
+  - id: brainstorm.idea.append
+    command: brainstorm.idea
+    fixture: fixtures/schema-v3-guided
+    args: [--project, "<PROJECT>", brainstorm, idea, local-promotion, --body, "Keep the guide packet stable.", --section, ideas]
+    native_args: [--project, "<PROJECT>", plan, brainstorm, idea, local-promotion, --body, "Keep the guide packet stable.", --section, ideas, --confirm]
+    intentional_differences:
+      - Brain previews by default and requires --confirm before the brainstorm write.
+      - Brain reports unchanged and emits no duplicate audit event on rerun.
+    expected:
+      exit_code: 0
+      stdout: golden/brainstorm-idea.stdout
+      stderr: empty
+      files: golden/brainstorm-idea.files
+      rerun: golden/brainstorm-idea-rerun.files
+    compare:
+      exit_code: exact
+      stdout: structural
+      stderr: exact
+      files: structural
+      rerun: structural
+  - id: brainstorm.sessions.guided
+    command: brainstorm.sessions
+    fixture: fixtures/schema-v3-guided
+    args: [--project, "<PROJECT>", brainstorm, sessions]
+    native_args: [--project, "<PROJECT>", plan, brainstorm, sessions]
+    expected:
+      exit_code: 0
+      stdout: golden/brainstorm-sessions.stdout
+      stderr: empty
+      files: unchanged
+      rerun: same
+    compare:
+      exit_code: exact
+      stdout: exact
+      stderr: exact
+      files: exact
+      rerun: exact
+  - id: guide.current.local
+    command: guide.current
+    fixture: fixtures/schema-v3-guided
+    args: [--project, "<PROJECT>", guide, current, --format, json]
+    native_args: [--project, "<PROJECT>", --json, plan, guide, current]
+    intentional_differences:
+      - Brain host command hints use the brain plan namespace.
+    expected:
+      exit_code: 0
+      stdout: golden/guide-current.structural
+      stderr: empty
+      files: unchanged
+      rerun: same
+    compare:
+      exit_code: exact
+      stdout: structural
+      stderr: exact
+      files: exact
+      rerun: structural
+  - id: discuss.assess.local.ready
+    command: discuss.assess.local
+    fixture: fixtures/schema-v3-guided
+    args: [--project, "<PROJECT>", discuss, assess, --brainstorm, local-promotion, --format, json]
+    native_args: [--project, "<PROJECT>", --json, plan, brainstorm, assess, local-promotion]
+    expected:
+      exit_code: 0
+      stdout: golden/brainstorm-assess.structural
+      stderr: empty
+      files: unchanged
+      rerun: same
+    compare:
+      exit_code: exact
+      stdout: structural
+      stderr: exact
+      files: exact
+      rerun: structural
+  - id: discuss.promote.local.preview
+    command: discuss.promote.local
+    fixture: fixtures/schema-v3-guided
+    args: [--project, "<PROJECT>", discuss, promote, --brainstorm, local-promotion, --format, json]
+    native_args: [--project, "<PROJECT>", --json, plan, brainstorm, promote, local-promotion]
+    intentional_differences:
+      - Brain replaces the standalone apply placeholder with confirmed direct local spec writes.
+      - Brain uses local artifact verification wording and brain plan command policy hints.
+      - Brain never creates an epic or persisted execution-slice intermediate.
+    expected:
+      exit_code: 0
+      stdout: golden/brainstorm-promote.structural
+      stderr: empty
+      files: unchanged
+      rerun: same
+    compare:
+      exit_code: exact
+      stdout: structural
+      stderr: exact
       files: exact
       rerun: structural

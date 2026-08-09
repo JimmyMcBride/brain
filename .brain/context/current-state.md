@@ -1,5 +1,5 @@
 ---
-updated: "2026-07-31T20:00:05Z"
+updated: "2026-08-09T07:52:41Z"
 ---
 <!-- brain:begin context-current-state -->
 This file is a deterministic snapshot of the repository state at the last refresh.
@@ -10,7 +10,7 @@ This file is a deterministic snapshot of the repository state at the last refres
 - Root: `.`
 - Runtime: `go`
 - Go module: `github.com/JimmyMcBride/brain`
-- Current branch: `codex/planning-workspace-query-roadmap`
+- Current branch: `develop`
 - Default branch: `develop`
 - Remote: `https://github.com/JimmyMcBride/brain.git`
 - Go test files: `42`
@@ -29,7 +29,7 @@ This file is a deterministic snapshot of the repository state at the last refres
 
 ## Local Notes
 
-- 2026-07-31: Phase 4's fourth slice captures pinned standalone status, project/spec check, and roadmap contracts; exposes `github.com/JimmyMcBride/brain/planning/application` and `github.com/JimmyMcBride/brain/planning/local` with locked export/dependency gates; and migrates native aggregate status, check, roadmap reads, and confirmed roadmap replacements. Roadmap writes are atomic, permissioned, audited, and idempotent. The next slice captures and migrates local brainstorm, guided-session, and direct-promotion behavior.
+- 2026-08-09: Phase 4's fifth slice captures pinned standalone local brainstorm, guided-session, guide-packet, maturity, repair, and promotion contracts. Shared `planning/application` and `planning/local` behavior now backs native idea/refinement/challenge updates, session navigation, roadmap parking, and confirmed direct brainstorm-to-spec promotion with permission, audit, atomic-write, and idempotency gates. Promotion creates no epic or persisted execution-slice intermediate. The next slice captures and migrates canonical local spec mutation, readiness, approval, execution, and handoff behavior.
 - 2026-07-29: Phase 4's conformance manifest merged through PR #46, followed by canonical Go module-path normalization through PR #47. Both slices preserved CLI behavior and `.plan/` artifacts.
 - 2026-07-29: Phase 4 is approved in `.plan/specs/plan-cli-compatibility.md`. The spec chooses a conformance-first transition to narrow Brain-owned importable Planning packages, maps the coherent local spec-first workflow, keeps standalone Plan independently usable during overlap, excludes GitHub/Linear/cloud/hybrid implementation, and derives execution slices only when implementation starts.
 - 2026-07-29: Phase 3 merged into `develop` through PR #39. Brain now ships the disabled-by-default `official.planning` module with schema-v3 local `.plan/` status, brainstorm list/show/start, and spec list/show commands. Read and write compatibility failures have distinct application errors, and stale brainstorm-creation lock timeouts identify the lock path. Ubuntu and Windows CI passed.

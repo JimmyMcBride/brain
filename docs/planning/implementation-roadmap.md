@@ -1,5 +1,5 @@
 ---
-updated: "2026-07-31T19:58:43Z"
+updated: "2026-08-09T07:52:41Z"
 ---
 # Planning Module Implementation Roadmap
 
@@ -53,7 +53,13 @@ Brain's Go module path. PR #48 exposed the stdlib-only domain at
 project/spec check, and roadmap contracts; exposes importable
 `planning/application` and `planning/local` packages with locked exports and
 dependencies; and migrates native aggregate status, check, and guarded roadmap
-commands behind shared conformance tests.
+commands behind shared conformance tests. The fifth slice captures and migrates
+local idea/refinement/challenge updates, guided-session navigation and packets,
+roadmap parking, maturity/repair behavior, and confirmed direct promotion from
+brainstorm to canonical spec. Content and promotion mutations are preview-first;
+all writes are permissioned, confirmed, audited, atomic at the local adapter
+boundary, and idempotent. Direct promotion creates no epic or persisted
+execution-slice intermediate.
 
 Deliver wrapper/shared implementation, command mapping, warning policy, docs, and
 script/exit/JSON compatibility tests.
@@ -109,7 +115,7 @@ lifecycle, diagnostics, and distribution direction.
 
 ## Exact Next Slice
 
-> After workspace, query, check, and roadmap behavior merges, capture the local
-> brainstorm, guided-session, and direct-promotion contracts. Then expose only
-> the additional application/local seams those cases require and migrate that
-> family behind passing conformance tests.
+> After local brainstorm, guided-session, and direct-promotion behavior merges,
+> capture canonical local spec mutation, readiness, approval, execution, and
+> handoff contracts. Then expose only the additional application/local seams
+> those cases require and migrate that family behind passing conformance tests.
