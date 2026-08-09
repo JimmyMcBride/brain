@@ -338,6 +338,30 @@ func (r *fakeRepository) WritePromotionSpecs(_ context.Context, writes []Promoti
 	return documents, MutationCreate, nil
 }
 
+func (r *fakeRepository) ReplaceSpec(_ context.Context, document SpecDocument, _ time.Time) (SpecDocument, MutationAction, error) {
+	for index, current := range r.specs {
+		if current.Artifact.ID != document.Artifact.ID {
+			continue
+		}
+		if sameSpecDocument(current, document) {
+			return current, MutationUnchanged, nil
+		}
+		r.specs[index] = document
+		return document, MutationUpdate, nil
+	}
+	return SpecDocument{}, "", errors.New("not found")
+}
+
+func (r *fakeRepository) RollbackSpecReplacement(_ context.Context, expected, previous SpecDocument) error {
+	for index, current := range r.specs {
+		if current.Artifact.ID == expected.Artifact.ID && sameSpecDocument(current, expected) {
+			r.specs[index] = previous
+			return nil
+		}
+	}
+	return ErrArtifactConflict
+}
+
 type allowAuthorizer struct{}
 
 func (allowAuthorizer) Require(context.Context, string) error { return nil }

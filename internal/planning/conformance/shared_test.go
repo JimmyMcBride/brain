@@ -165,6 +165,83 @@ func TestSharedGuidedBrainstormAndDirectPromotionBehaviorMatchesCapturedBaseline
 	}
 }
 
+func TestSharedSpecWorkflowMatchesCapturedBaseline(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "fixture")
+	if err := os.Mkdir(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fixture, err := Fixture("fixtures/schema-v3-spec")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.CopyFS(root, fixture); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 8, 9, 7, 45, 22, 0, time.UTC)
+	service := application.New(local.New(root), application.Options{ModuleID: "conformance", ProjectRoot: root, Now: func() time.Time { return now }})
+	ctx := context.Background()
+	events := &recordingSink{}
+	draftID := planning.ArtifactID("draft-spec")
+	approved, err := service.SetSpecStatus(ctx, application.SpecStatusInput{ID: draftID, Status: planning.SpecApproved, Confirmed: true}, allowAll{}, events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if approved.Document.Artifact.Status != planning.SpecApproved || approved.Action != application.MutationUpdate {
+		t.Fatalf("unexpected approval: %#v", approved)
+	}
+	id := planning.ArtifactID("execution-ready")
+	analysis, err := service.AnalyzeSpec(ctx, id, true, allowAll{}, events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertGolden(t, "golden/spec-analyze.stdout", renderAnalysisReport(analysis))
+	checklist, err := service.RunSpecChecklist(ctx, id, "general", true, allowAll{}, events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertGolden(t, "golden/spec-checklist.stdout", renderChecklistReport(checklist))
+	initiative := planning.ArtifactID("phase-four")
+	updated, err := service.SetSpecInitiative(ctx, application.SpecInitiativeInput{ID: id, Initiative: &initiative, Title: "Phase Four", Summary: "Complete local compatibility.", Confirmed: true}, allowAll{}, events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Document.Metadata["initiative_title"] != "Phase Four" {
+		t.Fatalf("initiative metadata missing: %#v", updated.Document.Metadata)
+	}
+	execution, err := service.BeginSpecExecution(ctx, application.SpecExecutionInput{ID: id, BranchPrefix: "feature/", Confirmed: true}, allowAll{}, events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertGolden(t, "golden/spec-execute.stdout", renderExecutionResult(execution))
+	if _, err := os.Stat(filepath.Join(root, ".plan", "stories")); !os.IsNotExist(err) {
+		t.Fatalf("execution persisted stories: %v", err)
+	}
+	rerun, err := service.BeginSpecExecution(ctx, application.SpecExecutionInput{ID: id, BranchPrefix: "feature/", Confirmed: true}, allowAll{}, events)
+	if err != nil || rerun.Action != application.MutationUnchanged || rerun.Event != nil {
+		t.Fatalf("execution rerun not idempotent: %#v err=%v", rerun, err)
+	}
+}
+
+func renderAnalysisReport(report application.SpecAnalysisReport) string {
+	return fmt.Sprintf("spec_analysis: %s\nfindings: %d total, %d blocking, %d guidance\nstatus: ok\n", report.SpecPath, len(report.Findings), report.ErrorCount(), report.WarningCount())
+}
+func renderChecklistReport(report application.SpecChecklistReport) string {
+	return fmt.Sprintf("spec_checklist: %s\nprofile: %s\nfindings: %d total, %d blocking, %d guidance\nstatus: ok\n", report.SpecPath, report.Profile, len(report.Findings), report.ErrorCount(), report.WarningCount())
+}
+func renderExecutionResult(result application.SpecExecutionResult) string {
+	var out bytes.Buffer
+	view := result.Execution
+	fmt.Fprintf(&out, "spec_execution: %s\nstatus: %s\nbranch: %s\nslices: %d\n", view.SpecPath, view.Status, view.SuggestedBranch, len(view.Slices))
+	for i, slice := range view.Slices {
+		fmt.Fprintf(&out, "%d. %s\n   goal: %s\n", i+1, slice.Title, slice.Goal)
+		for _, verify := range slice.Verification {
+			fmt.Fprintf(&out, "   verify: %s\n", verify)
+		}
+	}
+	fmt.Fprintln(&out, "workflow:\n- implement one slice at a time\n- review and verify each slice before committing it\n- open a PR after the full spec is built")
+	return out.String()
+}
+
 func assertGolden(t *testing.T, name, got string) {
 	t.Helper()
 	got = normalizeGolden(got)

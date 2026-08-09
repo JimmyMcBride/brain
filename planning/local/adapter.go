@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -525,6 +526,100 @@ func (a *Adapter) WritePromotionSpecs(
 	return documents, overall, nil
 }
 
+// ReplaceSpec atomically replaces one canonical spec document or reports it unchanged.
+func (a *Adapter) ReplaceSpec(ctx context.Context, document application.SpecDocument, updatedAt time.Time) (application.SpecDocument, application.MutationAction, error) {
+	if err := a.requireCompatible(ctx); err != nil {
+		return application.SpecDocument{}, "", err
+	}
+	if err := document.Artifact.ID.Validate(); err != nil {
+		return application.SpecDocument{}, "", err
+	}
+	if findings := planning.ValidateSpec(document.Artifact); hasErrorFindings(findings) {
+		return application.SpecDocument{}, "", fmt.Errorf("invalid spec replacement: %s", joinErrorFindingMessages(findings))
+	}
+	path := filepath.Join(a.projectRoot, ".plan", "specs", string(document.Artifact.ID)+".md")
+	release, err := acquireMutationLock(ctx, filepath.Join(a.projectRoot, ".plan", "specs", "."+string(document.Artifact.ID)+".lock"))
+	if err != nil {
+		return application.SpecDocument{}, "", err
+	}
+	defer release()
+	currentMeta, currentBody, err := readDocument(path)
+	if err != nil {
+		return application.SpecDocument{}, "", err
+	}
+	meta := cloneMetadata(document.Metadata)
+	meta["project"] = filepath.Base(a.projectRoot)
+	meta["slug"] = string(document.Artifact.ID)
+	meta["status"] = string(document.Artifact.Status)
+	meta["title"] = document.Artifact.Title
+	meta["type"] = "spec"
+	meta["created_at"] = currentMeta["created_at"]
+	if document.Artifact.Initiative == nil {
+		delete(meta, "initiative")
+		delete(meta, "initiative_title")
+		delete(meta, "initiative_summary")
+	} else {
+		meta["initiative"] = string(*document.Artifact.Initiative)
+	}
+	currentComparable := cloneMetadata(currentMeta)
+	desiredComparable := cloneMetadata(meta)
+	delete(currentComparable, "updated_at")
+	delete(desiredComparable, "updated_at")
+	if currentBody == document.Body && reflect.DeepEqual(currentComparable, desiredComparable) {
+		unchanged, err := a.readSpec(path)
+		return unchanged, application.MutationUnchanged, err
+	}
+	meta["updated_at"] = updatedAt.UTC().Format(time.RFC3339)
+	raw, err := composeDocument(meta, document.Body)
+	if err != nil {
+		return application.SpecDocument{}, "", err
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return application.SpecDocument{}, "", err
+	}
+	if err := a.writeAtomic(path, raw, info.Mode().Perm()); err != nil {
+		return application.SpecDocument{}, "", fmt.Errorf("write spec atomically: %w", err)
+	}
+	updated, err := a.readSpec(path)
+	return updated, application.MutationUpdate, err
+}
+
+// RollbackSpecReplacement restores a prior document only when the current document exactly matches the failed mutation.
+func (a *Adapter) RollbackSpecReplacement(ctx context.Context, expected, previous application.SpecDocument) error {
+	if err := a.requireCompatible(ctx); err != nil {
+		return err
+	}
+	path := filepath.Join(a.projectRoot, ".plan", "specs", string(expected.Artifact.ID)+".md")
+	release, err := acquireMutationLock(ctx, filepath.Join(a.projectRoot, ".plan", "specs", "."+string(expected.Artifact.ID)+".lock"))
+	if err != nil {
+		return err
+	}
+	defer release()
+	current, err := a.readSpec(path)
+	if err != nil {
+		return err
+	}
+	if current.Body == previous.Body && reflect.DeepEqual(current.Metadata, previous.Metadata) {
+		return nil
+	}
+	if current.Body != expected.Body || !reflect.DeepEqual(current.Metadata, expected.Metadata) {
+		return fmt.Errorf("%w: spec changed before rollback", application.ErrArtifactConflict)
+	}
+	raw, err := composeDocument(previous.Metadata, previous.Body)
+	if err != nil {
+		return err
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if err := a.writeAtomic(path, raw, info.Mode().Perm()); err != nil {
+		return fmt.Errorf("rollback spec atomically: %w", err)
+	}
+	return nil
+}
+
 // QuerySpecs returns minimally parsed specs for aggregate status and quality checks.
 func (a *Adapter) QuerySpecs(ctx context.Context, id *planning.ArtifactID) ([]application.SpecQueryDocument, error) {
 	if err := a.requireCompatible(ctx); err != nil {
@@ -676,14 +771,15 @@ func (a *Adapter) readSpec(path string) (application.SpecDocument, error) {
 		initiativeID = &initiative
 	}
 	artifact := planning.Spec{
-		ID:           id,
-		Title:        stringValue(meta["title"]),
-		Status:       status,
-		Approval:     approval,
-		Dependencies: metadataIDs(meta, "dependencies", "blocked_by"),
-		Verification: bulletItems(extractSection(body, "Verification")),
-		Initiative:   initiativeID,
-		ExecutionID:  executionID,
+		ID:                  id,
+		Title:               stringValue(meta["title"]),
+		Status:              status,
+		Approval:            approval,
+		Dependencies:        metadataIDs(meta, "dependencies", "blocked_by"),
+		Verification:        bulletItems(extractSection(body, "Verification")),
+		Initiative:          initiativeID,
+		ExecutionID:         executionID,
+		UnresolvedQuestions: markdownQuestions(body),
 	}
 	if findings := planning.ValidateSpec(artifact); hasErrorFindings(findings) {
 		return application.SpecDocument{}, fmt.Errorf(
@@ -698,6 +794,15 @@ func (a *Adapter) readSpec(path string) (application.SpecDocument, error) {
 		Body:     body,
 		Metadata: cloneMetadata(meta),
 	}, nil
+}
+
+func markdownQuestions(body string) []string {
+	for _, heading := range []string{"Open Questions", "Remaining Open Questions"} {
+		if values := bulletItems(extractSection(body, heading)); len(values) > 0 {
+			return values
+		}
+	}
+	return nil
 }
 
 func readDocument(path string) (map[string]any, string, error) {

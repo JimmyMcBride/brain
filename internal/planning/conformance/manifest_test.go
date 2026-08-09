@@ -259,3 +259,30 @@ func TestWorkspaceQueryAndRoadmapCasesReferenceReadableAssets(t *testing.T) {
 		t.Fatalf("missing workspace/query/roadmap cases: %v", wantCases)
 	}
 }
+
+func TestSpecWorkflowCasesReferenceReadableAssets(t *testing.T) {
+	manifest, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]struct{}{"spec.status.approve": {}, "spec.edit.body": {}, "spec.analyze.ready": {}, "spec.checklist.general": {}, "spec.initiative.set": {}, "spec.execute.approved": {}, "spec.handoff.preview": {}}
+	for _, testCase := range manifest.Cases {
+		if _, ok := want[testCase.ID]; !ok {
+			continue
+		}
+		delete(want, testCase.ID)
+		if testCase.Fixture != "fixtures/schema-v3-spec" {
+			t.Fatalf("unexpected spec fixture for %s: %s", testCase.ID, testCase.Fixture)
+		}
+		for _, asset := range []string{testCase.Expected.Stdout, testCase.Expected.Stderr, testCase.Expected.Files} {
+			if asset != "unchanged" {
+				if _, err := ReadGolden(asset); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+	}
+	if len(want) != 0 {
+		t.Fatalf("missing spec workflow cases: %v", want)
+	}
+}

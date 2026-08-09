@@ -146,7 +146,9 @@ native command namespace. Local brainstorm updates and roadmap edits preview by
 default; pass `--confirm` only after reviewing the proposed mutation. Guided
 session commands live under `brain plan brainstorm`, guide packets under
 `brain plan guide`, and local promotion goes directly from brainstorm to spec
-without an epic intermediate.
+without an epic intermediate. Canonical spec edit, approval, analysis,
+checklists, initiative metadata, execution, and guided handoff live under
+`brain plan spec`; mutations preview by default and require `--confirm`.
 
 ## Operating Rules
 

@@ -1,0 +1,19 @@
+Spec recap:
+Current understanding: Spec ready for execution handoff.
+Recommended next stage: continue into execution.
+spec_execution: .plan/specs/execution-ready.md
+status: approved
+branch: feature/execution-ready
+slices: 2
+1. Capture spec contracts
+   goal: Freeze standalone observable behavior before moving ownership.
+   verify: Run conformance tests.
+2. Migrate spec workflow
+   goal: Route native spec behavior through shared services.
+   verify: Run application and adapter tests.
+workflow:
+- implement one slice at a time
+- review and verify each slice before committing it
+- open a PR after the full spec is built
+Start execution from this spec plan? [y/N]: Checkpoint saved for brainstorm/execution-ready
+Next: Spec execution handoff is ready when you want to start implementation.
