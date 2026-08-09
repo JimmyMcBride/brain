@@ -301,6 +301,33 @@ func TestAdapterCreatesPlanCompatibleBrainstormAtomicallyAndIdempotently(t *test
 	assertNoTemporaryFiles(t, filepath.Join(root, ".plan", "brainstorms"))
 }
 
+func TestAdapterRollsBackOnlyTheExactBrainstormCreation(t *testing.T) {
+	root := t.TempDir()
+	copyFixture(t, "compatible", root)
+	adapter := New(root)
+	createdAt := time.Date(2026, 8, 9, 8, 0, 0, 0, time.UTC)
+	artifact := planning.Brainstorm{ID: "rollback-flow", Title: "Rollback Flow"}
+	if _, action, err := adapter.CreateBrainstorm(context.Background(), artifact, createdAt); err != nil || action != application.MutationCreate {
+		t.Fatalf("unexpected create: action=%s err=%v", action, err)
+	}
+	if err := adapter.RollbackBrainstormCreation(context.Background(), artifact, createdAt.Add(time.Hour)); !errors.Is(err, application.ErrArtifactConflict) {
+		t.Fatalf("expected guarded rollback conflict, got %v", err)
+	}
+	path := filepath.Join(root, ".plan", "brainstorms", "rollback-flow.md")
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("guarded rollback removed the wrong creation: %v", err)
+	}
+	if err := adapter.RollbackBrainstormCreation(context.Background(), artifact, createdAt); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("exact rollback left brainstorm: %v", err)
+	}
+	if err := adapter.RollbackBrainstormCreation(context.Background(), artifact, createdAt); err != nil {
+		t.Fatalf("rollback rerun was not idempotent: %v", err)
+	}
+}
+
 func TestAdapterAtomicWriteFailureLeavesNoArtifact(t *testing.T) {
 	root := t.TempDir()
 	copyFixture(t, "compatible", root)

@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -146,7 +147,13 @@ func (s *Service) CreateBrainstorm(
 	}
 	if action == MutationCreate {
 		if err := s.createGuidedSession(ctx, document, now); err != nil {
-			return BrainstormResult{}, err
+			if rollbackErr := s.repository.RollbackBrainstormCreation(ctx, document.Artifact, now); rollbackErr != nil {
+				return BrainstormResult{}, errors.Join(
+					fmt.Errorf("create guided session: %w", err),
+					fmt.Errorf("rollback brainstorm creation: %w", rollbackErr),
+				)
+			}
+			return BrainstormResult{}, fmt.Errorf("create guided session: %w", err)
 		}
 	}
 	result := BrainstormResult{Action: action, Document: document}

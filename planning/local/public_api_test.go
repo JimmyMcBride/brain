@@ -75,7 +75,8 @@ func TestPublicPlanningLocalExportSurface(t *testing.T) {
 		"Adapter", "Adapter.CreateBrainstorm", "Adapter.FindBrainstorm", "Adapter.FindSpec", "Adapter.GetBrainstorm",
 		"Adapter.GetSpec", "Adapter.ListBrainstorms", "Adapter.ListSpecs", "Adapter.QuerySpecs",
 		"Adapter.ReadGuidedSessions", "Adapter.ReadRoadmap", "Adapter.ReplaceBrainstorm",
-		"Adapter.ReplaceGuidedSessions", "Adapter.ReplaceRoadmap", "Adapter.Status", "Adapter.WritePromotionSpecs", "New",
+		"Adapter.ReplaceGuidedSessions", "Adapter.ReplaceRoadmap", "Adapter.RollbackBrainstormCreation",
+		"Adapter.Status", "Adapter.WritePromotionSpecs", "New",
 	}
 	slices.Sort(want)
 	if !slices.Equal(got, want) {

@@ -237,6 +237,43 @@ func (a *Adapter) CreateBrainstorm(
 	return document, application.MutationCreate, nil
 }
 
+// RollbackBrainstormCreation removes only the exact brainstorm created by a failed application mutation.
+func (a *Adapter) RollbackBrainstormCreation(ctx context.Context, artifact planning.Brainstorm, createdAt time.Time) error {
+	if err := a.requireCompatible(ctx); err != nil {
+		return err
+	}
+	if findings := planning.ValidateBrainstorm(artifact); hasErrorFindings(findings) {
+		return fmt.Errorf("invalid brainstorm artifact: %s", joinErrorFindingMessages(findings))
+	}
+	id := artifact.ID
+	path := filepath.Join(a.projectRoot, ".plan", "brainstorms", string(id)+".md")
+	release, err := acquireMutationLock(ctx, filepath.Join(a.projectRoot, ".plan", "brainstorms", "."+string(id)+".lock"))
+	if err != nil {
+		return err
+	}
+	defer release()
+	meta, body, err := readDocument(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	expected := createdAt.UTC().Format(time.RFC3339)
+	if artifactID(meta, path) != id ||
+		stringValue(meta["title"]) != artifact.Title ||
+		stringValue(meta["type"]) != string(planning.ArtifactBrainstorm) ||
+		stringValue(meta["created_at"]) != expected ||
+		stringValue(meta["updated_at"]) != expected ||
+		body != renderBrainstormBody(artifact.Title, createdAt.UTC()) {
+		return fmt.Errorf("%w: refuse rollback of brainstorm %s created outside this mutation", application.ErrArtifactConflict, id)
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("rollback brainstorm creation: %w", err)
+	}
+	return nil
+}
+
 // ReplaceBrainstorm atomically replaces brainstorm Markdown or reports it unchanged.
 func (a *Adapter) ReplaceBrainstorm(
 	ctx context.Context,

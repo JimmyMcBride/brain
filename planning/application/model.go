@@ -225,6 +225,7 @@ type Repository interface {
 	GetBrainstorm(context.Context, planning.ArtifactID) (BrainstormDocument, error)
 	FindBrainstorm(context.Context, planning.ArtifactID) (BrainstormDocument, bool, error)
 	CreateBrainstorm(context.Context, planning.Brainstorm, time.Time) (BrainstormDocument, MutationAction, error)
+	RollbackBrainstormCreation(context.Context, planning.Brainstorm, time.Time) error
 	ReplaceBrainstorm(context.Context, planning.ArtifactID, string, time.Time) (BrainstormDocument, MutationAction, error)
 	ReadGuidedSessions(context.Context) (GuidedSessionState, error)
 	ReplaceGuidedSessions(context.Context, GuidedSessionState) (GuidedSessionState, MutationAction, error)

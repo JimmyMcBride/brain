@@ -179,14 +179,15 @@ type PromotionSpecDraft struct {
 
 // LocalPromotionDraft is the versioned direct-spec promotion preview.
 type LocalPromotionDraft struct {
-	SchemaVersion         int                  `json:"schema_version"`
-	Kind                  string               `json:"kind"`
-	GeneratedAt           string               `json:"generated_at"`
-	Source                map[string]any       `json:"source"`
-	Ownership             map[string]any       `json:"ownership"`
-	Assessment            MaturityDecision     `json:"assessment"`
-	PromotionDecision     string               `json:"promotion_decision,omitempty"`
-	WhyThisPath           string               `json:"why_this_path,omitempty"`
+	SchemaVersion     int              `json:"schema_version"`
+	Kind              string           `json:"kind"`
+	GeneratedAt       string           `json:"generated_at"`
+	Source            map[string]any   `json:"source"`
+	Ownership         map[string]any   `json:"ownership"`
+	Assessment        MaturityDecision `json:"assessment"`
+	PromotionDecision string           `json:"promotion_decision,omitempty"`
+	WhyThisPath       string           `json:"why_this_path,omitempty"`
+	// ProposedSpecs keeps standalone Plan's proposed_spec_issues key during the compatibility window.
 	ProposedSpecs         []PromotionSpecDraft `json:"proposed_spec_issues"`
 	AgentPolicy           map[string]any       `json:"agent_policy"`
 	ManualFallbackAllowed bool                 `json:"manual_fallback_allowed"`

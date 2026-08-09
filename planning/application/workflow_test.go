@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -148,6 +149,20 @@ Promote directly.
 	}
 	if draft.ProposedSpecs[0].Kind != "spec" {
 		t.Fatalf("promotion created non-spec intermediate: %#v", draft.ProposedSpecs[0])
+	}
+	raw, err := json.Marshal(draft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := payload["proposed_spec_issues"]; !exists {
+		t.Fatalf("standalone compatibility key missing: %s", raw)
+	}
+	if _, exists := payload["proposed_specs"]; exists {
+		t.Fatalf("unexpected replacement JSON key: %s", raw)
 	}
 }
 
