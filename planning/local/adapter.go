@@ -237,6 +237,152 @@ func (a *Adapter) CreateBrainstorm(
 	return document, application.MutationCreate, nil
 }
 
+// RollbackBrainstormCreation removes only the exact brainstorm created by a failed application mutation.
+func (a *Adapter) RollbackBrainstormCreation(ctx context.Context, artifact planning.Brainstorm, createdAt time.Time) error {
+	if err := a.requireCompatible(ctx); err != nil {
+		return err
+	}
+	if findings := planning.ValidateBrainstorm(artifact); hasErrorFindings(findings) {
+		return fmt.Errorf("invalid brainstorm artifact: %s", joinErrorFindingMessages(findings))
+	}
+	id := artifact.ID
+	path := filepath.Join(a.projectRoot, ".plan", "brainstorms", string(id)+".md")
+	release, err := acquireMutationLock(ctx, filepath.Join(a.projectRoot, ".plan", "brainstorms", "."+string(id)+".lock"))
+	if err != nil {
+		return err
+	}
+	defer release()
+	meta, body, err := readDocument(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	expected := createdAt.UTC().Format(time.RFC3339)
+	if artifactID(meta, path) != id ||
+		stringValue(meta["title"]) != artifact.Title ||
+		stringValue(meta["type"]) != string(planning.ArtifactBrainstorm) ||
+		stringValue(meta["created_at"]) != expected ||
+		stringValue(meta["updated_at"]) != expected ||
+		body != renderBrainstormBody(artifact.Title, createdAt.UTC()) {
+		return fmt.Errorf("%w: refuse rollback of brainstorm %s created outside this mutation", application.ErrArtifactConflict, id)
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("rollback brainstorm creation: %w", err)
+	}
+	return nil
+}
+
+// ReplaceBrainstorm atomically replaces brainstorm Markdown or reports it unchanged.
+func (a *Adapter) ReplaceBrainstorm(
+	ctx context.Context,
+	id planning.ArtifactID,
+	body string,
+	updatedAt time.Time,
+) (application.BrainstormDocument, application.MutationAction, error) {
+	if err := a.requireCompatible(ctx); err != nil {
+		return application.BrainstormDocument{}, "", err
+	}
+	if err := id.Validate(); err != nil {
+		return application.BrainstormDocument{}, "", err
+	}
+	path := filepath.Join(a.projectRoot, ".plan", "brainstorms", string(id)+".md")
+	release, err := acquireMutationLock(ctx, filepath.Join(a.projectRoot, ".plan", "brainstorms", "."+string(id)+".lock"))
+	if err != nil {
+		return application.BrainstormDocument{}, "", err
+	}
+	defer release()
+	meta, currentBody, err := readDocument(path)
+	if err != nil {
+		return application.BrainstormDocument{}, "", err
+	}
+	if currentBody == body {
+		document, err := a.readBrainstorm(path)
+		return document, application.MutationUnchanged, err
+	}
+	meta["updated_at"] = updatedAt.UTC().Format(time.RFC3339)
+	raw, err := composeDocument(meta, body)
+	if err != nil {
+		return application.BrainstormDocument{}, "", err
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return application.BrainstormDocument{}, "", err
+	}
+	if err := a.writeAtomic(path, raw, info.Mode().Perm()); err != nil {
+		return application.BrainstormDocument{}, "", fmt.Errorf("write brainstorm atomically: %w", err)
+	}
+	document, err := a.readBrainstorm(path)
+	return document, application.MutationUpdate, err
+}
+
+// ReadGuidedSessions returns schema-v3 local guided-session state without creating it.
+func (a *Adapter) ReadGuidedSessions(ctx context.Context) (application.GuidedSessionState, error) {
+	if err := a.requireCompatible(ctx); err != nil {
+		return application.GuidedSessionState{}, err
+	}
+	path := filepath.Join(a.projectRoot, ".plan", ".meta", "guided_sessions.json")
+	raw, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return application.GuidedSessionState{SchemaVersion: currentSchemaVersion, Sessions: map[string]application.GuidedSessionRecord{}}, nil
+	}
+	if err != nil {
+		return application.GuidedSessionState{}, err
+	}
+	state := application.GuidedSessionState{}
+	if err := json.Unmarshal(raw, &state); err != nil {
+		return application.GuidedSessionState{}, fmt.Errorf("parse guided session state: %w", err)
+	}
+	if state.SchemaVersion > currentSchemaVersion {
+		return application.GuidedSessionState{}, fmt.Errorf("guided session schema version %d is newer than supported version %d", state.SchemaVersion, currentSchemaVersion)
+	}
+	if state.SchemaVersion == 0 {
+		state.SchemaVersion = currentSchemaVersion
+	}
+	if state.Sessions == nil {
+		state.Sessions = map[string]application.GuidedSessionRecord{}
+	}
+	return state, nil
+}
+
+// ReplaceGuidedSessions atomically replaces guided-session state or reports it unchanged.
+func (a *Adapter) ReplaceGuidedSessions(ctx context.Context, state application.GuidedSessionState) (application.GuidedSessionState, application.MutationAction, error) {
+	if err := a.requireCompatible(ctx); err != nil {
+		return application.GuidedSessionState{}, "", err
+	}
+	state.SchemaVersion = currentSchemaVersion
+	if state.Sessions == nil {
+		state.Sessions = map[string]application.GuidedSessionRecord{}
+	}
+	raw, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return application.GuidedSessionState{}, "", err
+	}
+	raw = append(raw, '\n')
+	path := filepath.Join(a.projectRoot, ".plan", ".meta", "guided_sessions.json")
+	release, err := acquireMutationLock(ctx, filepath.Join(a.projectRoot, ".plan", ".meta", ".guided-sessions.lock"))
+	if err != nil {
+		return application.GuidedSessionState{}, "", err
+	}
+	defer release()
+	current, err := os.ReadFile(path)
+	if err == nil && bytes.Equal(current, raw) {
+		return state, application.MutationUnchanged, nil
+	}
+	if err != nil && !os.IsNotExist(err) {
+		return application.GuidedSessionState{}, "", err
+	}
+	action := application.MutationUpdate
+	if os.IsNotExist(err) {
+		action = application.MutationCreate
+	}
+	if err := a.writeAtomic(path, raw, 0o644); err != nil {
+		return application.GuidedSessionState{}, "", fmt.Errorf("write guided session state atomically: %w", err)
+	}
+	return state, action, nil
+}
+
 // ListSpecs returns validated local spec documents in deterministic order.
 func (a *Adapter) ListSpecs(ctx context.Context) ([]application.SpecDocument, error) {
 	if err := a.requireCompatible(ctx); err != nil {
@@ -272,6 +418,111 @@ func (a *Adapter) GetSpec(ctx context.Context, id planning.ArtifactID) (applicat
 		return application.SpecDocument{}, err
 	}
 	return a.readSpec(filepath.Join(a.projectRoot, ".plan", "specs", string(id)+".md"))
+}
+
+// FindSpec returns one local spec document when it exists.
+func (a *Adapter) FindSpec(ctx context.Context, id planning.ArtifactID) (application.SpecDocument, bool, error) {
+	document, err := a.GetSpec(ctx, id)
+	if err == nil {
+		return document, true, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return application.SpecDocument{}, false, nil
+	}
+	return application.SpecDocument{}, false, err
+}
+
+// WritePromotionSpecs atomically writes a direct local promotion set.
+func (a *Adapter) WritePromotionSpecs(
+	ctx context.Context,
+	writes []application.PromotionSpecWrite,
+	updatedAt time.Time,
+) ([]application.SpecDocument, application.MutationAction, error) {
+	if err := a.requireCompatible(ctx); err != nil {
+		return nil, "", err
+	}
+	release, err := acquireMutationLock(ctx, filepath.Join(a.projectRoot, ".plan", ".promotion.lock"))
+	if err != nil {
+		return nil, "", err
+	}
+	defer release()
+	type pendingWrite struct {
+		path     string
+		raw      []byte
+		previous []byte
+		existed  bool
+		mode     os.FileMode
+	}
+	pending := make([]pendingWrite, 0, len(writes))
+	overall := application.MutationUnchanged
+	for _, write := range writes {
+		if findings := planning.ValidateSpec(write.Artifact); hasErrorFindings(findings) {
+			return nil, "", fmt.Errorf("invalid promoted spec: %s", joinErrorFindingMessages(findings))
+		}
+		path := filepath.Join(a.projectRoot, ".plan", "specs", string(write.Artifact.ID)+".md")
+		meta := cloneMetadata(write.Metadata)
+		meta["project"] = filepath.Base(a.projectRoot)
+		meta["slug"] = string(write.Artifact.ID)
+		meta["status"] = string(write.Artifact.Status)
+		meta["title"] = write.Artifact.Title
+		meta["type"] = "spec"
+		meta["updated_at"] = updatedAt.UTC().Format(time.RFC3339)
+		previous, readErr := os.ReadFile(path)
+		existed := readErr == nil
+		mode := os.FileMode(0o644)
+		if existed {
+			currentMeta, currentBody, err := readDocument(path)
+			if err != nil {
+				return nil, "", err
+			}
+			meta["created_at"] = currentMeta["created_at"]
+			if currentBody == write.Body && promotionMetadataEqual(currentMeta, meta) {
+				continue
+			}
+			info, err := os.Stat(path)
+			if err != nil {
+				return nil, "", err
+			}
+			mode = info.Mode().Perm()
+			if overall == application.MutationUnchanged {
+				overall = application.MutationUpdate
+			}
+		} else if os.IsNotExist(readErr) {
+			meta["created_at"] = updatedAt.UTC().Format(time.RFC3339)
+			overall = application.MutationCreate
+		} else {
+			return nil, "", readErr
+		}
+		raw, err := composeDocument(meta, write.Body)
+		if err != nil {
+			return nil, "", err
+		}
+		pending = append(pending, pendingWrite{path: path, raw: raw, previous: previous, existed: existed, mode: mode})
+	}
+	written := make([]pendingWrite, 0, len(pending))
+	for _, item := range pending {
+		if err := a.writeAtomic(item.path, item.raw, item.mode); err != nil {
+			for index := len(written) - 1; index >= 0; index-- {
+				prior := written[index]
+				if prior.existed {
+					_ = atomicWriteFile(prior.path, prior.previous, prior.mode)
+				} else {
+					_ = os.Remove(prior.path)
+				}
+			}
+			return nil, "", fmt.Errorf("write promoted specs atomically: %w", err)
+		}
+		written = append(written, item)
+	}
+	documents := make([]application.SpecDocument, 0, len(writes))
+	for _, write := range writes {
+		document, err := a.readSpec(filepath.Join(a.projectRoot, ".plan", "specs", string(write.Artifact.ID)+".md"))
+		if err != nil {
+			return nil, "", err
+		}
+		documents = append(documents, document)
+	}
+	return documents, overall, nil
 }
 
 // QuerySpecs returns minimally parsed specs for aggregate status and quality checks.
@@ -667,6 +918,23 @@ func cloneMetadata(meta map[string]any) map[string]any {
 	return out
 }
 
+func promotionMetadataEqual(current, desired map[string]any) bool {
+	keys := []string{"slug", "status", "title", "type", "source_brainstorm", "initiative", "dependencies", "blocked_by"}
+	left := make(map[string]any, len(keys))
+	right := make(map[string]any, len(keys))
+	for _, key := range keys {
+		if value, exists := current[key]; exists {
+			left[key] = value
+		}
+		if value, exists := desired[key]; exists {
+			right[key] = value
+		}
+	}
+	leftRaw, _ := json.Marshal(left)
+	rightRaw, _ := json.Marshal(right)
+	return bytes.Equal(leftRaw, rightRaw)
+}
+
 func relativePlanningPath(root, path string) string {
 	value, err := filepath.Rel(root, path)
 	if err != nil {
@@ -747,7 +1015,7 @@ func acquireMutationLock(ctx context.Context, path string) (func(), error) {
 				_ = os.Remove(path)
 			}, nil
 		}
-		if !os.IsExist(err) {
+		if !isMutationLockContention(err) {
 			return nil, fmt.Errorf("create Planning lock: %w", err)
 		}
 		select {

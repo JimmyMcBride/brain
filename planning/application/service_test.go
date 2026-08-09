@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -62,6 +63,42 @@ func TestCreateBrainstormEmitsOnceAndRerunIsIdempotent(t *testing.T) {
 	}
 	if repository.creates != 1 || len(events.events) != 1 {
 		t.Fatalf("expected one write and event, got writes=%d events=%d", repository.creates, len(events.events))
+	}
+}
+
+func TestCreateBrainstormRollsBackWhenGuidedSessionWriteFails(t *testing.T) {
+	repository := newFakeRepository()
+	repository.guidedWriteErr = errors.New("guided write failed")
+	service := New(repository, Options{
+		ModuleID: "official.planning",
+		Now:      func() time.Time { return time.Date(2026, 8, 9, 8, 0, 0, 0, time.UTC) },
+	})
+	events := &eventRecorder{}
+
+	_, err := service.CreateBrainstorm(context.Background(), CreateBrainstormInput{Title: "Rollback Flow", Confirmed: true}, allowAuthorizer{}, events)
+	if err == nil || !strings.Contains(err.Error(), "create guided session: guided write failed") {
+		t.Fatalf("unexpected create error: %v", err)
+	}
+	if _, exists := repository.brainstorms["rollback-flow"]; exists {
+		t.Fatal("failed guided-session write left brainstorm behind")
+	}
+	if repository.rollbacks != 1 || len(events.events) != 0 {
+		t.Fatalf("unexpected rollback/audit counts: rollbacks=%d events=%d", repository.rollbacks, len(events.events))
+	}
+}
+
+func TestCreateBrainstormSurfacesGuidedAndRollbackFailures(t *testing.T) {
+	repository := newFakeRepository()
+	repository.guidedWriteErr = errors.New("guided write failed")
+	repository.rollbackErr = errors.New("rollback failed")
+	service := New(repository, Options{Now: func() time.Time { return time.Date(2026, 8, 9, 8, 0, 0, 0, time.UTC) }})
+
+	_, err := service.CreateBrainstorm(context.Background(), CreateBrainstormInput{Title: "Repair Needed", Confirmed: true}, allowAuthorizer{}, &eventRecorder{})
+	if err == nil || !strings.Contains(err.Error(), "guided write failed") || !strings.Contains(err.Error(), "rollback brainstorm creation: rollback failed") {
+		t.Fatalf("combined failure did not preserve repair context: %v", err)
+	}
+	if _, exists := repository.brainstorms["repair-needed"]; !exists {
+		t.Fatal("fake rollback failure unexpectedly removed brainstorm")
 	}
 }
 
@@ -150,13 +187,17 @@ func TestUpdateRoadmapRequiresGatesAndRerunIsIdempotent(t *testing.T) {
 }
 
 type fakeRepository struct {
-	status        WorkspaceStatus
-	brainstorms   map[planning.ArtifactID]BrainstormDocument
-	specs         []SpecDocument
-	querySpecs    []SpecQueryDocument
-	roadmap       RoadmapDocument
-	creates       int
-	roadmapWrites int
+	status         WorkspaceStatus
+	brainstorms    map[planning.ArtifactID]BrainstormDocument
+	specs          []SpecDocument
+	querySpecs     []SpecQueryDocument
+	roadmap        RoadmapDocument
+	guided         GuidedSessionState
+	guidedWriteErr error
+	rollbackErr    error
+	creates        int
+	rollbacks      int
+	roadmapWrites  int
 }
 
 func newFakeRepository() *fakeRepository {
@@ -171,6 +212,7 @@ func newFakeRepository() *fakeRepository {
 		},
 		brainstorms: map[planning.ArtifactID]BrainstormDocument{},
 		roadmap:     RoadmapDocument{Path: ".plan/ROADMAP.md", Body: "# Roadmap\n"},
+		guided:      GuidedSessionState{SchemaVersion: 3, Sessions: map[string]GuidedSessionRecord{}},
 	}
 }
 
@@ -209,6 +251,40 @@ func (r *fakeRepository) CreateBrainstorm(_ context.Context, artifact planning.B
 	return document, MutationCreate, nil
 }
 
+func (r *fakeRepository) RollbackBrainstormCreation(_ context.Context, artifact planning.Brainstorm, _ time.Time) error {
+	r.rollbacks++
+	if r.rollbackErr != nil {
+		return r.rollbackErr
+	}
+	delete(r.brainstorms, artifact.ID)
+	return nil
+}
+
+func (r *fakeRepository) ReplaceBrainstorm(_ context.Context, id planning.ArtifactID, body string, _ time.Time) (BrainstormDocument, MutationAction, error) {
+	document, ok := r.brainstorms[id]
+	if !ok {
+		return BrainstormDocument{}, "", errors.New("not found")
+	}
+	if document.Body == body {
+		return document, MutationUnchanged, nil
+	}
+	document.Body = body
+	r.brainstorms[id] = document
+	return document, MutationUpdate, nil
+}
+
+func (r *fakeRepository) ReadGuidedSessions(context.Context) (GuidedSessionState, error) {
+	return r.guided, nil
+}
+
+func (r *fakeRepository) ReplaceGuidedSessions(_ context.Context, state GuidedSessionState) (GuidedSessionState, MutationAction, error) {
+	if r.guidedWriteErr != nil {
+		return GuidedSessionState{}, "", r.guidedWriteErr
+	}
+	r.guided = state
+	return state, MutationUpdate, nil
+}
+
 func (r *fakeRepository) ListSpecs(context.Context) ([]SpecDocument, error) {
 	return r.specs, nil
 }
@@ -230,8 +306,36 @@ func (r *fakeRepository) ReplaceRoadmap(_ context.Context, body string) (Roadmap
 	return r.roadmap, MutationUpdate, nil
 }
 
-func (r *fakeRepository) GetSpec(context.Context, planning.ArtifactID) (SpecDocument, error) {
+func (r *fakeRepository) GetSpec(_ context.Context, id planning.ArtifactID) (SpecDocument, error) {
+	for _, document := range r.specs {
+		if document.Artifact.ID == id {
+			return document, nil
+		}
+	}
 	return SpecDocument{}, errors.New("not found")
+}
+
+func (r *fakeRepository) FindSpec(ctx context.Context, id planning.ArtifactID) (SpecDocument, bool, error) {
+	document, err := r.GetSpec(ctx, id)
+	if err != nil {
+		return SpecDocument{}, false, nil
+	}
+	return document, true, nil
+}
+
+func (r *fakeRepository) WritePromotionSpecs(_ context.Context, writes []PromotionSpecWrite, _ time.Time) ([]SpecDocument, MutationAction, error) {
+	documents := make([]SpecDocument, 0, len(writes))
+	for _, write := range writes {
+		document := SpecDocument{
+			Artifact: write.Artifact,
+			Path:     ".plan/specs/" + string(write.Artifact.ID) + ".md",
+			Body:     write.Body,
+			Metadata: write.Metadata,
+		}
+		r.specs = append(r.specs, document)
+		documents = append(documents, document)
+	}
+	return documents, MutationCreate, nil
 }
 
 type allowAuthorizer struct{}

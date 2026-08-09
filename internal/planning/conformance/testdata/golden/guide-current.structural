@@ -1,0 +1,8 @@
+kind: guide_packet
+schema_version: 2
+chain_id: brainstorm/local-promotion
+artifact: local-promotion
+checkpoint: clarify-open-approaches
+pass: brainstorm_refine
+ownership: local
+generated_at: <TIMESTAMP>

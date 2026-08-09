@@ -160,6 +160,110 @@ func TestCLIPlanningLocalWorkflowAndIdempotentAudit(t *testing.T) {
 	}
 }
 
+func TestCLIPlanningGuidedBrainstormAndDirectPromotionWorkflow(t *testing.T) {
+	env := newCLIEnv(t)
+	fixture := filepath.Join(env.moduleRoot, "internal", "planning", "conformance", "testdata", "fixtures", "schema-v3-guided")
+	if err := os.CopyFS(env.project, os.DirFS(fixture)); err != nil {
+		t.Fatal(err)
+	}
+	permissions := officialplanning.Registration().Descriptor.Permissions
+	grant := []string{"--project", env.project, "modules", "grant", officialplanning.ID}
+	grant = append(grant, permissions...)
+	requireOK(t, runPlanningCLI(t, env, "", grant...))
+	requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "modules", "enable", officialplanning.ID))
+
+	sessions := requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "brainstorm", "sessions"))
+	for _, expected := range []string{
+		"* brainstorm/local-promotion stage=brainstorm",
+		"  brainstorm/secondary stage=brainstorm",
+	} {
+		if !strings.Contains(sessions, expected) {
+			t.Fatalf("sessions missing %q:\n%s", expected, sessions)
+		}
+	}
+	guideJSON := requireOK(t, runPlanningCLI(t, env, "", "--json", "--project", env.project, "plan", "guide", "current"))
+	var packet application.GuidePacket
+	if err := json.Unmarshal([]byte(guideJSON), &packet); err != nil {
+		t.Fatal(err)
+	}
+	if packet.Kind != "guide_packet" || packet.Artifact["slug"] != "local-promotion" || packet.Mode["checkpoint"] != "clarify-open-approaches" {
+		t.Fatalf("unexpected guide packet: %#v", packet)
+	}
+	assessmentJSON := requireOK(t, runPlanningCLI(t, env, "", "--json", "--project", env.project, "plan", "brainstorm", "assess", "local-promotion"))
+	var assessment application.CollaborationAssessment
+	if err := json.Unmarshal([]byte(assessmentJSON), &assessment); err != nil {
+		t.Fatal(err)
+	}
+	if assessment.Decision.State != "ready_single_spec" || assessment.Decision.RecommendedPath != "single_spec" {
+		t.Fatalf("unexpected maturity assessment: %#v", assessment)
+	}
+
+	brainstormPath := filepath.Join(env.project, ".plan", "brainstorms", "local-promotion.md")
+	beforeIdea, err := os.ReadFile(brainstormPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	preview := requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "brainstorm", "idea", "local-promotion", "--body", "Keep the guide packet stable."))
+	if !strings.Contains(preview, "Preview only") {
+		t.Fatalf("unexpected idea preview:\n%s", preview)
+	}
+	afterPreview, err := os.ReadFile(brainstormPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(afterPreview) != string(beforeIdea) {
+		t.Fatal("idea preview mutated brainstorm")
+	}
+	requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "brainstorm", "idea", "local-promotion", "--body", "Keep the guide packet stable.", "--confirm"))
+	ideaRerun := requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "brainstorm", "idea", "local-promotion", "--body", "Keep the guide packet stable.", "--confirm"))
+	if !strings.Contains(ideaRerun, "unchanged") {
+		t.Fatalf("unexpected idea rerun:\n%s", ideaRerun)
+	}
+
+	promotionPreviewJSON := requireOK(t, runPlanningCLI(t, env, "", "--json", "--project", env.project, "plan", "brainstorm", "promote", "local-promotion"))
+	var draft application.LocalPromotionDraft
+	if err := json.Unmarshal([]byte(promotionPreviewJSON), &draft); err != nil {
+		t.Fatal(err)
+	}
+	if draft.PromotionDecision != "single_spec" || len(draft.ProposedSpecs) != 1 || draft.ProposedSpecs[0].Kind != "spec" {
+		t.Fatalf("unexpected direct promotion preview: %#v", draft)
+	}
+	if _, err := os.Stat(filepath.Join(env.project, ".plan", "specs", "local-promotion.md")); !os.IsNotExist(err) {
+		t.Fatalf("promotion preview wrote spec: %v", err)
+	}
+	promotionJSON := requireOK(t, runPlanningCLI(t, env, "", "--json", "--project", env.project, "plan", "brainstorm", "promote", "local-promotion", "--confirm"))
+	var promotion application.LocalPromotionResult
+	if err := json.Unmarshal([]byte(promotionJSON), &promotion); err != nil {
+		t.Fatal(err)
+	}
+	if promotion.Action != application.MutationCreate || len(promotion.Specs) != 1 || promotion.Event == nil {
+		t.Fatalf("unexpected direct promotion: %#v", promotion)
+	}
+	for _, legacy := range []string{"epics", "stories"} {
+		if _, err := os.Stat(filepath.Join(env.project, ".plan", legacy)); !os.IsNotExist(err) {
+			t.Fatalf("direct promotion created legacy %s hierarchy: %v", legacy, err)
+		}
+	}
+	promotionRerunJSON := requireOK(t, runPlanningCLI(t, env, "", "--json", "--project", env.project, "plan", "brainstorm", "promote", "local-promotion", "--confirm"))
+	promotion = application.LocalPromotionResult{}
+	if err := json.Unmarshal([]byte(promotionRerunJSON), &promotion); err != nil {
+		t.Fatal(err)
+	}
+	if promotion.Action != application.MutationUnchanged || promotion.Event != nil {
+		t.Fatalf("unexpected promotion rerun: %#v", promotion)
+	}
+	history, err := os.ReadFile(filepath.Join(env.project, ".brain", "state", "history.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count := strings.Count(string(history), application.EventBrainstormUpdated); count != 2 {
+		t.Fatalf("expected one brainstorm update event record, got count=%d", count)
+	}
+	if count := strings.Count(string(history), application.EventBrainstormPromoted); count != 2 {
+		t.Fatalf("expected one promotion event record, got count=%d", count)
+	}
+}
+
 func TestCLIPlanningFutureSchemaIsReadOnly(t *testing.T) {
 	env := newCLIEnv(t)
 	fixture := filepath.Join(env.moduleRoot, "planning", "local", "testdata", "future")

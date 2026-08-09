@@ -15,6 +15,7 @@ import (
 const manifestPath = "testdata/manifest.yaml"
 
 var revisionPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
+var timestampPattern = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z`)
 
 //go:embed all:testdata
 var testdata embed.FS
@@ -38,6 +39,7 @@ type Normalization struct {
 	LineEndings      string `yaml:"line_endings"`
 	PathSeparator    string `yaml:"path_separator"`
 	ProjectRootToken string `yaml:"project_root_token"`
+	Timestamps       string `yaml:"timestamps"`
 }
 
 type Command struct {
@@ -109,7 +111,8 @@ func ReadGolden(name string) (string, error) {
 }
 
 func normalizeGolden(value string) string {
-	return strings.ReplaceAll(value, "\r\n", "\n")
+	value = strings.ReplaceAll(value, "\r\n", "\n")
+	return timestampPattern.ReplaceAllString(value, "<TIMESTAMP>")
 }
 
 func Fixture(name string) (fs.FS, error) {
@@ -152,7 +155,8 @@ func (m Manifest) validate() error {
 	}
 	if m.Normalization.LineEndings != "lf" ||
 		m.Normalization.PathSeparator != "/" ||
-		m.Normalization.ProjectRootToken != "<PROJECT>" {
+		m.Normalization.ProjectRootToken != "<PROJECT>" ||
+		m.Normalization.Timestamps != "rfc3339_token" {
 		return fmt.Errorf("unsupported conformance normalization: %#v", m.Normalization)
 	}
 

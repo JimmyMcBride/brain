@@ -1,0 +1,10 @@
+kind: promotion_draft
+schema_version: 1
+source: local-promotion
+state: ready_single_spec
+promotion_decision: single_spec
+spec: Local Promotion
+spec_kind: spec
+spec_action: create
+confirmation_required: true
+generated_at: <TIMESTAMP>

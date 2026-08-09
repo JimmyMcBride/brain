@@ -301,6 +301,33 @@ func TestAdapterCreatesPlanCompatibleBrainstormAtomicallyAndIdempotently(t *test
 	assertNoTemporaryFiles(t, filepath.Join(root, ".plan", "brainstorms"))
 }
 
+func TestAdapterRollsBackOnlyTheExactBrainstormCreation(t *testing.T) {
+	root := t.TempDir()
+	copyFixture(t, "compatible", root)
+	adapter := New(root)
+	createdAt := time.Date(2026, 8, 9, 8, 0, 0, 0, time.UTC)
+	artifact := planning.Brainstorm{ID: "rollback-flow", Title: "Rollback Flow"}
+	if _, action, err := adapter.CreateBrainstorm(context.Background(), artifact, createdAt); err != nil || action != application.MutationCreate {
+		t.Fatalf("unexpected create: action=%s err=%v", action, err)
+	}
+	if err := adapter.RollbackBrainstormCreation(context.Background(), artifact, createdAt.Add(time.Hour)); !errors.Is(err, application.ErrArtifactConflict) {
+		t.Fatalf("expected guarded rollback conflict, got %v", err)
+	}
+	path := filepath.Join(root, ".plan", "brainstorms", "rollback-flow.md")
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("guarded rollback removed the wrong creation: %v", err)
+	}
+	if err := adapter.RollbackBrainstormCreation(context.Background(), artifact, createdAt); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("exact rollback left brainstorm: %v", err)
+	}
+	if err := adapter.RollbackBrainstormCreation(context.Background(), artifact, createdAt); err != nil {
+		t.Fatalf("rollback rerun was not idempotent: %v", err)
+	}
+}
+
 func TestAdapterAtomicWriteFailureLeavesNoArtifact(t *testing.T) {
 	root := t.TempDir()
 	copyFixture(t, "compatible", root)
@@ -401,6 +428,132 @@ func TestCreationLockTimeoutIdentifiesLockPath(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), lockPath) {
 		t.Fatalf("expected timeout to identify lock path %q, got %v", lockPath, err)
 	}
+}
+
+func TestAdapterReplacesBrainstormAndGuidedSessionsIdempotently(t *testing.T) {
+	root := t.TempDir()
+	copyFixture(t, "compatible", root)
+	adapter := New(root)
+	ctx := context.Background()
+	now := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
+
+	brainstorm, err := adapter.GetBrainstorm(ctx, "alpha")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := brainstorm.Body + "\n## Ideas\n\n- Preserve the local contract.\n"
+	updated, action, err := adapter.ReplaceBrainstorm(ctx, "alpha", body, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action != application.MutationUpdate || updated.Body != body || updated.Metadata["created_at"] != brainstorm.Metadata["created_at"] {
+		t.Fatalf("unexpected brainstorm update: action=%s document=%#v", action, updated)
+	}
+	_, action, err = adapter.ReplaceBrainstorm(ctx, "alpha", body, now.Add(time.Hour))
+	if err != nil || action != application.MutationUnchanged {
+		t.Fatalf("unexpected brainstorm rerun: action=%s err=%v", action, err)
+	}
+
+	state := application.GuidedSessionState{
+		SchemaVersion:   3,
+		LastActiveChain: "brainstorm/alpha",
+		LastUpdatedAt:   now.Format(time.RFC3339),
+		Sessions: map[string]application.GuidedSessionRecord{
+			"brainstorm/alpha": {
+				ChainID:       "brainstorm/alpha",
+				Brainstorm:    "alpha",
+				CurrentStage:  "brainstorm",
+				StageStatuses: map[string]string{"brainstorm": "in_progress"},
+			},
+		},
+	}
+	_, action, err = adapter.ReplaceGuidedSessions(ctx, state)
+	if err != nil || action != application.MutationCreate {
+		t.Fatalf("unexpected guided-session create: action=%s err=%v", action, err)
+	}
+	got, err := adapter.ReadGuidedSessions(ctx)
+	if err != nil || got.LastActiveChain != state.LastActiveChain {
+		t.Fatalf("unexpected guided-session read: %#v err=%v", got, err)
+	}
+	_, action, err = adapter.ReplaceGuidedSessions(ctx, state)
+	if err != nil || action != application.MutationUnchanged {
+		t.Fatalf("unexpected guided-session rerun: action=%s err=%v", action, err)
+	}
+	assertNoTemporaryFiles(t, filepath.Join(root, ".plan"))
+}
+
+func TestAdapterWritesDirectPromotionSpecsWithoutLegacyHierarchy(t *testing.T) {
+	root := t.TempDir()
+	copyFixture(t, "compatible", root)
+	adapter := New(root)
+	ctx := context.Background()
+	now := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
+	write := application.PromotionSpecWrite{
+		Artifact: planning.Spec{
+			ID: "local-promotion", Title: "Local Promotion", Status: planning.SpecDraft,
+			Approval:     planning.Approval{State: planning.ApprovalPending},
+			Verification: []string{"Run tests.", "Verify CLI output."},
+			Sources:      []planning.SourceReference{{URI: ".plan/brainstorms/alpha.md", Purpose: "promotion_source"}},
+		},
+		Body:     "# Local Promotion\n\n## Verification\n\n- Run tests.\n- Verify CLI output.\n",
+		Metadata: map[string]any{"source_brainstorm": ".plan/brainstorms/alpha.md"},
+	}
+
+	documents, action, err := adapter.WritePromotionSpecs(ctx, []application.PromotionSpecWrite{write}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action != application.MutationCreate || len(documents) != 1 || documents[0].Artifact.ID != "local-promotion" {
+		t.Fatalf("unexpected promotion write: action=%s documents=%#v", action, documents)
+	}
+	for _, legacy := range []string{"epics", "stories"} {
+		if _, err := os.Stat(filepath.Join(root, ".plan", legacy)); !os.IsNotExist(err) {
+			t.Fatalf("direct promotion created legacy %s hierarchy: %v", legacy, err)
+		}
+	}
+	_, action, err = adapter.WritePromotionSpecs(ctx, []application.PromotionSpecWrite{write}, now.Add(time.Hour))
+	if err != nil || action != application.MutationUnchanged {
+		t.Fatalf("unexpected promotion rerun: action=%s err=%v", action, err)
+	}
+	assertNoTemporaryFiles(t, filepath.Join(root, ".plan"))
+}
+
+func TestAdapterPromotionWriteFailureRollsBackCreatedSpecs(t *testing.T) {
+	root := t.TempDir()
+	copyFixture(t, "compatible", root)
+	writeFailure := errors.New("second write failed")
+	writesSeen := 0
+	adapter := newWithWriter(root, func(path string, raw []byte, mode os.FileMode) error {
+		writesSeen++
+		if writesSeen == 2 {
+			return writeFailure
+		}
+		return atomicWriteFile(path, raw, mode)
+	})
+	makeWrite := func(id, title string) application.PromotionSpecWrite {
+		return application.PromotionSpecWrite{
+			Artifact: planning.Spec{
+				ID: planning.ArtifactID(id), Title: title, Status: planning.SpecDraft,
+				Approval:     planning.Approval{State: planning.ApprovalPending},
+				Verification: []string{"Run tests.", "Verify CLI output."},
+			},
+			Body:     "# " + title + "\n\n## Verification\n\n- Run tests.\n- Verify CLI output.\n",
+			Metadata: map[string]any{"source_brainstorm": ".plan/brainstorms/alpha.md"},
+		}
+	}
+	_, _, err := adapter.WritePromotionSpecs(context.Background(), []application.PromotionSpecWrite{
+		makeWrite("first-promoted", "First Promoted"),
+		makeWrite("second-promoted", "Second Promoted"),
+	}, time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC))
+	if !errors.Is(err, writeFailure) {
+		t.Fatalf("expected write failure, got %v", err)
+	}
+	for _, id := range []string{"first-promoted", "second-promoted"} {
+		if _, err := os.Stat(filepath.Join(root, ".plan", "specs", id+".md")); !os.IsNotExist(err) {
+			t.Fatalf("failed promotion left %s: %v", id, err)
+		}
+	}
+	assertNoTemporaryFiles(t, filepath.Join(root, ".plan"))
 }
 
 func TestAdapterRejectsWritesForUnsupportedWorkspace(t *testing.T) {

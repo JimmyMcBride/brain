@@ -1,5 +1,5 @@
 ---
-updated: "2026-07-31T19:59:02Z"
+updated: "2026-08-09T07:52:41Z"
 ---
 # Planning CLI Migration
 
@@ -12,12 +12,14 @@ mapped local workflow, full command disposition, compatibility contract, and
 warning policy. Phase 4 now has a versioned conformance manifest pinned to
 standalone Plan revision `53ebd96`; PR #46 captured root-command disposition
 and initial `status` baselines, PR #47 normalized Brain's Go module path, and PR
-#48 exposed the storage-neutral domain. The current slice captures aggregate
-status, project/spec checks, and roadmap read/replace behavior; exposes
-`planning/application` and `planning/local`; and migrates `brain plan status`,
-`brain plan check`, and `brain plan roadmap`. Brain roadmap writes intentionally
-add explicit confirmation, audit events, atomic replacement, and unchanged
-reruns.
+#48 exposed the storage-neutral domain, and the fourth slice migrated aggregate
+status, project/spec checks, and roadmap read/replace behavior. The current slice
+captures local brainstorm, guided-session, and direct-promotion behavior and
+migrates `brain plan brainstorm idea/refine/challenge/resume/sessions/switch/reopen/review/park/assess/promote/repair`
+plus `brain plan guide current/show`. Brain mutations intentionally add explicit
+confirmation, permission checks, audit events, atomic local writes, and unchanged
+reruns. Local promotion writes canonical specs directly and never creates an epic
+or persisted execution-slice intermediate.
 
 ## Command Families
 
@@ -45,7 +47,8 @@ API.
 1. Current: standalone `plan` remains fully functional; Brain adds architecture
    and later module infrastructure without behavior changes.
 2. Shared domain/application services: Brain owns importable local status,
-   check, roadmap, brainstorm list/show/start, and spec list/show behavior.
+   check, roadmap, brainstorm capture/refinement/challenge, guided sessions and
+   packets, direct local promotion, and spec list/show behavior.
    Standalone `plan` remains the pinned compatibility source until its mapped
    local families switch to these packages.
 3. Native primary command: `brain plan` becomes primary; `plan` is a compatibility

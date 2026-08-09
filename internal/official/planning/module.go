@@ -41,6 +41,9 @@ func Registration() modules.Registration {
 			Commands: []string{CommandGroup},
 			Events: []string{
 				application.EventBrainstormCreated,
+				application.EventBrainstormUpdated,
+				application.EventGuidedSessionUpdated,
+				application.EventBrainstormPromoted,
 				application.EventRoadmapUpdated,
 			},
 		},
@@ -64,7 +67,7 @@ func (m *Module) Validate(_ context.Context, _ modules.ModuleContext, config mod
 
 func (m *Module) Initialize(_ context.Context, moduleContext modules.ModuleContext, _ modules.Config) error {
 	repository := local.New(moduleContext.Project.Root)
-	service := application.New(repository, application.Options{ModuleID: ID})
+	service := application.New(repository, application.Options{ModuleID: ID, ProjectRoot: moduleContext.Project.Root})
 	m.mu.Lock()
 	m.service = service
 	m.mu.Unlock()

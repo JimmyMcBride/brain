@@ -3,9 +3,47 @@ package application
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/JimmyMcBride/brain/planning"
 )
+
+// PreviewRoadmapParking returns one idempotent parking-lot append without writing.
+func (s *Service) PreviewRoadmapParking(ctx context.Context, input RoadmapParkingInput) (RoadmapPreview, error) {
+	if err := input.BrainstormID.Validate(); err != nil {
+		return RoadmapPreview{}, err
+	}
+	if strings.TrimSpace(input.Title) == "" {
+		return RoadmapPreview{}, fmt.Errorf("parking title is required")
+	}
+	roadmap, err := s.ReadRoadmap(ctx)
+	if err != nil {
+		return RoadmapPreview{}, err
+	}
+	entry := fmt.Sprintf("- %s | value: %s | parked because: %s | unlock: %s | source: [Brainstorm](../brainstorms/%s.md)",
+		strings.TrimSpace(input.Title), strings.TrimSpace(input.Value), strings.TrimSpace(input.Reason),
+		strings.TrimSpace(input.Unlock), input.BrainstormID,
+	)
+	body, changed := appendUniqueSection(roadmap.Body, "Parking Lot", entry)
+	action := MutationUpdate
+	if !changed {
+		action = MutationUnchanged
+	}
+	roadmap.Body = body
+	return RoadmapPreview{Action: action, Document: roadmap}, nil
+}
+
+// ParkRoadmap applies one confirmed, authorized, audited parking-lot append.
+func (s *Service) ParkRoadmap(ctx context.Context, input RoadmapParkingInput, authorizer Authorizer, events EventSink) (RoadmapResult, error) {
+	preview, err := s.PreviewRoadmapParking(ctx, input)
+	if err != nil {
+		return RoadmapResult{}, err
+	}
+	if preview.Action == MutationUnchanged {
+		return RoadmapResult{Action: MutationUnchanged, Document: preview.Document}, nil
+	}
+	return s.UpdateRoadmap(ctx, UpdateRoadmapInput{Body: preview.Document.Body, Confirmed: input.Confirmed}, authorizer, events)
+}
 
 // ReadRoadmap returns the complete local roadmap Markdown.
 func (s *Service) ReadRoadmap(ctx context.Context) (RoadmapDocument, error) {

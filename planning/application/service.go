@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -11,15 +12,17 @@ import (
 
 // Service coordinates shared Planning reads and guarded mutations.
 type Service struct {
-	repository Repository
-	moduleID   string
-	now        func() time.Time
+	repository  Repository
+	moduleID    string
+	projectRoot string
+	now         func() time.Time
 }
 
 // Options configures host identity and time for emitted events.
 type Options struct {
-	ModuleID string
-	Now      func() time.Time
+	ModuleID    string
+	ProjectRoot string
+	Now         func() time.Time
 }
 
 // New creates a Planning application service over repository.
@@ -29,9 +32,10 @@ func New(repository Repository, options Options) *Service {
 		now = time.Now
 	}
 	return &Service{
-		repository: repository,
-		moduleID:   strings.TrimSpace(options.ModuleID),
-		now:        now,
+		repository:  repository,
+		moduleID:    strings.TrimSpace(options.ModuleID),
+		projectRoot: strings.TrimSpace(options.ProjectRoot),
+		now:         now,
 	}
 }
 
@@ -140,6 +144,17 @@ func (s *Service) CreateBrainstorm(
 	document, action, err := s.repository.CreateBrainstorm(ctx, preview.Document.Artifact, now)
 	if err != nil {
 		return BrainstormResult{}, err
+	}
+	if action == MutationCreate {
+		if err := s.createGuidedSession(ctx, document, now); err != nil {
+			if rollbackErr := s.repository.RollbackBrainstormCreation(ctx, document.Artifact, now); rollbackErr != nil {
+				return BrainstormResult{}, errors.Join(
+					fmt.Errorf("create guided session: %w", err),
+					fmt.Errorf("rollback brainstorm creation: %w", rollbackErr),
+				)
+			}
+			return BrainstormResult{}, fmt.Errorf("create guided session: %w", err)
+		}
 	}
 	result := BrainstormResult{Action: action, Document: document}
 	if action != MutationCreate {

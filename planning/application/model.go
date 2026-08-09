@@ -167,6 +167,8 @@ const (
 	MutationUpdate MutationAction = "update"
 	// MutationUnchanged means the requested state already existed.
 	MutationUnchanged MutationAction = "unchanged"
+	// MutationReuse means an existing canonical artifact is retained without mutation.
+	MutationReuse MutationAction = "reuse"
 )
 
 // BrainstormPreview describes a proposed brainstorm mutation.
@@ -223,8 +225,14 @@ type Repository interface {
 	GetBrainstorm(context.Context, planning.ArtifactID) (BrainstormDocument, error)
 	FindBrainstorm(context.Context, planning.ArtifactID) (BrainstormDocument, bool, error)
 	CreateBrainstorm(context.Context, planning.Brainstorm, time.Time) (BrainstormDocument, MutationAction, error)
+	RollbackBrainstormCreation(context.Context, planning.Brainstorm, time.Time) error
+	ReplaceBrainstorm(context.Context, planning.ArtifactID, string, time.Time) (BrainstormDocument, MutationAction, error)
+	ReadGuidedSessions(context.Context) (GuidedSessionState, error)
+	ReplaceGuidedSessions(context.Context, GuidedSessionState) (GuidedSessionState, MutationAction, error)
 	ListSpecs(context.Context) ([]SpecDocument, error)
 	GetSpec(context.Context, planning.ArtifactID) (SpecDocument, error)
+	FindSpec(context.Context, planning.ArtifactID) (SpecDocument, bool, error)
+	WritePromotionSpecs(context.Context, []PromotionSpecWrite, time.Time) ([]SpecDocument, MutationAction, error)
 	QuerySpecs(context.Context, *planning.ArtifactID) ([]SpecQueryDocument, error)
 	ReadRoadmap(context.Context) (RoadmapDocument, error)
 	ReplaceRoadmap(context.Context, string) (RoadmapDocument, MutationAction, error)
