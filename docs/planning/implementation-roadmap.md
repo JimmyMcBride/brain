@@ -1,5 +1,5 @@
 ---
-updated: "2026-08-09T07:52:41Z"
+updated: "2026-08-10T07:27:42Z"
 ---
 # Planning Module Implementation Roadmap
 
@@ -66,6 +66,12 @@ application/local seams. Brain previews mutations by default, requires explicit
 spec edit/approval permission and confirmation, emits audit events, derives
 runtime slices without story files, and compensates an execution-status write
 when guided-session handoff persistence fails.
+The seventh slice is implemented in standalone Plan PR
+[`#87`](https://github.com/JimmyMcBride/plan/pull/87). It pins Brain merge
+`c2c71279030f` without a local replacement, routes compatible schema-v3 local
+families through the shared packages, preserves standalone host and fallback
+behavior, and enables the interactive-only warning policy. Linux and Windows CI
+are green; the slice remains pending until that PR merges.
 
 Deliver wrapper/shared implementation, command mapping, warning policy, docs, and
 script/exit/JSON compatibility tests.
@@ -121,7 +127,8 @@ lifecycle, diagnostics, and distribution direction.
 
 ## Exact Next Slice
 
-> After the canonical local spec workflow merges, switch standalone Plan's
-> mapped local command families to the merged Brain-owned packages, pin the
-> Brain revision, and enable the documented interactive-only warning policy
-> behind cross-repository compatibility tests.
+> Merge standalone Plan PR `#87`, then complete the coordinated Phase 4
+> cross-repository verification, documentation, and rollout pass. Confirm the
+> released standalone module resolves the merged Brain revision with no local
+> replacement and that the compatibility warning remains absent from JSON and
+> noninteractive automation.
