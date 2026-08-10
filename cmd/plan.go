@@ -371,7 +371,7 @@ func addPlanningSpecWorkflowCommands(specCmd *cobra.Command, loadApp appLoader) 
 			if err != nil {
 				return err
 			}
-			return printSpecMutation(appCtx, result, !editConfirm)
+			return printSpecMutation(appCtx, result, !editConfirm, fmt.Sprintf("Updated spec %s", result.Document.Path))
 		})
 	}}
 	edit.Flags().StringVarP(&editBody, "body", "b", "", "replacement body")
@@ -394,7 +394,7 @@ func addPlanningSpecWorkflowCommands(specCmd *cobra.Command, loadApp appLoader) 
 			if err != nil {
 				return err
 			}
-			return printSpecMutation(appCtx, result, !statusConfirm)
+			return printSpecMutation(appCtx, result, !statusConfirm, fmt.Sprintf("Set spec %s to %s", result.Document.Path, input.Status))
 		})
 	}}
 	status.Flags().StringVar(&setStatus, "set", "", "new status: draft, approved, done")
@@ -471,7 +471,7 @@ func addPlanningSpecWorkflowCommands(specCmd *cobra.Command, loadApp appLoader) 
 			if err != nil {
 				return err
 			}
-			return printSpecMutation(appCtx, result, !initiativeConfirm)
+			return printSpecMutation(appCtx, result, !initiativeConfirm, fmt.Sprintf("Updated initiative metadata for %s", result.Document.Path))
 		})
 	}}
 	initiative.Flags().StringVar(&initiativeSlug, "set", "", "initiative slug")
@@ -529,12 +529,16 @@ func addPlanningSpecWorkflowCommands(specCmd *cobra.Command, loadApp appLoader) 
 	specCmd.AddCommand(edit, status, analyze, checklist, initiative, execute, handoff)
 }
 
-func printSpecMutation(appCtx *app.App, result application.SpecMutationResult, preview bool) error {
+func printSpecMutation(appCtx *app.App, result application.SpecMutationResult, preview bool, successMessage string) error {
 	return appCtx.Output.Print(result, func(w io.Writer) error {
 		if preview {
 			fmt.Fprintln(w, "Preview only; rerun with --confirm to apply.")
 		}
-		_, err := fmt.Fprintf(w, "%s\t%s\n", result.Action, result.Document.Path)
+		if result.Action == application.MutationUnchanged {
+			_, err := fmt.Fprintf(w, "%s\t%s\n", result.Action, result.Document.Path)
+			return err
+		}
+		_, err := fmt.Fprintln(w, successMessage)
 		return err
 	})
 }

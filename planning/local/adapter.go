@@ -585,7 +585,8 @@ func (a *Adapter) ReplaceSpec(ctx context.Context, document application.SpecDocu
 	return updated, application.MutationUpdate, err
 }
 
-// RollbackSpecReplacement restores a prior document only when the current document exactly matches the failed mutation.
+// RollbackSpecReplacement restores a prior document when the current document exactly matches the failed mutation.
+// It succeeds without writing when the prior document has already been restored.
 func (a *Adapter) RollbackSpecReplacement(ctx context.Context, expected, previous application.SpecDocument) error {
 	if err := a.requireCompatible(ctx); err != nil {
 		return err

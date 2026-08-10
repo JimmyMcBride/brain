@@ -302,15 +302,18 @@ func TestCLIPlanningCanonicalSpecWorkflow(t *testing.T) {
 	if string(unchanged) != string(before) {
 		t.Fatal("edit preview mutated spec")
 	}
-	requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "spec", "edit", "execution-ready", "--body", editedBody, "--confirm"))
+	editOutput := requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "spec", "edit", "execution-ready", "--body", editedBody, "--confirm"))
+	assertPlanningGoldenOutput(t, env.moduleRoot, "spec-edit.stdout", editOutput)
 	requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "spec", "analyze", "execution-ready", "--confirm"))
 	requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "spec", "checklist", "execution-ready", "--profile", "general", "--confirm"))
-	requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "spec", "initiative", "execution-ready", "--set", "phase-four", "--title", "Phase Four", "--confirm"))
+	initiativeOutput := requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "spec", "initiative", "execution-ready", "--set", "phase-four", "--title", "Phase Four", "--confirm"))
+	assertPlanningGoldenOutput(t, env.moduleRoot, "spec-initiative.stdout", initiativeOutput)
 	statusPreview := requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "spec", "status", "draft-spec", "--set", "approved"))
 	if !strings.Contains(statusPreview, "Preview only") {
 		t.Fatalf("unexpected status preview:\n%s", statusPreview)
 	}
-	requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "spec", "status", "draft-spec", "--set", "approved", "--confirm"))
+	statusOutput := requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "spec", "status", "draft-spec", "--set", "approved", "--confirm"))
+	assertPlanningGoldenOutput(t, env.moduleRoot, "spec-status.stdout", statusOutput)
 	executionPreview := requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "spec", "execute", "execution-ready"))
 	if !strings.Contains(executionPreview, "slices: 2") || !strings.Contains(executionPreview, "Preview only") {
 		t.Fatalf("unexpected execution preview:\n%s", executionPreview)
@@ -329,6 +332,17 @@ func TestCLIPlanningCanonicalSpecWorkflow(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(env.project, ".plan", "stories")); !os.IsNotExist(err) {
 		t.Fatalf("spec execution created stories: %v", err)
+	}
+}
+
+func assertPlanningGoldenOutput(t *testing.T, moduleRoot, name, got string) {
+	t.Helper()
+	want, err := os.ReadFile(filepath.Join(moduleRoot, "internal", "planning", "conformance", "testdata", "golden", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != string(want) {
+		t.Fatalf("output differs from %s:\nwant:\n%s\ngot:\n%s", name, want, got)
 	}
 }
 
