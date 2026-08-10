@@ -330,10 +330,264 @@ func addPlanningCommand(root *cobra.Command, _ *rootFlagsState, loadApp appLoade
 		},
 	}
 	specCmd.AddCommand(specListCmd, specShowCmd)
+	addPlanningSpecWorkflowCommands(specCmd, loadApp)
 
 	guideCmd := newPlanningGuideCommand(loadApp)
 	planCmd.AddCommand(statusCmd, checkCmd, roadmapCmd, brainstormCmd, guideCmd, specCmd)
 	root.AddCommand(planCmd)
+}
+
+func addPlanningSpecWorkflowCommands(specCmd *cobra.Command, loadApp appLoader) {
+	var editBody string
+	var editStdin, editConfirm bool
+	var editEditor string
+	edit := &cobra.Command{Use: "edit <spec-slug>", Short: "Preview or replace canonical spec Markdown", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+		return withPlanningService(cmd, loadApp, application.PermissionRead, func(appCtx *app.App, service *application.Service, auth planningAuthorizer, _ string) error {
+			usingEditor := !editStdin && editBody == ""
+			if usingEditor && !editConfirm {
+				return fmt.Errorf("%w: pass --confirm before opening the spec editor", application.ErrConfirmationRequired)
+			}
+			body, err := readBody(cmd.InOrStdin(), editBody, editStdin)
+			if err != nil {
+				return err
+			}
+			if usingEditor {
+				current, err := service.GetSpec(cmd.Context(), planning.ArtifactID(args[0]))
+				if err != nil {
+					return err
+				}
+				body, err = editPlanningText(current.Body, editEditor)
+				if err != nil {
+					return err
+				}
+			}
+			input := application.SpecEditInput{ID: planning.ArtifactID(args[0]), Body: body, Confirmed: editConfirm}
+			var result application.SpecMutationResult
+			if editConfirm {
+				result, err = service.EditSpec(cmd.Context(), input, auth, planningEventSink{history: appCtx.History})
+			} else {
+				result, err = service.PreviewSpecEdit(cmd.Context(), input)
+			}
+			if err != nil {
+				return err
+			}
+			return printSpecMutation(appCtx, result, !editConfirm, fmt.Sprintf("Updated spec %s", result.Document.Path))
+		})
+	}}
+	edit.Flags().StringVarP(&editBody, "body", "b", "", "replacement body")
+	edit.Flags().BoolVar(&editStdin, "stdin", false, "read replacement body from stdin")
+	edit.Flags().StringVar(&editEditor, "editor", "", "editor command")
+	edit.Flags().BoolVar(&editConfirm, "confirm", false, "confirm the spec write")
+
+	var setStatus string
+	var statusConfirm bool
+	status := &cobra.Command{Use: "status <spec-slug>", Short: "Preview or set spec status", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+		return withPlanningService(cmd, loadApp, application.PermissionRead, func(appCtx *app.App, service *application.Service, auth planningAuthorizer, _ string) error {
+			input := application.SpecStatusInput{ID: planning.ArtifactID(args[0]), Status: planning.SpecStatus(setStatus), Confirmed: statusConfirm}
+			var result application.SpecMutationResult
+			var err error
+			if statusConfirm {
+				result, err = service.SetSpecStatus(cmd.Context(), input, auth, planningEventSink{history: appCtx.History})
+			} else {
+				result, err = service.PreviewSpecStatus(cmd.Context(), input)
+			}
+			if err != nil {
+				return err
+			}
+			return printSpecMutation(appCtx, result, !statusConfirm, fmt.Sprintf("Set spec %s to %s", result.Document.Path, input.Status))
+		})
+	}}
+	status.Flags().StringVar(&setStatus, "set", "", "new status: draft, approved, done")
+	_ = status.MarkFlagRequired("set")
+	status.Flags().BoolVar(&statusConfirm, "confirm", false, "confirm the status write")
+
+	var analyzeConfirm bool
+	analyze := &cobra.Command{Use: "analyze <spec-slug>", Short: "Pressure-test a spec and preview or retain its additive report", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+		return withPlanningService(cmd, loadApp, application.PermissionRead, func(appCtx *app.App, service *application.Service, auth planningAuthorizer, _ string) error {
+			var report application.SpecAnalysisReport
+			var err error
+			if analyzeConfirm {
+				report, err = service.AnalyzeSpec(cmd.Context(), planning.ArtifactID(args[0]), true, auth, planningEventSink{history: appCtx.History})
+			} else {
+				report, err = service.PreviewSpecAnalysis(cmd.Context(), planning.ArtifactID(args[0]))
+			}
+			if err != nil {
+				return err
+			}
+			if err := appCtx.Output.Print(report, func(w io.Writer) error { return renderSpecAnalysis(w, report, !analyzeConfirm) }); err != nil {
+				return err
+			}
+			if report.ErrorCount() > 0 {
+				return fmt.Errorf("spec analysis found %d blocking issue(s)", report.ErrorCount())
+			}
+			return nil
+		})
+	}}
+	analyze.Flags().BoolVar(&analyzeConfirm, "confirm", false, "retain the additive analysis report")
+
+	var profile string
+	var checklistConfirm bool
+	checklist := &cobra.Command{Use: "checklist <spec-slug>", Short: "Run a profile-driven spec checklist", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+		return withPlanningService(cmd, loadApp, application.PermissionRead, func(appCtx *app.App, service *application.Service, auth planningAuthorizer, _ string) error {
+			var report application.SpecChecklistReport
+			var err error
+			if checklistConfirm {
+				report, err = service.RunSpecChecklist(cmd.Context(), planning.ArtifactID(args[0]), profile, true, auth, planningEventSink{history: appCtx.History})
+			} else {
+				report, err = service.PreviewSpecChecklist(cmd.Context(), planning.ArtifactID(args[0]), profile)
+			}
+			if err != nil {
+				return err
+			}
+			if err := appCtx.Output.Print(report, func(w io.Writer) error { return renderSpecChecklist(w, report, !checklistConfirm) }); err != nil {
+				return err
+			}
+			if report.ErrorCount() > 0 {
+				return fmt.Errorf("spec checklist found %d blocking issue(s)", report.ErrorCount())
+			}
+			return nil
+		})
+	}}
+	checklist.Flags().StringVar(&profile, "profile", "general", "checklist profile")
+	checklist.Flags().BoolVar(&checklistConfirm, "confirm", false, "retain the additive checklist report")
+
+	var initiativeSlug, initiativeTitle, initiativeSummary string
+	var initiativeClear, initiativeConfirm bool
+	initiative := &cobra.Command{Use: "initiative <spec-slug>", Short: "Preview or update initiative metadata", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+		return withPlanningService(cmd, loadApp, application.PermissionRead, func(appCtx *app.App, service *application.Service, auth planningAuthorizer, _ string) error {
+			var id *planning.ArtifactID
+			if strings.TrimSpace(initiativeSlug) != "" {
+				value := planning.ArtifactID(initiativeSlug)
+				id = &value
+			}
+			input := application.SpecInitiativeInput{ID: planning.ArtifactID(args[0]), Initiative: id, Title: initiativeTitle, Summary: initiativeSummary, Clear: initiativeClear, Confirmed: initiativeConfirm}
+			var result application.SpecMutationResult
+			var err error
+			if initiativeConfirm {
+				result, err = service.SetSpecInitiative(cmd.Context(), input, auth, planningEventSink{history: appCtx.History})
+			} else {
+				result, err = service.PreviewSpecInitiative(cmd.Context(), input)
+			}
+			if err != nil {
+				return err
+			}
+			return printSpecMutation(appCtx, result, !initiativeConfirm, fmt.Sprintf("Updated initiative metadata for %s", result.Document.Path))
+		})
+	}}
+	initiative.Flags().StringVar(&initiativeSlug, "set", "", "initiative slug")
+	initiative.Flags().StringVar(&initiativeTitle, "title", "", "initiative title")
+	initiative.Flags().StringVar(&initiativeSummary, "summary", "", "initiative summary")
+	initiative.Flags().BoolVar(&initiativeClear, "clear", false, "clear initiative metadata")
+	initiative.Flags().BoolVar(&initiativeConfirm, "confirm", false, "confirm initiative metadata write")
+
+	var branchPrefix string
+	var executeConfirm bool
+	execute := &cobra.Command{Use: "execute <spec-slug>", Short: "Preview or start spec execution with ephemeral slices", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+		return withPlanningService(cmd, loadApp, application.PermissionRead, func(appCtx *app.App, service *application.Service, auth planningAuthorizer, _ string) error {
+			input := application.SpecExecutionInput{ID: planning.ArtifactID(args[0]), BranchPrefix: branchPrefix, Confirmed: executeConfirm}
+			var result application.SpecExecutionResult
+			var err error
+			if executeConfirm {
+				result, err = service.BeginSpecExecution(cmd.Context(), input, auth, planningEventSink{history: appCtx.History})
+			} else {
+				result, err = service.PreviewSpecExecution(cmd.Context(), input)
+			}
+			if err != nil {
+				return err
+			}
+			return appCtx.Output.Print(result, func(w io.Writer) error { return renderSpecExecution(w, result, !executeConfirm) })
+		})
+	}}
+	execute.Flags().StringVar(&branchPrefix, "branch-prefix", "feature/", "suggested branch prefix")
+	execute.Flags().BoolVar(&executeConfirm, "confirm", false, "confirm execution start")
+	var handoffPrefix string
+	var handoffConfirm bool
+	handoff := &cobra.Command{Use: "handoff <spec-slug>", Short: "Preview or continue a guided spec into execution", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+		return withPlanningService(cmd, loadApp, application.PermissionRead, func(appCtx *app.App, service *application.Service, auth planningAuthorizer, _ string) error {
+			input := application.SpecExecutionInput{ID: planning.ArtifactID(args[0]), BranchPrefix: handoffPrefix, Confirmed: handoffConfirm}
+			var result application.SpecExecutionResult
+			var err error
+			if handoffConfirm {
+				result, err = service.HandoffSpec(cmd.Context(), input, auth, planningEventSink{history: appCtx.History})
+			} else {
+				result, err = service.PreviewSpecHandoff(cmd.Context(), input)
+			}
+			if err != nil {
+				return err
+			}
+			return appCtx.Output.Print(result, func(w io.Writer) error {
+				if result.Session != nil {
+					fmt.Fprintf(w, "Spec recap:\nCurrent understanding: %s\nRecommended next stage: continue into execution.\n", result.Recap)
+				}
+				return renderSpecExecution(w, result, !handoffConfirm)
+			})
+		})
+	}}
+	handoff.Flags().StringVar(&handoffPrefix, "branch-prefix", "feature/", "suggested branch prefix")
+	handoff.Flags().BoolVar(&handoffConfirm, "confirm", false, "confirm guided execution handoff")
+
+	specCmd.AddCommand(edit, status, analyze, checklist, initiative, execute, handoff)
+}
+
+func printSpecMutation(appCtx *app.App, result application.SpecMutationResult, preview bool, successMessage string) error {
+	return appCtx.Output.Print(result, func(w io.Writer) error {
+		if preview {
+			fmt.Fprintln(w, "Preview only; rerun with --confirm to apply.")
+		}
+		if result.Action == application.MutationUnchanged {
+			_, err := fmt.Fprintf(w, "%s\t%s\n", result.Action, result.Document.Path)
+			return err
+		}
+		_, err := fmt.Fprintln(w, successMessage)
+		return err
+	})
+}
+func renderSpecAnalysis(w io.Writer, report application.SpecAnalysisReport, preview bool) error {
+	fmt.Fprintf(w, "spec_analysis: %s\nfindings: %d total, %d blocking, %d guidance\n", report.SpecPath, len(report.Findings), report.ErrorCount(), report.WarningCount())
+	if len(report.Findings) == 0 {
+		fmt.Fprintln(w, "status: ok")
+	}
+	for _, f := range report.Findings {
+		fmt.Fprintf(w, "- [%s] %s: %s\n", f.Severity, f.Category, f.Message)
+		if f.Recommendation != "" {
+			fmt.Fprintln(w, "  fix: "+f.Recommendation)
+		}
+	}
+	if preview {
+		fmt.Fprintln(w, "Preview only; rerun with --confirm to retain the report.")
+	}
+	return nil
+}
+func renderSpecChecklist(w io.Writer, report application.SpecChecklistReport, preview bool) error {
+	fmt.Fprintf(w, "spec_checklist: %s\nprofile: %s\nfindings: %d total, %d blocking, %d guidance\n", report.SpecPath, report.Profile, len(report.Findings), report.ErrorCount(), report.WarningCount())
+	if len(report.Findings) == 0 {
+		fmt.Fprintln(w, "status: ok")
+	}
+	for _, f := range report.Findings {
+		fmt.Fprintf(w, "- [%s] %s: %s\n", f.Severity, f.Area, f.Message)
+		if f.Recommendation != "" {
+			fmt.Fprintln(w, "  fix: "+f.Recommendation)
+		}
+	}
+	if preview {
+		fmt.Fprintln(w, "Preview only; rerun with --confirm to retain the report.")
+	}
+	return nil
+}
+func renderSpecExecution(w io.Writer, result application.SpecExecutionResult, preview bool) error {
+	view := result.Execution
+	fmt.Fprintf(w, "spec_execution: %s\nstatus: %s\nbranch: %s\nslices: %d\n", view.SpecPath, view.Status, view.SuggestedBranch, len(view.Slices))
+	for i, slice := range view.Slices {
+		fmt.Fprintf(w, "%d. %s\n   goal: %s\n", i+1, slice.Title, slice.Goal)
+		for _, verify := range slice.Verification {
+			fmt.Fprintln(w, "   verify: "+verify)
+		}
+	}
+	fmt.Fprintln(w, "workflow:\n- implement one slice at a time\n- review and verify each slice before committing it\n- open a PR after the full spec is built")
+	if preview {
+		fmt.Fprintln(w, "Preview only; rerun with --confirm to start execution.")
+	}
+	return nil
 }
 
 func addPlanningBrainstormWorkflowCommands(brainstormCmd *cobra.Command, loadApp appLoader) {
@@ -968,6 +1222,12 @@ func (s planningEventSink) Publish(_ context.Context, event application.Event) e
 		summary = "Planning guided session updated"
 	case application.EventBrainstormPromoted:
 		summary = "Planning brainstorm promoted directly to local spec"
+	case application.EventSpecUpdated:
+		file = ".plan/specs/" + target + ".md"
+		summary = "Planning spec updated"
+	case application.EventSpecExecutionStarted:
+		file = ".plan/specs/" + target + ".md"
+		summary = "Planning spec execution started"
 	}
 	return s.history.Append(history.Entry{
 		ID:        strings.Join([]string{event.ModuleID, event.Name, target, fmt.Sprintf("%d", event.OccurredAt.UnixNano())}, ":"),

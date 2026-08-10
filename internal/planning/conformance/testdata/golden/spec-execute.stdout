@@ -1,0 +1,14 @@
+spec_execution: .plan/specs/execution-ready.md
+status: implementing
+branch: feature/execution-ready
+slices: 2
+1. Capture spec contracts
+   goal: Freeze standalone observable behavior before moving ownership.
+   verify: Run conformance tests.
+2. Migrate spec workflow
+   goal: Route native spec behavior through shared services.
+   verify: Run application and adapter tests.
+workflow:
+- implement one slice at a time
+- review and verify each slice before committing it
+- open a PR after the full spec is built

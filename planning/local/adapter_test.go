@@ -130,6 +130,51 @@ func TestAdapterReadsCheckDocumentsAndReplacesRoadmapAtomically(t *testing.T) {
 	assertNoTemporaryFiles(t, filepath.Join(root, ".plan"))
 }
 
+func TestAdapterSpecReplacementAndGuardedRollback(t *testing.T) {
+	root := t.TempDir()
+	copyFixture(t, "compatible", root)
+	adapter := New(root)
+	ctx := context.Background()
+	now := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
+	previous, err := adapter.GetSpec(ctx, "alpha-spec")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := previous
+	expected.Artifact.Status = planning.SpecImplementing
+	expected.Artifact.ExecutionID = artifactIDPointer("alpha-spec-execution")
+	updated, action, err := adapter.ReplaceSpec(ctx, expected, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action != application.MutationUpdate || updated.Artifact.Status != planning.SpecImplementing {
+		t.Fatalf("unexpected spec replacement: %#v action=%s", updated, action)
+	}
+	if err := adapter.RollbackSpecReplacement(ctx, updated, previous); err != nil {
+		t.Fatal(err)
+	}
+	restored, err := adapter.GetSpec(ctx, "alpha-spec")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored.Artifact.Status != planning.SpecApproved {
+		t.Fatalf("spec was not restored: %#v", restored.Artifact)
+	}
+	if err := adapter.RollbackSpecReplacement(ctx, updated, previous); err != nil {
+		t.Fatalf("idempotent rollback failed: %v", err)
+	}
+	changed := updated
+	changed.Body += "\nexternal change\n"
+	if _, _, err := adapter.ReplaceSpec(ctx, changed, now.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if err := adapter.RollbackSpecReplacement(ctx, updated, previous); !errors.Is(err, application.ErrArtifactConflict) {
+		t.Fatalf("expected guarded rollback conflict, got %v", err)
+	}
+}
+
+func artifactIDPointer(id planning.ArtifactID) *planning.ArtifactID { return &id }
+
 func TestAdapterResolvesRelativeProjectRoot(t *testing.T) {
 	parent := t.TempDir()
 	root := filepath.Join(parent, "fixture")

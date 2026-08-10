@@ -264,6 +264,90 @@ func TestCLIPlanningGuidedBrainstormAndDirectPromotionWorkflow(t *testing.T) {
 	}
 }
 
+func TestCLIPlanningCanonicalSpecWorkflow(t *testing.T) {
+	env := newCLIEnv(t)
+	fixture := filepath.Join(env.moduleRoot, "internal", "planning", "conformance", "testdata", "fixtures", "schema-v3-spec")
+	if err := os.CopyFS(env.project, os.DirFS(fixture)); err != nil {
+		t.Fatal(err)
+	}
+	grant := []string{"--project", env.project, "modules", "grant", officialplanning.ID}
+	grant = append(grant, officialplanning.Registration().Descriptor.Permissions...)
+	requireOK(t, runPlanningCLI(t, env, "", grant...))
+	requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "modules", "enable", officialplanning.ID))
+	specPath := filepath.Join(env.project, ".plan", "specs", "execution-ready.md")
+	before, err := os.ReadFile(specPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	preview := requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "spec", "analyze", "execution-ready"))
+	if !strings.Contains(preview, "Preview only") || !strings.Contains(preview, "status: ok") {
+		t.Fatalf("unexpected analysis preview:\n%s", preview)
+	}
+	after, err := os.ReadFile(specPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Fatal("analysis preview mutated spec")
+	}
+	editedBody := string(before) + "\n## Notes\n\nEdited through Brain.\n"
+	editPreview := requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "spec", "edit", "execution-ready", "--body", editedBody))
+	if !strings.Contains(editPreview, "Preview only") {
+		t.Fatalf("unexpected edit preview:\n%s", editPreview)
+	}
+	unchanged, err := os.ReadFile(specPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(unchanged) != string(before) {
+		t.Fatal("edit preview mutated spec")
+	}
+	editOutput := requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "spec", "edit", "execution-ready", "--body", editedBody, "--confirm"))
+	assertPlanningGoldenOutput(t, env.moduleRoot, "spec-edit.stdout", editOutput)
+	requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "spec", "analyze", "execution-ready", "--confirm"))
+	requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "spec", "checklist", "execution-ready", "--profile", "general", "--confirm"))
+	initiativeOutput := requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "spec", "initiative", "execution-ready", "--set", "phase-four", "--title", "Phase Four", "--confirm"))
+	assertPlanningGoldenOutput(t, env.moduleRoot, "spec-initiative.stdout", initiativeOutput)
+	statusPreview := requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "spec", "status", "draft-spec", "--set", "approved"))
+	if !strings.Contains(statusPreview, "Preview only") {
+		t.Fatalf("unexpected status preview:\n%s", statusPreview)
+	}
+	statusOutput := requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "spec", "status", "draft-spec", "--set", "approved", "--confirm"))
+	assertPlanningGoldenOutput(t, env.moduleRoot, "spec-status.stdout", statusOutput)
+	executionPreview := requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "spec", "execute", "execution-ready"))
+	if !strings.Contains(executionPreview, "slices: 2") || !strings.Contains(executionPreview, "Preview only") {
+		t.Fatalf("unexpected execution preview:\n%s", executionPreview)
+	}
+	requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "spec", "execute", "execution-ready", "--confirm"))
+	handoff := requireOK(t, runPlanningCLI(t, env, "", "--project", env.project, "plan", "spec", "handoff", "execution-ready", "--confirm"))
+	if !strings.Contains(handoff, "Recommended next stage: continue into execution") {
+		t.Fatalf("unexpected handoff:\n%s", handoff)
+	}
+	sessions, err := os.ReadFile(filepath.Join(env.project, ".plan", ".meta", "guided_sessions.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(sessions), `"current_stage": "execution"`) {
+		t.Fatalf("handoff did not advance session:\n%s", sessions)
+	}
+	if _, err := os.Stat(filepath.Join(env.project, ".plan", "stories")); !os.IsNotExist(err) {
+		t.Fatalf("spec execution created stories: %v", err)
+	}
+}
+
+func assertPlanningGoldenOutput(t *testing.T, moduleRoot, name, got string) {
+	t.Helper()
+	want, err := os.ReadFile(filepath.Join(moduleRoot, "internal", "planning", "conformance", "testdata", "golden", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	normalizedWant := strings.ReplaceAll(string(want), "\r\n", "\n")
+	normalizedGot := strings.ReplaceAll(got, "\r\n", "\n")
+	if normalizedGot != normalizedWant {
+		t.Fatalf("output differs from %s:\nwant:\n%s\ngot:\n%s", name, want, got)
+	}
+}
+
 func TestCLIPlanningFutureSchemaIsReadOnly(t *testing.T) {
 	env := newCLIEnv(t)
 	fixture := filepath.Join(env.moduleRoot, "planning", "local", "testdata", "future")

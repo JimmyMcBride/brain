@@ -95,11 +95,12 @@ workspaces. Grant its exact permissions, then enable it:
 
 ```bash
 brain modules grant --project . official.planning \
-  planning.read planning.brainstorm project.context.read
+  planning.read planning.brainstorm planning.roadmap planning.spec.edit \
+  planning.spec.approve planning.execute project.context.read
 brain modules enable --project . official.planning
 ```
 
-Available Phase 3 commands:
+Available local Planning commands include:
 
 ```bash
 brain plan status --project .
@@ -109,6 +110,11 @@ brain plan brainstorm start --project . "Topic"
 brain plan brainstorm start --project . "Topic" --confirm
 brain plan spec list --project .
 brain plan spec show --project . <slug>
+brain plan spec analyze --project . <slug>
+brain plan spec checklist --project . <slug> --profile general
+brain plan spec status --project . <slug> --set approved --confirm
+brain plan spec execute --project . <slug> --confirm
+brain plan spec handoff --project . <slug> --confirm
 ```
 
 `brainstorm start` previews by default. `--confirm` performs the atomic write;

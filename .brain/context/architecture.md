@@ -1,5 +1,5 @@
 ---
-updated: "2026-08-09T07:52:41Z"
+updated: "2026-08-09T21:58:01Z"
 ---
 # Architecture
 
@@ -52,4 +52,5 @@ Use this file for the structural shape of the repository.
 - 2026-07-29: `internal/planning/conformance` owns the Phase 4 compatibility manifest, the pinned standalone Plan revision, command dispositions, normalization rules, copied fixtures, and black-box goldens. It remains internal while command families move behind captured contracts.
 - 2026-07-29: Brain's canonical Go module path is `github.com/JimmyMcBride/brain`. The Phase 4 normalization changes imports plus linker targets in the release workflow and maintainer refresh scripts only.
 - 2026-08-09: `cmd/plan.go` is a bounded native shell over the registered public Planning application service. In addition to status/check/roadmap and basic artifact reads, it exposes local brainstorm capture/refinement/challenge, guided-session navigation and guide packets, roadmap parking, maturity/source repair, and direct brainstorm-to-spec promotion. Shared mutations require explicit confirmation, module permission, durable audit, atomic local writes, and idempotent reruns. Direct local promotion creates canonical specs without epic or persisted story intermediates; commands still fail with `module_disabled` until `official.planning` is granted and enabled.
+- 2026-08-09: Canonical local spec edit, approval, analysis, checklist, initiative, execution, and guided handoff now run through public `planning/application` plus `planning/local`. Execution slices are deterministic and ephemeral; handoff compensates the exact spec transition if guided-session persistence fails.
 - 2026-07-27: Planning is an official optional module. It retains `.plan/` for initial local compatibility and supports `local`, `github`, and `hybrid` migration sources; during standalone Plan migration, `hybrid` means split local/GitHub ownership. Brain Planning never imports or implements Linear integration; legacy Linear workspaces receive standalone Plan migration guidance. Planning uses review-first Brain memory proposals.

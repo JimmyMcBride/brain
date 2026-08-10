@@ -86,6 +86,10 @@ schema-v3 local adapter, plus workspace diagnostics, aggregate status, local
 spec checks, roadmap read/replace/parking, brainstorm capture/refinement/challenge,
 guided-session state and packets, maturity/source repair, direct local spec
 promotion, existing brainstorm/spec reads, and guarded mutation contracts. The
+same boundary now owns canonical spec edit/lifecycle/initiative mutations,
+additive analysis/checklist reports, deterministic execution-plan derivation,
+and compensated spec-to-guided-session handoff. Runtime slices remain ephemeral.
+The
 local adapter depends only on the Planning domain,
 application contracts, standard library, and YAML parsing. Cobra, Brain module
 runtime, GitHub, Linear, and cloud types remain outside both packages.

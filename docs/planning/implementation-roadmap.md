@@ -60,6 +60,12 @@ brainstorm to canonical spec. Content and promotion mutations are preview-first;
 all writes are permissioned, confirmed, audited, atomic at the local adapter
 boundary, and idempotent. Direct promotion creates no epic or persisted
 execution-slice intermediate.
+The sixth slice captures standalone spec edit, lifecycle, analysis, checklist,
+initiative, execution, and handoff contracts, then migrates them behind shared
+application/local seams. Brain previews mutations by default, requires explicit
+spec edit/approval permission and confirmation, emits audit events, derives
+runtime slices without story files, and compensates an execution-status write
+when guided-session handoff persistence fails.
 
 Deliver wrapper/shared implementation, command mapping, warning policy, docs, and
 script/exit/JSON compatibility tests.
@@ -115,7 +121,7 @@ lifecycle, diagnostics, and distribution direction.
 
 ## Exact Next Slice
 
-> After local brainstorm, guided-session, and direct-promotion behavior merges,
-> capture canonical local spec mutation, readiness, approval, execution, and
-> handoff contracts. Then expose only the additional application/local seams
-> those cases require and migrate that family behind passing conformance tests.
+> After the canonical local spec workflow merges, switch standalone Plan's
+> mapped local command families to the merged Brain-owned packages, pin the
+> Brain revision, and enable the documented interactive-only warning policy
+> behind cross-repository compatibility tests.

@@ -665,3 +665,105 @@ cases:
       stderr: exact
       files: exact
       rerun: structural
+  - id: spec.status.approve
+    command: spec.status
+    fixture: fixtures/schema-v3-spec
+    args: [--project, "<PROJECT>", spec, status, draft-spec, --set, approved]
+    native_args: [--project, "<PROJECT>", plan, spec, status, draft-spec, --set, approved, --confirm]
+    intentional_differences:
+      - Brain requires explicit confirmation and planning.spec.approve authorization.
+    expected:
+      exit_code: 0
+      stdout: golden/spec-status.stdout
+      stderr: empty
+      files: golden/spec-status.files
+      rerun: same
+    compare: {exit_code: exact, stdout: structural, stderr: exact, files: structural, rerun: structural}
+  - id: spec.edit.body
+    command: spec.edit
+    fixture: fixtures/schema-v3-spec
+    args: [--project, "<PROJECT>", spec, edit, execution-ready, --body, "# Execution Ready\n\n## Verification\n\n- Run focused tests.\n"]
+    native_args: [--project, "<PROJECT>", plan, spec, edit, execution-ready, --body, "# Execution Ready\n\n## Verification\n\n- Run focused tests.\n", --confirm]
+    intentional_differences:
+      - Brain requires explicit confirmation before replacing canonical Markdown.
+      - Brain validates the replacement as an executable spec contract.
+    expected:
+      exit_code: 0
+      stdout: golden/spec-edit.stdout
+      stderr: empty
+      files: golden/spec-edit.files
+      rerun: same
+    compare: {exit_code: exact, stdout: structural, stderr: exact, files: structural, rerun: structural}
+  - id: spec.analyze.ready
+    command: spec.analyze
+    fixture: fixtures/schema-v3-spec
+    args: [--project, "<PROJECT>", spec, analyze, execution-ready]
+    native_args: [--project, "<PROJECT>", plan, spec, analyze, execution-ready, --confirm]
+    intentional_differences:
+      - Brain previews additive analysis by default and requires confirmation to retain it.
+    expected:
+      exit_code: 0
+      stdout: golden/spec-analyze.stdout
+      stderr: empty
+      files: golden/spec-analyze.files
+      rerun: same
+    compare: {exit_code: exact, stdout: exact, stderr: exact, files: structural, rerun: structural}
+  - id: spec.checklist.general
+    command: spec.checklist
+    fixture: fixtures/schema-v3-spec
+    args: [--project, "<PROJECT>", spec, checklist, execution-ready, --profile, general]
+    native_args: [--project, "<PROJECT>", plan, spec, checklist, execution-ready, --profile, general, --confirm]
+    intentional_differences:
+      - Brain previews additive checklist output by default and requires confirmation to retain it.
+    expected:
+      exit_code: 0
+      stdout: golden/spec-checklist.stdout
+      stderr: empty
+      files: golden/spec-checklist.files
+      rerun: same
+    compare: {exit_code: exact, stdout: exact, stderr: exact, files: structural, rerun: structural}
+  - id: spec.initiative.set
+    command: spec.initiative
+    fixture: fixtures/schema-v3-spec
+    args: [--project, "<PROJECT>", spec, initiative, execution-ready, --set, phase-four, --title, "Phase Four", --summary, "Complete local compatibility."]
+    native_args: [--project, "<PROJECT>", plan, spec, initiative, execution-ready, --set, phase-four, --title, "Phase Four", --summary, "Complete local compatibility.", --confirm]
+    intentional_differences:
+      - Brain requires explicit confirmation before initiative metadata changes.
+    expected:
+      exit_code: 0
+      stdout: golden/spec-initiative.stdout
+      stderr: empty
+      files: golden/spec-initiative.files
+      rerun: same
+    compare: {exit_code: exact, stdout: structural, stderr: exact, files: structural, rerun: structural}
+  - id: spec.execute.approved
+    command: spec.execute
+    fixture: fixtures/schema-v3-spec
+    args: [--project, "<PROJECT>", spec, execute, execution-ready]
+    native_args: [--project, "<PROJECT>", plan, spec, execute, execution-ready, --confirm]
+    intentional_differences:
+      - Brain previews by default and requires confirmation before marking the spec implementing.
+      - Brain emits a permissioned audit event and no persisted slice artifacts.
+    expected:
+      exit_code: 0
+      stdout: golden/spec-execute.stdout
+      stderr: empty
+      files: golden/spec-execute.files
+      rerun: same
+    compare: {exit_code: exact, stdout: exact, stderr: exact, files: structural, rerun: structural}
+  - id: spec.handoff.preview
+    command: spec.handoff
+    fixture: fixtures/schema-v3-spec
+    args: [--project, "<PROJECT>", spec, handoff, execution-ready]
+    native_args: [--project, "<PROJECT>", plan, spec, handoff, execution-ready]
+    intentional_differences:
+      - Brain uses explicit --confirm instead of an interactive stdin prompt.
+      - Brain preview is non-mutating; standalone saves a declined checkpoint.
+      - Brain reports the target implementing state in its preview.
+    expected:
+      exit_code: 0
+      stdout: golden/spec-handoff.stdout
+      stderr: empty
+      files: unchanged
+      rerun: same
+    compare: {exit_code: exact, stdout: structural, stderr: exact, files: structural, rerun: structural}

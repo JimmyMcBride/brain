@@ -36,6 +36,9 @@ func Registration() modules.Registration {
 				application.PermissionRead,
 				application.PermissionBrainstorm,
 				application.PermissionRoadmap,
+				application.PermissionSpecEdit,
+				application.PermissionSpecApprove,
+				application.PermissionExecute,
 				PermissionContextRead,
 			},
 			Commands: []string{CommandGroup},
@@ -45,6 +48,8 @@ func Registration() modules.Registration {
 				application.EventGuidedSessionUpdated,
 				application.EventBrainstormPromoted,
 				application.EventRoadmapUpdated,
+				application.EventSpecUpdated,
+				application.EventSpecExecutionStarted,
 			},
 		},
 		Factory: func() modules.Module {

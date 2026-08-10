@@ -15,10 +15,20 @@ const (
 	PermissionBrainstorm = "planning.brainstorm"
 	// PermissionRoadmap authorizes roadmap mutations.
 	PermissionRoadmap = "planning.roadmap"
+	// PermissionSpecEdit authorizes canonical spec mutations and execution start.
+	PermissionSpecEdit = "planning.spec.edit"
+	// PermissionSpecApprove authorizes spec approval.
+	PermissionSpecApprove = "planning.spec.approve"
+	// PermissionExecute authorizes spec execution and guided handoff.
+	PermissionExecute = "planning.execute"
 	// EventBrainstormCreated identifies a created-brainstorm audit event.
 	EventBrainstormCreated = "planning.brainstorm.created"
 	// EventRoadmapUpdated identifies an updated-roadmap audit event.
 	EventRoadmapUpdated = "planning.roadmap.updated"
+	// EventSpecUpdated identifies a canonical spec mutation.
+	EventSpecUpdated = "planning.spec.updated"
+	// EventSpecExecutionStarted identifies a spec execution transition.
+	EventSpecExecutionStarted = "planning.spec.execution-started"
 )
 
 // WorkspaceState classifies local workspace compatibility.
@@ -233,6 +243,8 @@ type Repository interface {
 	GetSpec(context.Context, planning.ArtifactID) (SpecDocument, error)
 	FindSpec(context.Context, planning.ArtifactID) (SpecDocument, bool, error)
 	WritePromotionSpecs(context.Context, []PromotionSpecWrite, time.Time) ([]SpecDocument, MutationAction, error)
+	ReplaceSpec(context.Context, SpecDocument, time.Time) (SpecDocument, MutationAction, error)
+	RollbackSpecReplacement(context.Context, SpecDocument, SpecDocument) error
 	QuerySpecs(context.Context, *planning.ArtifactID) ([]SpecQueryDocument, error)
 	ReadRoadmap(context.Context) (RoadmapDocument, error)
 	ReplaceRoadmap(context.Context, string) (RoadmapDocument, MutationAction, error)

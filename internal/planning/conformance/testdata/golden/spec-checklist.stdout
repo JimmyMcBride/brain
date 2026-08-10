@@ -1,0 +1,4 @@
+spec_checklist: .plan/specs/execution-ready.md
+profile: general
+findings: 0 total, 0 blocking, 0 guidance
+status: ok
