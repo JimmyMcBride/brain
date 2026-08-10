@@ -341,7 +341,9 @@ func assertPlanningGoldenOutput(t *testing.T, moduleRoot, name, got string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != string(want) {
+	normalizedWant := strings.ReplaceAll(string(want), "\r\n", "\n")
+	normalizedGot := strings.ReplaceAll(got, "\r\n", "\n")
+	if normalizedGot != normalizedWant {
 		t.Fatalf("output differs from %s:\nwant:\n%s\ngot:\n%s", name, want, got)
 	}
 }
