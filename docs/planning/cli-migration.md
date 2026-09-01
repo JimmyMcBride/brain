@@ -1,5 +1,5 @@
 ---
-updated: "2026-09-01T14:26:27Z"
+updated: "2026-09-01T15:01:49Z"
 ---
 # Planning CLI Migration
 
@@ -27,9 +27,16 @@ Standalone Plan PR [`#87`](https://github.com/JimmyMcBride/plan/pull/87)
 merged the seventh slice against Brain merge `c2c71279030f`: compatible
 schema-v3 local families now call the shared application/local packages, while
 the standalone host retains flags, prompts, rendering, GitHub/hybrid ownership,
-and legacy repair fallbacks. Its Linux and Windows CI are green. Final rollout
-publishes the Brain boundary and replaces the temporary pseudo-version pin with
-that stable tag before publishing standalone Plan.
+and legacy repair fallbacks. The shared boundary shipped in Brain
+[`v0.1.21`](https://github.com/JimmyMcBride/brain/releases/tag/v0.1.21); Plan PR
+[`#88`](https://github.com/JimmyMcBride/plan/pull/88) replaced the temporary pin,
+and standalone Plan
+[`v0.1.29`](https://github.com/JimmyMcBride/plan/releases/tag/v0.1.29) completed
+the coordinated rollout. Both repositories passed local, race, vet, build,
+module, Linux, and Windows verification. Phase 4 is complete and Stage 3 is now
+the active compatibility posture: `brain plan` is primary for mapped local
+schema-v3 workflows, while `plan` remains a supported wrapper with warnings only
+for interactive migrated commands.
 
 ## Command Families
 
@@ -54,7 +61,7 @@ API.
 
 ## Stages
 
-1. Current: standalone `plan` remains fully functional; Brain adds architecture
+1. Initial: standalone `plan` remains fully functional; Brain adds architecture
    and later module infrastructure without behavior changes.
 2. Shared domain/application services: Brain owns importable local status,
    check, roadmap, brainstorm capture/refinement/challenge, guided sessions and
@@ -62,8 +69,9 @@ API.
    edit/readiness/approval/execution/handoff workflow.
    Standalone `plan` remains the pinned compatibility source; PR `#87` switched
    its mapped local families to these packages.
-3. Native primary command: `brain plan` becomes primary; `plan` is a compatibility
-   wrapper and emits documented warnings.
+3. Current — native primary command: `brain plan` is primary for mapped local
+   schema-v3 workflows; `plan` is a compatibility wrapper and emits documented
+   interactive warnings.
 4. Distribution deprecation: workspace migration is stable; separate Plan release
    timing and support window are published.
 
