@@ -1,5 +1,5 @@
 ---
-updated: "2026-09-01T14:26:27Z"
+updated: "2026-09-01T14:33:36Z"
 ---
 # Planning Module Implementation Roadmap
 
@@ -66,7 +66,7 @@ application/local seams. Brain previews mutations by default, requires explicit
 spec edit/approval permission and confirmation, emits audit events, derives
 runtime slices without story files, and compensates an execution-status write
 when guided-session handoff persistence fails.
-The seventh slice merged through standalone Plan PR
+The seventh slice landed through standalone Plan PR
 [`#87`](https://github.com/JimmyMcBride/plan/pull/87). It pins Brain merge
 `c2c71279030f` without a local replacement, routes compatible schema-v3 local
 families through the shared packages, preserves standalone host and fallback
