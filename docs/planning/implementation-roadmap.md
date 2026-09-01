@@ -1,5 +1,5 @@
 ---
-updated: "2026-08-10T07:27:42Z"
+updated: "2026-09-01T14:26:27Z"
 ---
 # Planning Module Implementation Roadmap
 
@@ -66,12 +66,13 @@ application/local seams. Brain previews mutations by default, requires explicit
 spec edit/approval permission and confirmation, emits audit events, derives
 runtime slices without story files, and compensates an execution-status write
 when guided-session handoff persistence fails.
-The seventh slice is implemented in standalone Plan PR
+The seventh slice merged through standalone Plan PR
 [`#87`](https://github.com/JimmyMcBride/plan/pull/87). It pins Brain merge
 `c2c71279030f` without a local replacement, routes compatible schema-v3 local
 families through the shared packages, preserves standalone host and fallback
 behavior, and enables the interactive-only warning policy. Linux and Windows CI
-are green; the slice remains pending until that PR merges.
+are green. Final rollout replaces the pseudo-version with the next published
+Brain tag before publishing the corresponding standalone Plan release.
 
 Deliver wrapper/shared implementation, command mapping, warning policy, docs, and
 script/exit/JSON compatibility tests.
@@ -127,8 +128,7 @@ lifecycle, diagnostics, and distribution direction.
 
 ## Exact Next Slice
 
-> Merge standalone Plan PR `#87`, then complete the coordinated Phase 4
-> cross-repository verification, documentation, and rollout pass. Confirm the
-> released standalone module resolves the merged Brain revision with no local
-> replacement and that the compatibility warning remains absent from JSON and
-> noninteractive automation.
+> Publish the merged Brain Planning boundary as the next stable Brain tag,
+> replace standalone Plan's temporary pseudo-version with that tag, repeat the
+> cross-repository verification matrix, and publish the corresponding Plan
+> release. Then mark Phase 4 complete and advance to Phase 5.

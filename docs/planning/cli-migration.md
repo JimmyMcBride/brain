@@ -1,5 +1,5 @@
 ---
-updated: "2026-08-10T07:27:42Z"
+updated: "2026-09-01T14:26:27Z"
 ---
 # Planning CLI Migration
 
@@ -24,10 +24,12 @@ spec edit/status/analyze/checklist/initiative/execute/handoff` with captured
 standalone contracts, preview-first writes, explicit spec permissions, guarded
 handoff rollback, and ephemeral execution slices.
 Standalone Plan PR [`#87`](https://github.com/JimmyMcBride/plan/pull/87)
-implements the seventh slice against Brain merge `c2c71279030f`: compatible
+merged the seventh slice against Brain merge `c2c71279030f`: compatible
 schema-v3 local families now call the shared application/local packages, while
 the standalone host retains flags, prompts, rendering, GitHub/hybrid ownership,
-and legacy repair fallbacks. Its Linux and Windows CI are green pending merge.
+and legacy repair fallbacks. Its Linux and Windows CI are green. Final rollout
+publishes the Brain boundary and replaces the temporary pseudo-version pin with
+that stable tag before publishing standalone Plan.
 
 ## Command Families
 
@@ -58,8 +60,8 @@ API.
    check, roadmap, brainstorm capture/refinement/challenge, guided sessions and
    packets, direct local promotion, and the complete canonical local spec
    edit/readiness/approval/execution/handoff workflow.
-   Standalone `plan` remains the pinned compatibility source; PR `#87` switches
-   its mapped local families to these packages and awaits merge.
+   Standalone `plan` remains the pinned compatibility source; PR `#87` switched
+   its mapped local families to these packages.
 3. Native primary command: `brain plan` becomes primary; `plan` is a compatibility
    wrapper and emits documented warnings.
 4. Distribution deprecation: workspace migration is stable; separate Plan release
