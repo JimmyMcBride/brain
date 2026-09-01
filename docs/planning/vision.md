@@ -2,8 +2,8 @@
 
 ## Status
 
-Approved direction. Storage-neutral domain and bounded local module vertical
-slice implemented; broader workflow compatibility and adapters remain phased.
+Approved direction. Storage-neutral domain, local module, and standalone CLI
+compatibility are shipped; adapters and the Brain knowledge loop remain phased.
 
 Brain Planning is an official optional Brain module. It turns rough work into
 reviewed, executable planning artifacts while consuming Brain's context, memory,
@@ -38,9 +38,11 @@ brain plan spec show --project . authentication-overhaul
 brain plan status --project .
 ```
 
-The current native surface is status, brainstorm list/show/start, and spec
-list/show. The approved Phase 4 Plan CLI Compatibility spec defines the broader
-local mapping and standalone overlap; implementation remains pending.
+The native surface covers the mapped schema-v3 local status, check, roadmap,
+brainstorm, guided-session, guide, promotion, and spec workflows. Phase 4 shipped
+that shared behavior in Brain `v0.1.21` and the standalone compatibility wrapper
+in Plan `v0.1.29`. GitHub and hybrid behavior remains with standalone Plan until
+the Phase 5 adapter transition is specified and implemented.
 
 When disabled, Planning creates no storage or configuration, injects no context,
 grants no permissions, and direct Planning commands explain how to enable it.

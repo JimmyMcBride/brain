@@ -38,7 +38,7 @@ the `plan` command as a shared compatibility wrapper.
 - [x] [Planning domain extraction](./specs/planning-domain-extraction.md)
 - [x] [Local Planning module](./specs/local-planning-module.md): `.plan/`
   adapter/fixtures plus native commands, permissions, and events
-- [ ] [Plan CLI compatibility](./specs/plan-cli-compatibility.md): shared local
+- [x] [Plan CLI compatibility](./specs/plan-cli-compatibility.md): shared local
   behavior, full command disposition, wrapper policy, and compatibility tests
 
 ## Phase 5–7: Integrations and Knowledge Loop

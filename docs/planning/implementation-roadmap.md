@@ -1,5 +1,5 @@
 ---
-updated: "2026-09-01T14:33:36Z"
+updated: "2026-09-01T15:01:49Z"
 ---
 # Planning Module Implementation Roadmap
 
@@ -45,7 +45,7 @@ and local tests.
 
 ## Phase 4 — Plan CLI Compatibility
 
-Status: In progress from `.plan/specs/plan-cli-compatibility.md`. PR #46
+Status: Complete from `.plan/specs/plan-cli-compatibility.md`. PR #46
 pinned standalone Plan revision `53ebd96`, recorded the complete command
 disposition, and captured initial black-box `status` cases. PR #47 normalized
 Brain's Go module path. PR #48 exposed the stdlib-only domain at
@@ -71,8 +71,14 @@ The seventh slice landed through standalone Plan PR
 `c2c71279030f` without a local replacement, routes compatible schema-v3 local
 families through the shared packages, preserves standalone host and fallback
 behavior, and enables the interactive-only warning policy. Linux and Windows CI
-are green. Final rollout replaces the pseudo-version with the next published
-Brain tag before publishing the corresponding standalone Plan release.
+are green. Final rollout published the shared Brain boundary in
+[`v0.1.21`](https://github.com/JimmyMcBride/brain/releases/tag/v0.1.21), replaced
+the temporary pseudo-version through standalone Plan PR
+[`#88`](https://github.com/JimmyMcBride/plan/pull/88), and published the verified
+compatibility wrapper in
+[`v0.1.29`](https://github.com/JimmyMcBride/plan/releases/tag/v0.1.29). Both
+releases include checksums and Linux, macOS, and Windows archives for amd64 and
+arm64.
 
 Deliver wrapper/shared implementation, command mapping, warning policy, docs, and
 script/exit/JSON compatibility tests.
@@ -128,7 +134,8 @@ lifecycle, diagnostics, and distribution direction.
 
 ## Exact Next Slice
 
-> Publish the merged Brain Planning boundary as the next stable Brain tag,
-> replace standalone Plan's temporary pseudo-version with that tag, repeat the
-> cross-repository verification matrix, and publish the corresponding Plan
-> release. Then mark Phase 4 complete and advance to Phase 5.
+> Shape and approve the bounded Phase 5 GitHub Adapter Transition spec. Inventory
+> the retained GitHub collaboration, publication, repository, execution, and
+> reconciliation behavior; define generic Planning ports and source-ownership
+> boundaries; and lock conformance and rollout gates before moving any GitHub
+> implementation into Brain.
