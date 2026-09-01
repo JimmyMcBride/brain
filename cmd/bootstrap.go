@@ -3,11 +3,11 @@ package cmd
 import (
 	"path/filepath"
 
-	"brain/internal/config"
-	"brain/internal/embeddings"
-	"brain/internal/index"
-	"brain/internal/projectcontext"
-	"brain/internal/workspace"
+	"github.com/JimmyMcBride/brain/internal/config"
+	"github.com/JimmyMcBride/brain/internal/embeddings"
+	"github.com/JimmyMcBride/brain/internal/index"
+	"github.com/JimmyMcBride/brain/internal/projectcontext"
+	"github.com/JimmyMcBride/brain/internal/workspace"
 )
 
 type bootstrapResult struct {

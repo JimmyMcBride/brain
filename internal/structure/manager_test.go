@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"brain/internal/index"
-	"brain/internal/workspace"
+	"github.com/JimmyMcBride/brain/internal/index"
+	"github.com/JimmyMcBride/brain/internal/workspace"
 )
 
 func TestFreshnessReportsMissingStaleAndFresh(t *testing.T) {

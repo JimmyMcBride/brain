@@ -73,7 +73,7 @@ $commit = (& git -C $repoRoot rev-parse HEAD).Trim()
 $date = (& git -C $repoRoot show -s --format=%cI HEAD).Trim()
 
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-& go build -C $repoRoot -ldflags "-X brain/internal/buildinfo.Commit=$commit -X brain/internal/buildinfo.Date=$date" -o $binPath .
+& go build -C $repoRoot -ldflags "-X github.com/JimmyMcBride/brain/internal/buildinfo.Commit=$commit -X github.com/JimmyMcBride/brain/internal/buildinfo.Date=$date" -o $binPath .
 
 if (-not (Test-Path $binPath)) {
     Fail "build did not produce $binPath"

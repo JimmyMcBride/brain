@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"brain/internal/modules"
-	"brain/internal/modules/testmodule"
+	"github.com/JimmyMcBride/brain/internal/modules"
+	"github.com/JimmyMcBride/brain/internal/modules/testmodule"
 )
 
 func TestDescriptorAndRegistryValidation(t *testing.T) {

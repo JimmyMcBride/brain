@@ -1,0 +1,14 @@
+check_scope: project
+findings: 4 total, 4 blocking, 0 guidance
+- [error] spec .plan/specs/alpha-spec.md :: Problem
+  Missing required ## Problem section content.
+  fix: Add a concrete problem statement under ## Problem that explains what is broken or missing today.
+- [error] spec .plan/specs/alpha-spec.md :: Goals
+  Missing required ## Goals section content.
+  fix: Expand ## Goals with the specific outcomes this spec must deliver.
+- [error] spec .plan/specs/alpha-spec.md :: Non-Goals
+  Missing required ## Non-Goals section content.
+  fix: Use ## Non-Goals to define what this work will explicitly not do.
+- [error] spec .plan/specs/alpha-spec.md :: Constraints
+  Missing required ## Constraints section content.
+  fix: List the design or implementation limits under ## Constraints so tradeoffs stay clear.

@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"brain/internal/modules"
-	"brain/internal/planning/application"
+	"github.com/JimmyMcBride/brain/internal/modules"
+	"github.com/JimmyMcBride/brain/planning/application"
 )
 
-func TestRegistrationDeclaresBoundedPhaseThreeContract(t *testing.T) {
+func TestRegistrationDeclaresBoundedPlanningContract(t *testing.T) {
 	descriptor := Registration().Descriptor
 	if descriptor.ID != ID || descriptor.Version != "0.1.0" {
 		t.Fatalf("unexpected descriptor identity: %#v", descriptor)
@@ -19,13 +19,16 @@ func TestRegistrationDeclaresBoundedPhaseThreeContract(t *testing.T) {
 	if strings.Join(descriptor.Commands, ",") != CommandGroup {
 		t.Fatalf("unexpected commands: %v", descriptor.Commands)
 	}
-	if strings.Join(descriptor.Events, ",") != application.EventBrainstormCreated {
-		t.Fatalf("unexpected events: %v", descriptor.Events)
+	for _, required := range []string{application.EventBrainstormCreated, application.EventRoadmapUpdated} {
+		if !strings.Contains(strings.Join(descriptor.Events, ","), required) {
+			t.Fatalf("missing event %q: %v", required, descriptor.Events)
+		}
 	}
 	permissions := strings.Join(descriptor.Permissions, ",")
 	for _, required := range []string{
 		application.PermissionRead,
 		application.PermissionBrainstorm,
+		application.PermissionRoadmap,
 		PermissionContextRead,
 	} {
 		if !strings.Contains(permissions, required) {
@@ -67,7 +70,9 @@ func TestModuleRuntimeHealthAndServiceFollowWorkspaceState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	provider, ok := resolution.Module.(application.ServiceProvider)
+	provider, ok := resolution.Module.(interface {
+		PlanningService() *application.Service
+	})
 	if !ok || provider.PlanningService() == nil {
 		t.Fatalf("resolved module does not provide Planning service: %#v", resolution)
 	}
@@ -75,7 +80,7 @@ func TestModuleRuntimeHealthAndServiceFollowWorkspaceState(t *testing.T) {
 
 func copyCompatibleWorkspace(t *testing.T, root string) {
 	t.Helper()
-	if err := os.CopyFS(root, os.DirFS(filepath.Join("local", "testdata", "compatible"))); err != nil {
+	if err := os.CopyFS(root, os.DirFS(filepath.Join("..", "..", "..", "planning", "local", "testdata", "compatible"))); err != nil {
 		t.Fatal(err)
 	}
 }

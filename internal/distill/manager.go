@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"brain/internal/history"
-	"brain/internal/notes"
-	"brain/internal/promotion"
-	"brain/internal/session"
+	"github.com/JimmyMcBride/brain/internal/history"
+	"github.com/JimmyMcBride/brain/internal/notes"
+	"github.com/JimmyMcBride/brain/internal/promotion"
+	"github.com/JimmyMcBride/brain/internal/session"
 )
 
 type Manager struct {

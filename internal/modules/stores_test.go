@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"brain/internal/modules"
+	"github.com/JimmyMcBride/brain/internal/modules"
 )
 
 func TestFileStoresDoNotCreateFilesOnLoad(t *testing.T) {

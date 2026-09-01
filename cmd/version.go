@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"io"
 
-	"brain/internal/buildinfo"
-	"brain/internal/config"
-	"brain/internal/output"
+	"github.com/JimmyMcBride/brain/internal/buildinfo"
+	"github.com/JimmyMcBride/brain/internal/config"
+	"github.com/JimmyMcBride/brain/internal/output"
 
 	"github.com/spf13/cobra"
 )

@@ -6,7 +6,7 @@ updated: "2026-04-20T05:44:35Z"
 <!-- brain:begin project-doc-overview -->
 Project: `brain`
 
-Go module: `brain`
+Go module: `github.com/JimmyMcBride/brain`
 
 Primary runtime: `go`
 
@@ -23,6 +23,7 @@ Primary runtime: `go`
 - `cmd/`
 - `docs/`
 - `internal/`
+- `planning/`
 - `scripts/`
 - `skills/`
 - `templates/`

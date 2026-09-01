@@ -7,11 +7,11 @@ import (
 	"io"
 	"path/filepath"
 
-	"brain/internal/buildinfo"
-	"brain/internal/config"
-	"brain/internal/output"
-	"brain/internal/projectcontext"
-	"brain/internal/update"
+	"github.com/JimmyMcBride/brain/internal/buildinfo"
+	"github.com/JimmyMcBride/brain/internal/config"
+	"github.com/JimmyMcBride/brain/internal/output"
+	"github.com/JimmyMcBride/brain/internal/projectcontext"
+	"github.com/JimmyMcBride/brain/internal/update"
 
 	"github.com/spf13/cobra"
 )

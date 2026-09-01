@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"brain/internal/history"
-	"brain/internal/projectcontext"
+	"github.com/JimmyMcBride/brain/internal/history"
+	"github.com/JimmyMcBride/brain/internal/projectcontext"
 )
 
 type Manager struct {

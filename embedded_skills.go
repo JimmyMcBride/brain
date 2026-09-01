@@ -4,7 +4,7 @@ import (
 	"embed"
 	"io/fs"
 
-	"brain/internal/skills"
+	"github.com/JimmyMcBride/brain/internal/skills"
 )
 
 //go:embed skills/brain/**

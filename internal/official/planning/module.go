@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"sync"
 
-	"brain/internal/modules"
-	"brain/internal/official/planning/local"
-	"brain/internal/planning/application"
+	"github.com/JimmyMcBride/brain/internal/modules"
+	"github.com/JimmyMcBride/brain/planning/application"
+	"github.com/JimmyMcBride/brain/planning/local"
 )
 
 const (
@@ -35,10 +35,22 @@ func Registration() modules.Registration {
 			Permissions: []string{
 				application.PermissionRead,
 				application.PermissionBrainstorm,
+				application.PermissionRoadmap,
+				application.PermissionSpecEdit,
+				application.PermissionSpecApprove,
+				application.PermissionExecute,
 				PermissionContextRead,
 			},
 			Commands: []string{CommandGroup},
-			Events:   []string{application.EventBrainstormCreated},
+			Events: []string{
+				application.EventBrainstormCreated,
+				application.EventBrainstormUpdated,
+				application.EventGuidedSessionUpdated,
+				application.EventBrainstormPromoted,
+				application.EventRoadmapUpdated,
+				application.EventSpecUpdated,
+				application.EventSpecExecutionStarted,
+			},
 		},
 		Factory: func() modules.Module {
 			return &Module{}
@@ -60,7 +72,7 @@ func (m *Module) Validate(_ context.Context, _ modules.ModuleContext, config mod
 
 func (m *Module) Initialize(_ context.Context, moduleContext modules.ModuleContext, _ modules.Config) error {
 	repository := local.New(moduleContext.Project.Root)
-	service := application.New(repository, application.Options{ModuleID: ID})
+	service := application.New(repository, application.Options{ModuleID: ID, ProjectRoot: moduleContext.Project.Root})
 	m.mu.Lock()
 	m.service = service
 	m.mu.Unlock()

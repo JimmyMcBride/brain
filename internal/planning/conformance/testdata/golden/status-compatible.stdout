@@ -1,0 +1,6 @@
+project: fixture
+planning_model: spec_first_v1
+source_mode: local
+specs: 1 total, 0 draft, 1 approved, 0 implementing, 0 done
+ready_specs: 1
+  - Alpha Spec status=approved

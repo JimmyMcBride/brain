@@ -13,11 +13,11 @@ import (
 	"strings"
 	"testing"
 
-	"brain/internal/buildinfo"
-	"brain/internal/config"
-	"brain/internal/projectcontext"
-	"brain/internal/skills"
-	"brain/internal/update"
+	"github.com/JimmyMcBride/brain/internal/buildinfo"
+	"github.com/JimmyMcBride/brain/internal/config"
+	"github.com/JimmyMcBride/brain/internal/projectcontext"
+	"github.com/JimmyMcBride/brain/internal/skills"
+	"github.com/JimmyMcBride/brain/internal/update"
 )
 
 var rfc3339Pattern = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z`)

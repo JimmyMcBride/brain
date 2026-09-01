@@ -1,17 +1,42 @@
+---
+updated: "2026-09-01T14:26:27Z"
+---
 # Planning CLI Migration
 
 ## Status
 
 Approved staged compatibility direction. Phase 3's bounded local native surface
-is implemented; full command mapping and warning schedule remain Phase 4
-decisions.
+is merged. Phase 4's approved
+`.plan/specs/plan-cli-compatibility.md` defines the shared-package boundary,
+mapped local workflow, full command disposition, compatibility contract, and
+warning policy. Phase 4 now has a versioned conformance manifest pinned to
+standalone Plan revision `53ebd96`; PR #46 captured root-command disposition
+and initial `status` baselines, PR #47 normalized Brain's Go module path, and PR
+#48 exposed the storage-neutral domain, and the fourth slice migrated aggregate
+status, project/spec checks, and roadmap read/replace behavior. The fifth slice
+captures local brainstorm, guided-session, and direct-promotion behavior and
+migrates `brain plan brainstorm idea/refine/challenge/resume/sessions/switch/reopen/review/park/assess/promote/repair`
+plus `brain plan guide current/show`. Brain mutations intentionally add explicit
+confirmation, permission checks, audit events, atomic local writes, and unchanged
+reruns. Local promotion writes canonical specs directly and never creates an epic
+or persisted execution-slice intermediate. The sixth slice migrates `brain plan
+spec edit/status/analyze/checklist/initiative/execute/handoff` with captured
+standalone contracts, preview-first writes, explicit spec permissions, guarded
+handoff rollback, and ephemeral execution slices.
+Standalone Plan PR [`#87`](https://github.com/JimmyMcBride/plan/pull/87)
+merged the seventh slice against Brain merge `c2c71279030f`: compatible
+schema-v3 local families now call the shared application/local packages, while
+the standalone host retains flags, prompts, rendering, GitHub/hybrid ownership,
+and legacy repair fallbacks. Its Linux and Windows CI are green. Final rollout
+publishes the Brain boundary and replaces the temporary pseudo-version pin with
+that stable tag before publishing standalone Plan.
 
 ## Command Families
 
 Target conceptual family:
 
 ```text
-brain modules grant official.planning planning.read planning.brainstorm project.context.read --project .
+brain modules grant official.planning planning.read planning.brainstorm planning.roadmap planning.spec.edit planning.spec.approve planning.execute project.context.read --project .
 brain modules enable official.planning --project .
 brain plan ...
 ```
@@ -31,9 +56,12 @@ API.
 
 1. Current: standalone `plan` remains fully functional; Brain adds architecture
    and later module infrastructure without behavior changes.
-2. Shared domain/application services: implemented in Brain for local status,
-   brainstorm list/show/start, and spec list/show; standalone `plan` remains the
-   compatibility source until Phase 4 shares the implementation.
+2. Shared domain/application services: Brain owns importable local status,
+   check, roadmap, brainstorm capture/refinement/challenge, guided sessions and
+   packets, direct local promotion, and the complete canonical local spec
+   edit/readiness/approval/execution/handoff workflow.
+   Standalone `plan` remains the pinned compatibility source; PR `#87` switched
+   its mapped local families to these packages.
 3. Native primary command: `brain plan` becomes primary; `plan` is a compatibility
    wrapper and emits documented warnings.
 4. Distribution deprecation: workspace migration is stable; separate Plan release

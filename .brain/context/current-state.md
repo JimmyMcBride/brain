@@ -1,5 +1,5 @@
 ---
-updated: "2026-07-29T07:47:49Z"
+updated: "2026-09-01T14:26:27Z"
 ---
 <!-- brain:begin context-current-state -->
 This file is a deterministic snapshot of the repository state at the last refresh.
@@ -9,11 +9,11 @@ This file is a deterministic snapshot of the repository state at the last refres
 - Project: `brain`
 - Root: `.`
 - Runtime: `go`
-- Go module: `brain`
+- Go module: `github.com/JimmyMcBride/brain`
 - Current branch: `develop`
 - Default branch: `develop`
 - Remote: `https://github.com/JimmyMcBride/brain.git`
-- Go test files: `37`
+- Go test files: `46`
 
 ## Docs
 
@@ -29,6 +29,12 @@ This file is a deterministic snapshot of the repository state at the last refres
 
 ## Local Notes
 
+- 2026-08-09: Phase 4's sixth slice captures and migrates canonical local spec edit, approval, analysis, checklist, initiative, execution, and guided handoff behavior. Brain mutations are preview-first, permissioned, confirmed, audited, atomic, and idempotent; execution slices remain ephemeral, and failed session persistence rolls back only the exact spec execution transition. The next slice switches standalone Plan's mapped local families to merged Brain packages and enables compatibility warnings.
+- 2026-09-01: Phase 4's seventh slice merged through standalone Plan PR `#87` at `e172bada36f0`, pinned to merged Brain revision `c2c71279030f` without a local replacement. Compatible schema-v3 local commands use Brain's shared Planning packages; standalone presentation, GitHub/hybrid ownership, and legacy repair fallbacks remain intact. The interactive warning is stderr-only and once per process, with JSON and noninteractive suppression. Final local, race, vet, module, Linux, and Windows verification passed. Exact next work publishes a stable Brain tag, replaces the temporary Plan pseudo-version, publishes Plan, then closes Phase 4.
+- 2026-08-09: Planning local mutation locks treat Windows `ERROR_ACCESS_DENIED` and sharing violations from exclusive lock-file creation as contention, retrying through the existing one-second timeout just as Unix retries `EEXIST`. Other lock creation errors still fail immediately.
+- 2026-08-09: Phase 4's fifth slice captures pinned standalone local brainstorm, guided-session, guide-packet, maturity, repair, and promotion contracts. Shared `planning/application` and `planning/local` behavior now backs native idea/refinement/challenge updates, session navigation, roadmap parking, and confirmed direct brainstorm-to-spec promotion with permission, audit, atomic-write, and idempotency gates. Promotion creates no epic or persisted execution-slice intermediate. The public promotion JSON deliberately retains standalone Plan's `proposed_spec_issues` key during the compatibility window. If guided-session persistence fails after brainstorm creation, the application rolls back only the exact brainstorm created by that mutation and surfaces any rollback failure. The next slice captures and migrates canonical local spec mutation, readiness, approval, execution, and handoff behavior.
+- 2026-07-29: Phase 4's conformance manifest merged through PR #46, followed by canonical Go module-path normalization through PR #47. Both slices preserved CLI behavior and `.plan/` artifacts.
+- 2026-07-29: Phase 4 is approved in `.plan/specs/plan-cli-compatibility.md`. The spec chooses a conformance-first transition to narrow Brain-owned importable Planning packages, maps the coherent local spec-first workflow, keeps standalone Plan independently usable during overlap, excludes GitHub/Linear/cloud/hybrid implementation, and derives execution slices only when implementation starts.
 - 2026-07-29: Phase 3 merged into `develop` through PR #39. Brain now ships the disabled-by-default `official.planning` module with schema-v3 local `.plan/` status, brainstorm list/show/start, and spec list/show commands. Read and write compatibility failures have distinct application errors, and stale brainstorm-creation lock timeouts identify the lock path. Ubuntu and Windows CI passed.
 - 2026-07-28: The approved Phase 1 spec at `.plan/specs/minimal-internal-module-framework.md` is implemented on its spec branch with descriptor/registry/runtime contracts, atomic project config and local grants, seven module administration commands, and cross-platform tests. The production binary still registers zero modules and Planning remains excluded.
 - 2026-07-27: Approved future direction lives in `docs/modules/`, `docs/planning/`, and ADRs 0001–0011. No Brain module runtime or Planning implementation exists yet.

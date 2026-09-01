@@ -5,7 +5,7 @@ import (
 	"errors"
 	"sync"
 
-	"brain/internal/modules"
+	"github.com/JimmyMcBride/brain/internal/modules"
 )
 
 const ID = "dev.brain.test"

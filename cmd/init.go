@@ -1,11 +1,11 @@
 package cmd
 
 import (
-	"brain/internal/output"
-	"brain/internal/projectcontext"
 	"fmt"
 	"io"
 
+	"github.com/JimmyMcBride/brain/internal/output"
+	"github.com/JimmyMcBride/brain/internal/projectcontext"
 	"github.com/spf13/cobra"
 )
 

@@ -50,6 +50,7 @@ Important reference notes:
 
 Current architecture emphasis:
 
+- expose storage-neutral Planning domain values only through `github.com/JimmyMcBride/brain/planning`
 - keep `internal/workspace` as the project-root boundary
 - keep indexing scoped to Brain-managed markdown
 - keep project context and session enforcement deterministic

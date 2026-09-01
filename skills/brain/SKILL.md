@@ -5,7 +5,7 @@ args:
       required: false
 description: Use this skill when working with a project-local Brain workspace managed by the `brain` CLI, especially for repo memory, retrieval, compiled task context, session hygiene, and safe markdown updates.
 name: brain
-updated: "2026-04-16T22:00:00Z"
+updated: "2026-08-09T07:52:41Z"
 user-invocable: true
 ---
 # Brain
@@ -140,6 +140,15 @@ Use these commands by default:
   - Inspect tracked note operations.
 - `brain undo`
   - Revert the latest tracked note operation.
+
+When the optional `official.planning` module is enabled, use `brain plan` as its
+native command namespace. Local brainstorm updates and roadmap edits preview by
+default; pass `--confirm` only after reviewing the proposed mutation. Guided
+session commands live under `brain plan brainstorm`, guide packets under
+`brain plan guide`, and local promotion goes directly from brainstorm to spec
+without an epic intermediate. Canonical spec edit, approval, analysis,
+checklists, initiative metadata, execution, and guided handoff live under
+`brain plan spec`; mutations preview by default and require `--confirm`.
 
 ## Operating Rules
 

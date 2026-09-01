@@ -6,7 +6,7 @@ import (
 	"io"
 	"strings"
 
-	"brain/internal/projectcontext"
+	"github.com/JimmyMcBride/brain/internal/projectcontext"
 )
 
 func RenderPacketExplanationHuman(w io.Writer, explanation *PacketExplanation) error {

@@ -1,0 +1,11 @@
+Error: plan check found 4 blocking issue(s)
+Usage:
+  plan check [project|epic|spec|story] [slug] [flags]
+
+Flags:
+  -h, --help   help for check
+
+Global Flags:
+      --project string   project root (default ".")
+
+plan check found 4 blocking issue(s)

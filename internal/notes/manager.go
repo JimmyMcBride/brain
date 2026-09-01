@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"brain/internal/backup"
-	"brain/internal/history"
-	"brain/internal/templates"
-	"brain/internal/workspace"
+	"github.com/JimmyMcBride/brain/internal/backup"
+	"github.com/JimmyMcBride/brain/internal/history"
+	"github.com/JimmyMcBride/brain/internal/templates"
+	"github.com/JimmyMcBride/brain/internal/workspace"
 )
 
 var slugPattern = regexp.MustCompile(`[^a-z0-9]+`)

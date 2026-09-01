@@ -44,7 +44,7 @@ mkdir -p "${INSTALL_DIR}"
 
 go build \
   -C "${REPO_ROOT}" \
-  -ldflags "-X brain/internal/buildinfo.Commit=${COMMIT} -X brain/internal/buildinfo.Date=${DATE}" \
+  -ldflags "-X github.com/JimmyMcBride/brain/internal/buildinfo.Commit=${COMMIT} -X github.com/JimmyMcBride/brain/internal/buildinfo.Date=${DATE}" \
   -o "${BIN_PATH}" \
   .
 

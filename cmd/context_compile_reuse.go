@@ -1,6 +1,6 @@
 package cmd
 
-import "brain/internal/session"
+import "github.com/JimmyMcBride/brain/internal/session"
 
 func latestMatchingPacketRecord(records []session.PacketRecord, fingerprint string) *session.PacketRecord {
 	if fingerprint == "" {
