@@ -41,8 +41,9 @@ brain plan status --project .
 The native surface covers the mapped schema-v3 local status, check, roadmap,
 brainstorm, guided-session, guide, promotion, and spec workflows. Phase 4 shipped
 that shared behavior in Brain `v0.1.21` and the standalone compatibility wrapper
-in Plan `v0.1.29`. GitHub and hybrid behavior remains with standalone Plan until
-the Phase 5 adapter transition is specified and implemented.
+in Plan `v0.1.29`. GitHub and hybrid behavior remains with standalone Plan while
+the approved Phase 5 adapter transition moves retained behavior behind
+provider-neutral ports and an optional official adapter.
 
 When disabled, Planning creates no storage or configuration, injects no context,
 grants no permissions, and direct Planning commands explain how to enable it.

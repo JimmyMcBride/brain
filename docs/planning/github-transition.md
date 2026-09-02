@@ -3,7 +3,9 @@
 ## Status
 
 GitHub support is transitional and retained during migration. It is not the
-permanent canonical Planning backend.
+permanent canonical Planning backend. Phase 5 implementation is governed by the
+approved [GitHub Adapter Transition](../../.plan/specs/github-adapter-transition.md)
+spec.
 
 ## Current Implementation
 
@@ -44,8 +46,10 @@ Long term companion integration:
 
 Planning domain uses generic capabilities for collaboration sources,
 publication, repository changes, external work items, and execution status.
-Interface names are not final. GitHub-specific node IDs, issue/project types,
-labels, milestone fields, GraphQL details, and `gh` execution stay in an adapter.
+The approved application boundary covers collaboration sources, publication
+targets, repository evidence, external mappings, and execution workspaces.
+GitHub-specific node IDs, issue/project types, labels, milestone fields, GraphQL
+details, and `gh` execution stay in the optional `planning/github` adapter.
 
 No generic contract should reproduce every GitHub feature. Extract only behavior
 used by local Planning plus a retained adapter.
@@ -59,7 +63,10 @@ used by local Planning plus a retained adapter.
 - repeated apply/reconcile remains idempotent
 - ambiguous identity fails instead of matching titles
 - compatibility CLI scripts keep working through shared implementation
-- existing `.plan/.meta/github.json` is migrated or read in place
+- existing `.plan/.meta/github.json` is read in place
+- Phase 5 keeps the current metadata shape and reads it in place; no backfill
+- GitHub source mode remains supported through Phase 9 replacement and a
+  separate reviewed deprecation decision
 
 ## Phase 5 Exit
 

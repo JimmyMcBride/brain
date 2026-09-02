@@ -46,7 +46,7 @@ the `plan` command as a shared compatibility wrapper.
 Goal: Move GitHub behind adapters, keep Linear outside Brain Planning, and connect
 Planning outcomes to review-first Brain memory proposals.
 
-- [ ] GitHub adapter transition
+- [ ] [GitHub adapter transition](./specs/github-adapter-transition.md)
 - [ ] Reject legacy Linear workspaces with standalone Plan migration guidance
 - [ ] Brain context sources and Planning context packets
 - [ ] Completion-to-memory proposals
