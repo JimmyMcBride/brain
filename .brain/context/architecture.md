@@ -1,5 +1,5 @@
 ---
-updated: "2026-09-06T12:35:52Z"
+updated: "2026-09-06T13:40:00Z"
 ---
 # Architecture
 
@@ -45,6 +45,7 @@ Use this file for the structural shape of the repository.
 
 ## Local Notes
 
+- 2026-09-06: `planning/application/integration.go` owns the Phase 5 provider-neutral external reference, collaboration, publication, repository evidence, durable mapping, adoption/reconciliation, execution workspace, and typed integration-error contracts. The five capability-sized ports depend only on Planning domain and stdlib; application code owns policy and action classification, while provider adapters return opaque evidence. Exact export, dependency, and provider-noun guards protect this boundary before the provider adapter package exists.
 - 2026-09-06: `internal/planning/conformance/testdata/github-v1` is a separate Phase 5 baseline pinned to standalone Plan `v0.1.29`. Its manifest, provider fixtures, transcripts, output projections, remote identities, metadata snapshots, failure recovery, and rerun contracts constrain provider-neutral port extraction without changing the older Phase 4 local baseline. Required tests are fully fake-backed and make no live GitHub calls.
 - 2026-05-16: `internal/projectcontext/manager.go` owns the base `AGENTS.md` template emitted by `brain adopt` and `brain context refresh`; keep generated contract behavior, Karpathy guidelines, and post-adoption enrichment guidance there with matching projectcontext goldens.
 - 2026-05-16: `internal/projectcontext/guidance.go` stores local optional guidance decisions in Brain state; `cmd/update.go` reports unset Karpathy Guidelines decisions to the AI agent, and `cmd/context.go` records accept/decline/status decisions.

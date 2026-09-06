@@ -1,5 +1,5 @@
 ---
-updated: "2026-09-06T12:35:40Z"
+updated: "2026-09-06T13:38:27Z"
 ---
 # Planning Module Implementation Roadmap
 
@@ -86,9 +86,9 @@ script/exit/JSON compatibility tests.
 ## Phase 5 — GitHub Adapter Transition
 
 Status: Implementing from `.plan/specs/github-adapter-transition.md`. The
-first slice captures the standalone Plan `v0.1.29` GitHub baseline in
-`internal/planning/conformance/testdata/github-v1`, including fake-provider
-transcripts, metadata effects, partial failure, and identical reruns.
+first two slices capture the standalone Plan `v0.1.29` GitHub baseline and
+establish the provider-neutral application DTOs, capability-sized ports, typed
+integration errors, and export/dependency guards.
 
 Move retained GitHub collaboration/publication/repository/execution behavior
 behind generic Planning ports. Support planning PRs and retained Discussion,
@@ -143,7 +143,6 @@ lifecycle, diagnostics, and distribution direction.
 
 ## Exact Next Slice
 
-> Land the provider-neutral Phase 5 DTOs and capability-sized ports in
-> `planning/application`, using only needs proven by the GitHub conformance
-> manifest. Add export and dependency guards before creating `planning/github`
-> or moving any provider implementation.
+> Add the `planning/github` transport and exact `.plan/.meta/github.json`
+> compatibility fixtures behind disabled configuration. Keep provider execution
+> injected and prove disabled mode performs zero provider work.
