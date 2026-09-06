@@ -1,5 +1,5 @@
 ---
-updated: "2026-09-01T15:01:49Z"
+updated: "2026-09-02T14:31:31Z"
 ---
 # Planning Module Implementation Roadmap
 
@@ -85,10 +85,16 @@ script/exit/JSON compatibility tests.
 
 ## Phase 5 — GitHub Adapter Transition
 
+Status: Approved in `.plan/specs/github-adapter-transition.md`.
+
 Move retained GitHub collaboration/publication/repository/execution behavior
 behind generic Planning ports. Support planning PRs and retained Discussion,
 issue, milestone, Project, and reconciliation behavior. No GitHub type remains in
-Planning domain.
+Planning domain or provider-neutral application/local packages. The approved
+shape uses a conformance-first Plan `v0.1.29` baseline, capability-sized ports,
+an optional importable `planning/github` adapter, explicit enablement and
+permissions, current metadata compatibility, and coordinated Brain-then-Plan
+release gates.
 
 ## Phase 6 — Standalone Plan Linear Cleanup
 
@@ -134,8 +140,7 @@ lifecycle, diagnostics, and distribution direction.
 
 ## Exact Next Slice
 
-> Shape and approve the bounded Phase 5 GitHub Adapter Transition spec. Inventory
-> the retained GitHub collaboration, publication, repository, execution, and
-> reconciliation behavior; define generic Planning ports and source-ownership
-> boundaries; and lock conformance and rollout gates before moving any GitHub
-> implementation into Brain.
+> Build the Phase 5 conformance manifest pinned to standalone Plan `v0.1.29`
+> before changing module paths or moving GitHub implementation. Capture remote
+> command contracts, fake-provider transcripts, metadata effects, partial
+> failure, and identical reruns for every retained family.
