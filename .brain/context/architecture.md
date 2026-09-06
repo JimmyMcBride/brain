@@ -1,5 +1,5 @@
 ---
-updated: "2026-08-09T21:58:01Z"
+updated: "2026-09-06T12:35:52Z"
 ---
 # Architecture
 
@@ -45,6 +45,7 @@ Use this file for the structural shape of the repository.
 
 ## Local Notes
 
+- 2026-09-06: `internal/planning/conformance/testdata/github-v1` is a separate Phase 5 baseline pinned to standalone Plan `v0.1.29`. Its manifest, provider fixtures, transcripts, output projections, remote identities, metadata snapshots, failure recovery, and rerun contracts constrain provider-neutral port extraction without changing the older Phase 4 local baseline. Required tests are fully fake-backed and make no live GitHub calls.
 - 2026-05-16: `internal/projectcontext/manager.go` owns the base `AGENTS.md` template emitted by `brain adopt` and `brain context refresh`; keep generated contract behavior, Karpathy guidelines, and post-adoption enrichment guidance there with matching projectcontext goldens.
 - 2026-05-16: `internal/projectcontext/guidance.go` stores local optional guidance decisions in Brain state; `cmd/update.go` reports unset Karpathy Guidelines decisions to the AI agent, and `cmd/context.go` records accept/decline/status decisions.
 - 2026-07-29: `internal/modules` now attributes command groups and typed events to compiled descriptors, rejects collisions, and gates command resolution through project enablement and exact grants. `main.go` registers `official.planning` at the outer composition root; disabled modules remain uninstantiated.

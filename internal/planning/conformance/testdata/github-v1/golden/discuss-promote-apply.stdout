@@ -1,0 +1,19 @@
+{
+  "draft": {
+    "kind": "promotion_draft",
+    "confirmation_required": true,
+    "proposed_initiative_issue": {"title": "GitHub collaboration foundation", "action": "create"},
+    "proposed_spec_issues": [
+      {"title": "Collaboration source", "action": "create"},
+      {"title": "Publication target", "action": "create"}
+    ]
+  },
+  "initiative": {"number": 101, "url": "https://github.com/JimmyMcBride/plan/issues/101"},
+  "specs": [
+    {"number": 102, "url": "https://github.com/JimmyMcBride/plan/issues/102"},
+    {"number": 103, "url": "https://github.com/JimmyMcBride/plan/issues/103"}
+  ],
+  "milestone": {"number": 1, "title": "GitHub collaboration foundation"},
+  "parent_issue": 101,
+  "manual_fallback_allowed": false
+}

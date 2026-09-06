@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "calls": [
+    {"operation":"repository.preflight","input":{"project_dir":"<PROJECT>"},"output":{"repo":"JimmyMcBride/plan","repo_url":"https://github.com/JimmyMcBride/plan","default_branch":"develop","issues_enabled":true}}
+  ]
+}

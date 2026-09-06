@@ -3,10 +3,10 @@ created_at: "2026-09-02T14:22:24Z"
 project: brain
 slug: github-adapter-transition
 source_brainstorm: .plan/brainstorms/github-adapter-transition.md
-status: approved
+status: implementing
 title: GitHub Adapter Transition
 type: spec
-updated_at: "2026-09-02T14:34:17Z"
+updated_at: "2026-09-06T12:19:00Z"
 ---
 
 # GitHub Adapter Transition
