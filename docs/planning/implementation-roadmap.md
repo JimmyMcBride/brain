@@ -1,5 +1,5 @@
 ---
-updated: "2026-09-02T14:31:31Z"
+updated: "2026-09-06T12:35:40Z"
 ---
 # Planning Module Implementation Roadmap
 
@@ -85,7 +85,10 @@ script/exit/JSON compatibility tests.
 
 ## Phase 5 — GitHub Adapter Transition
 
-Status: Approved in `.plan/specs/github-adapter-transition.md`.
+Status: Implementing from `.plan/specs/github-adapter-transition.md`. The
+first slice captures the standalone Plan `v0.1.29` GitHub baseline in
+`internal/planning/conformance/testdata/github-v1`, including fake-provider
+transcripts, metadata effects, partial failure, and identical reruns.
 
 Move retained GitHub collaboration/publication/repository/execution behavior
 behind generic Planning ports. Support planning PRs and retained Discussion,
@@ -140,7 +143,7 @@ lifecycle, diagnostics, and distribution direction.
 
 ## Exact Next Slice
 
-> Build the Phase 5 conformance manifest pinned to standalone Plan `v0.1.29`
-> before changing module paths or moving GitHub implementation. Capture remote
-> command contracts, fake-provider transcripts, metadata effects, partial
-> failure, and identical reruns for every retained family.
+> Land the provider-neutral Phase 5 DTOs and capability-sized ports in
+> `planning/application`, using only needs proven by the GitHub conformance
+> manifest. Add export and dependency guards before creating `planning/github`
+> or moving any provider implementation.

@@ -1,0 +1,611 @@
+schema_version: 1
+
+baseline:
+  repository: https://github.com/JimmyMcBride/plan
+  tag: v0.1.29
+  revision: 898b2a4c470350c0e9115302c99c6ad27bdead9c
+  command: plan
+  workspace_schema: 3
+
+normalization:
+  line_endings: lf
+  path_separator: /
+  project_root_token: "<PROJECT>"
+  timestamps: rfc3339_token
+
+provider:
+  name: github
+  transport: injected_fake
+  required_ci_live: false
+
+families:
+  - id: discuss.assess.remote
+    standalone: [discuss, assess, --discussion]
+    native: [plan, brainstorm, assess, --discussion]
+    retention: migrate
+    behavior: assess a GitHub Discussion without mutation
+    source_evidence: [internal/planning/collaboration.go, internal/planning/collaboration_test.go]
+  - id: discuss.repair.remote
+    standalone: [discuss, repair, --discussion]
+    native: [plan, brainstorm, repair, --discussion]
+    retention: migrate
+    behavior: guard and repair a Discussion Specs section
+    source_evidence: [internal/planning/collaboration.go, cmd/discuss.go]
+  - id: discuss.promote.remote
+    standalone: [discuss, promote, --discussion]
+    native: [plan, brainstorm, promote, --discussion]
+    retention: migrate
+    behavior: preview and apply initiative/spec publication actions
+    source_evidence: [internal/planning/collaboration.go, internal/planning/collaboration_reconcile.go, internal/planning/collaboration_test.go]
+  - id: github.enable
+    standalone: [github, enable]
+    native: [plan, github, enable]
+    retention: migrate
+    behavior: preflight GitHub and initialize compatible adapter state
+    source_evidence: [internal/planning/github_backend.go, cmd/github.go, cmd/github_test.go]
+  - id: github.adopt
+    standalone: [github, adopt]
+    native: [plan, github, adopt]
+    retention: migrate
+    behavior: adopt ordered existing planning issues and relationships
+    source_evidence: [internal/planning/collaboration.go, cmd/github.go, cmd/github_test.go]
+  - id: github.reconcile
+    standalone: [github, reconcile]
+    native: [plan, github, reconcile]
+    retention: migrate
+    behavior: reconcile repository, issue, readiness, and Project evidence
+    source_evidence: [internal/planning/github_reconcile.go, internal/planning/github_project_drift.go, internal/planning/github_backend_test.go]
+  - id: github.project.status
+    standalone: [github, project, status]
+    native: [plan, github, project, status]
+    retention: migrate
+    behavior: move a tracked Project item through execution status
+    source_evidence: [internal/planning/github_project_status.go, cmd/github.go, cmd/github_test.go]
+  - id: check.github
+    standalone: [check, project]
+    native: [plan, check, project]
+    retention: migrate
+    behavior: report GitHub Project drift without mutation
+    source_evidence: [internal/planning/check.go, internal/planning/github_project_drift.go, internal/planning/github_project_drift_test.go]
+  - id: guide.show.remote
+    standalone: [guide, show, --discussion]
+    native: [plan, guide, show, --discussion]
+    retention: migrate
+    behavior: render a collaboration guide packet from a Discussion
+    source_evidence: [internal/planning/guide_packet.go, cmd/guide.go, cmd/guide_test.go]
+  - id: repository.evidence
+    operation: CurrentContext
+    retention: migrate
+    behavior: resolve repository ref, commit, default branch, and planning pull request
+    source_evidence: [internal/planning/github_client.go, internal/planning/github_backend_test.go]
+  - id: story.github.compatibility
+    operation: BuildGitHubStoryIssueContract
+    retention: compatibility-only
+    behavior: preserve shared repository and planning-PR evidence for legacy story creation
+    source_evidence: [internal/planning/github_backend.go, internal/planning/github_backend_test.go]
+
+fixtures:
+  - id: local
+    workspace: github-v1/fixtures/local
+    provider_state: github-v1/provider/fresh.json
+  - id: discussion
+    workspace: github-v1/fixtures/local
+    provider_state: github-v1/provider/discussion.json
+  - id: tracked
+    workspace: github-v1/fixtures/tracked
+    provider_state: github-v1/provider/tracked.json
+
+cases:
+  - id: discuss.assess.remote.ready-multi
+    family: discuss.assess.remote
+    fixture: discussion
+    invocation:
+      kind: cli
+      args: [discuss, assess, --discussion, "49", --format, json]
+    safety:
+      mutation: false
+      baseline_confirmation: not-required
+      target_confirmation: not-required
+      partial_failure: false
+      manual_fallback_allowed: false
+    expected:
+      exit_code: 0
+      format: json
+      stdout_comparison: structural
+      stdout: github-v1/golden/discuss-assess.stdout
+      stderr: empty
+      files: unchanged
+      provider_transcript: github-v1/transcripts/discussion-read.json
+      github_metadata: unchanged
+      classifications: [ready_multi_spec]
+    rerun:
+      kind: identical
+      baseline_mutation: false
+      exit_code: 0
+      stdout: github-v1/golden/discuss-assess.stdout
+      stderr: empty
+      files: unchanged
+      provider_transcript: github-v1/transcripts/discussion-read.json
+      github_metadata: unchanged
+      classifications: [unchanged]
+
+  - id: discuss.repair.remote.requires-confirm
+    family: discuss.repair.remote
+    fixture: discussion
+    invocation:
+      kind: cli
+      args: [discuss, repair, --discussion, "49", --spec, "Collaboration source", --spec, "Publication target", --format, json]
+    safety:
+      mutation: false
+      baseline_confirmation: required
+      target_confirmation: required
+      partial_failure: false
+      manual_fallback_allowed: false
+    expected:
+      exit_code: 1
+      format: text
+      stdout_comparison: exact
+      stdout: empty
+      stderr: github-v1/golden/discuss-repair-confirm.stderr
+      files: unchanged
+      provider_transcript: github-v1/transcripts/discussion-read.json
+      github_metadata: unchanged
+
+  - id: discuss.repair.remote.confirmed
+    family: discuss.repair.remote
+    fixture: discussion
+    invocation:
+      kind: cli
+      args: [discuss, repair, --discussion, "49", --spec, "Collaboration source", --spec, "Publication target", --confirm, --format, json]
+    safety:
+      mutation: true
+      baseline_confirmation: confirmed
+      target_confirmation: confirmed
+      partial_failure: false
+      manual_fallback_allowed: false
+    expected:
+      exit_code: 0
+      format: json
+      stdout_comparison: structural
+      stdout: github-v1/golden/discuss-repair.stdout
+      stderr: empty
+      files: unchanged
+      provider_transcript: github-v1/transcripts/discussion-repair.json
+      github_metadata: unchanged
+      remote_identities:
+        - {provider: github, kind: discussion, opaque_id: D_kwDOPlan49, display_id: "#49", url: "https://github.com/JimmyMcBride/plan/discussions/49", revision: discussion-revision-2}
+      classifications: [update]
+    rerun:
+      kind: identical
+      baseline_mutation: true
+      exit_code: 0
+      stdout: github-v1/golden/discuss-repair.stdout
+      stderr: empty
+      files: unchanged
+      provider_transcript: github-v1/transcripts/discussion-repair.json
+      github_metadata: unchanged
+      classifications: [unchanged]
+    intentional_differences:
+      - Plan v0.1.29 rewrites an identical repaired Discussion; Brain must classify the rerun unchanged and emit no mutation.
+
+  - id: discuss.promote.remote.preview
+    family: discuss.promote.remote
+    fixture: discussion
+    invocation:
+      kind: cli
+      args: [discuss, promote, --discussion, "49", --format, json]
+    safety:
+      mutation: false
+      baseline_confirmation: required
+      target_confirmation: required
+      partial_failure: false
+      manual_fallback_allowed: false
+    expected:
+      exit_code: 0
+      format: json
+      stdout_comparison: structural
+      stdout: github-v1/golden/discuss-promote-preview.stdout
+      stderr: empty
+      files: unchanged
+      provider_transcript: github-v1/transcripts/promotion-preview.json
+      github_metadata: unchanged
+      classifications: [create, create, create, create]
+
+  - id: discuss.promote.remote.requires-confirm
+    family: discuss.promote.remote
+    fixture: discussion
+    invocation:
+      kind: cli
+      args: [discuss, promote, --discussion, "49", --apply, --target, github, --format, json]
+    safety:
+      mutation: false
+      baseline_confirmation: required
+      target_confirmation: required
+      partial_failure: false
+      manual_fallback_allowed: false
+    expected:
+      exit_code: 1
+      format: text
+      stdout_comparison: exact
+      stdout: empty
+      stderr: github-v1/golden/discuss-promote-confirm.stderr
+      files: unchanged
+      provider_transcript: github-v1/transcripts/none.json
+      github_metadata: unchanged
+
+  - id: discuss.promote.remote.apply
+    family: discuss.promote.remote
+    fixture: discussion
+    invocation:
+      kind: cli
+      args: [discuss, promote, --discussion, "49", --apply, --confirm, --target, github, --format, json]
+    safety:
+      mutation: true
+      baseline_confirmation: confirmed
+      target_confirmation: confirmed
+      partial_failure: false
+      manual_fallback_allowed: false
+    expected:
+      exit_code: 0
+      format: json
+      stdout_comparison: structural
+      stdout: github-v1/golden/discuss-promote-apply.stdout
+      stderr: empty
+      files: github-v1/golden/promotion.files
+      provider_transcript: github-v1/transcripts/promotion-apply.json
+      github_metadata: github-v1/golden/promoted.github.json
+      remote_identities:
+        - {provider: github, kind: milestone, opaque_id: MI_kwDOPlan1, display_id: "#1", url: "https://github.com/JimmyMcBride/plan/milestone/1"}
+        - {provider: github, kind: issue, opaque_id: I_kwDOPlan101, display_id: "#101", url: "https://github.com/JimmyMcBride/plan/issues/101"}
+        - {provider: github, kind: issue, opaque_id: I_kwDOPlan102, display_id: "#102", url: "https://github.com/JimmyMcBride/plan/issues/102"}
+        - {provider: github, kind: issue, opaque_id: I_kwDOPlan103, display_id: "#103", url: "https://github.com/JimmyMcBride/plan/issues/103"}
+      classifications: [create, create, create, create]
+    rerun:
+      kind: identical
+      baseline_mutation: false
+      exit_code: 0
+      stdout: github-v1/golden/discuss-promote-rerun.stdout
+      stderr: empty
+      files: unchanged
+      provider_transcript: github-v1/transcripts/promotion-rerun.json
+      github_metadata: unchanged
+      classifications: [reuse, unchanged, unchanged, unchanged]
+
+  - id: discuss.promote.remote.partial-failure
+    family: discuss.promote.remote
+    fixture: discussion
+    invocation:
+      kind: cli
+      args: [discuss, promote, --discussion, "49", --apply, --confirm, --target, github, --format, json]
+    safety:
+      mutation: true
+      baseline_confirmation: confirmed
+      target_confirmation: confirmed
+      partial_failure: true
+      manual_fallback_allowed: true
+    expected:
+      exit_code: 1
+      format: json
+      stdout_comparison: structural
+      stdout: github-v1/golden/discuss-promote-partial.stdout
+      stderr: github-v1/golden/discuss-promote-partial.stderr
+      files: unchanged
+      provider_transcript: github-v1/transcripts/promotion-partial.json
+      github_metadata: unchanged
+      remote_identities:
+        - {provider: github, kind: issue, opaque_id: I_kwDOPlan101, display_id: "#101", url: "https://github.com/JimmyMcBride/plan/issues/101"}
+      classifications: [create, failed]
+
+  - id: github.enable
+    family: github.enable
+    fixture: local
+    invocation:
+      kind: cli
+      args: [github, enable]
+    safety:
+      mutation: true
+      baseline_confirmation: not-required
+      target_confirmation: confirmed
+      partial_failure: false
+      manual_fallback_allowed: false
+    expected:
+      exit_code: 0
+      format: text
+      stdout_comparison: exact
+      stdout: github-v1/golden/github-enable.stdout
+      stderr: empty
+      files: github-v1/golden/github-enable.files
+      provider_transcript: github-v1/transcripts/preflight.json
+      github_metadata: github-v1/golden/enabled.github.json
+      remote_identities:
+        - {provider: github, kind: repository, opaque_id: R_kwDOPlan, display_id: JimmyMcBride/plan, url: "https://github.com/JimmyMcBride/plan", revision: develop}
+      classifications: [create]
+    rerun:
+      kind: identical
+      baseline_mutation: false
+      exit_code: 0
+      stdout: github-v1/golden/github-enable.stdout
+      stderr: empty
+      files: unchanged
+      provider_transcript: github-v1/transcripts/preflight.json
+      github_metadata: unchanged
+      classifications: [unchanged]
+    intentional_differences:
+      - Plan v0.1.29 enables immediately; Brain must preview and require --confirm before local configuration changes.
+
+  - id: github.adopt.ordered-issues
+    family: github.adopt
+    fixture: discussion
+    invocation:
+      kind: cli
+      args: [github, adopt, --discussion, "49", --issues, "201,202,203", --format, json]
+    safety:
+      mutation: true
+      baseline_confirmation: not-required
+      target_confirmation: confirmed
+      partial_failure: false
+      manual_fallback_allowed: false
+    expected:
+      exit_code: 0
+      format: json
+      stdout_comparison: structural
+      stdout: github-v1/golden/github-adopt.stdout
+      stderr: empty
+      files: github-v1/golden/github-adopt.files
+      provider_transcript: github-v1/transcripts/adopt.json
+      github_metadata: github-v1/golden/adopted.github.json
+      remote_identities:
+        - {provider: github, kind: issue, opaque_id: I_kwDOPlan201, display_id: "#201", url: "https://github.com/JimmyMcBride/plan/issues/201"}
+        - {provider: github, kind: issue, opaque_id: I_kwDOPlan202, display_id: "#202", url: "https://github.com/JimmyMcBride/plan/issues/202"}
+        - {provider: github, kind: issue, opaque_id: I_kwDOPlan203, display_id: "#203", url: "https://github.com/JimmyMcBride/plan/issues/203"}
+      classifications: [reuse, update, update]
+    rerun:
+      kind: identical
+      baseline_mutation: true
+      exit_code: 0
+      stdout: github-v1/golden/github-adopt-rerun.stdout
+      stderr: empty
+      files: unchanged
+      provider_transcript: github-v1/transcripts/adopt.json
+      github_metadata: unchanged
+      classifications: [reuse, unchanged, unchanged]
+    intentional_differences:
+      - Plan v0.1.29 adopts immediately and may reapply issue relationships; Brain must preview, require --confirm, and suppress unchanged writes.
+
+  - id: github.reconcile.planning-pr
+    family: github.reconcile
+    fixture: tracked
+    invocation:
+      kind: cli
+      args: [github, reconcile]
+    safety:
+      mutation: true
+      baseline_confirmation: not-required
+      target_confirmation: confirmed
+      partial_failure: false
+      manual_fallback_allowed: false
+    expected:
+      exit_code: 0
+      format: text
+      stdout_comparison: exact
+      stdout: github-v1/golden/github-reconcile.stdout
+      stderr: empty
+      files: github-v1/golden/github-reconcile.files
+      provider_transcript: github-v1/transcripts/reconcile.json
+      github_metadata: github-v1/golden/reconciled.github.json
+      remote_identities:
+        - {provider: github, kind: issue, opaque_id: I_kwDOPlan68, display_id: "#68", url: "https://github.com/JimmyMcBride/plan/issues/68", revision: abc123}
+      classifications: [update]
+    intentional_differences:
+      - Plan v0.1.29 reconciles immediately; Brain must preview and require --confirm before issue or metadata changes.
+
+  - id: github.reconcile.update-visible
+    family: github.reconcile
+    fixture: tracked
+    invocation:
+      kind: cli
+      args: [github, reconcile, --update-visible]
+    safety:
+      mutation: true
+      baseline_confirmation: not-required
+      target_confirmation: confirmed
+      partial_failure: false
+      manual_fallback_allowed: false
+    expected:
+      exit_code: 0
+      format: text
+      stdout_comparison: exact
+      stdout: github-v1/golden/github-reconcile-visible.stdout
+      stderr: empty
+      files: github-v1/golden/github-reconcile.files
+      provider_transcript: github-v1/transcripts/reconcile-visible.json
+      github_metadata: github-v1/golden/reconciled.github.json
+      remote_identities:
+        - {provider: github, kind: issue, opaque_id: I_kwDOPlan68, display_id: "#68", url: "https://github.com/JimmyMcBride/plan/issues/68", revision: abc123}
+        - {provider: github, kind: project_item, opaque_id: PVTI_68, display_id: "#68", url: "https://github.com/JimmyMcBride/plan/issues/68"}
+      classifications: [update, update]
+    rerun:
+      kind: identical
+      baseline_mutation: false
+      exit_code: 0
+      stdout: github-v1/golden/github-reconcile-rerun.stdout
+      stderr: empty
+      files: unchanged
+      provider_transcript: github-v1/transcripts/reconcile-rerun.json
+      github_metadata: unchanged
+      classifications: [unchanged]
+    intentional_differences:
+      - Plan v0.1.29 reconciles immediately; Brain must preview and require --confirm before issue, Project, or metadata changes.
+
+  - id: github.project.status.in-progress
+    family: github.project.status
+    fixture: tracked
+    invocation:
+      kind: cli
+      args: [github, project, status, --issue, "68", --set, in-progress]
+    safety:
+      mutation: true
+      baseline_confirmation: not-required
+      target_confirmation: confirmed
+      partial_failure: false
+      manual_fallback_allowed: false
+    expected:
+      exit_code: 0
+      format: text
+      stdout_comparison: exact
+      stdout: github-v1/golden/github-project-status.stdout
+      stderr: empty
+      files: unchanged
+      provider_transcript: github-v1/transcripts/project-status.json
+      github_metadata: unchanged
+      remote_identities:
+        - {provider: github, kind: project_item, opaque_id: PVTI_68, display_id: "#68", url: "https://github.com/JimmyMcBride/plan/issues/68"}
+      classifications: [update]
+    rerun:
+      kind: identical
+      baseline_mutation: true
+      exit_code: 0
+      stdout: github-v1/golden/github-project-status.stdout
+      stderr: empty
+      files: unchanged
+      provider_transcript: github-v1/transcripts/project-status.json
+      github_metadata: unchanged
+      classifications: [unchanged]
+    intentional_differences:
+      - Plan v0.1.29 sets Project status immediately and repeats the same write; Brain must preview, require --confirm, and suppress unchanged writes.
+
+  - id: check.github.project-drift
+    family: check.github
+    fixture: tracked
+    invocation:
+      kind: cli
+      args: [check, project]
+    safety:
+      mutation: false
+      baseline_confirmation: not-required
+      target_confirmation: not-required
+      partial_failure: false
+      manual_fallback_allowed: false
+    expected:
+      exit_code: 1
+      format: text
+      stdout_comparison: structural
+      stdout: github-v1/golden/check-github.stdout
+      stderr: empty
+      files: unchanged
+      provider_transcript: github-v1/transcripts/project-read.json
+      github_metadata: unchanged
+      classifications: [missing_item, stale_item_field, missing_field_option]
+    rerun:
+      kind: identical
+      baseline_mutation: false
+      exit_code: 1
+      stdout: github-v1/golden/check-github.stdout
+      stderr: empty
+      files: unchanged
+      provider_transcript: github-v1/transcripts/project-read.json
+      github_metadata: unchanged
+      classifications: [unchanged]
+
+  - id: guide.show.remote.initiative-draft
+    family: guide.show.remote
+    fixture: discussion
+    invocation:
+      kind: cli
+      args: [guide, show, --discussion, "49", --stage, initiative_draft, --format, json]
+    safety:
+      mutation: false
+      baseline_confirmation: not-required
+      target_confirmation: not-required
+      partial_failure: false
+      manual_fallback_allowed: false
+    expected:
+      exit_code: 0
+      format: json
+      stdout_comparison: structural
+      stdout: github-v1/golden/guide-remote.stdout
+      stderr: empty
+      files: unchanged
+      provider_transcript: github-v1/transcripts/discussion-read.json
+      github_metadata: unchanged
+      classifications: [guide_packet]
+    rerun:
+      kind: identical
+      baseline_mutation: false
+      exit_code: 0
+      stdout: github-v1/golden/guide-remote.stdout
+      stderr: empty
+      files: unchanged
+      provider_transcript: github-v1/transcripts/discussion-read.json
+      github_metadata: unchanged
+      classifications: [unchanged]
+
+  - id: repository.evidence.open-planning-pr
+    family: repository.evidence
+    fixture: tracked
+    invocation:
+      kind: manager
+      operation: CurrentContext
+    safety:
+      mutation: false
+      baseline_confirmation: not-required
+      target_confirmation: not-required
+      partial_failure: false
+      manual_fallback_allowed: false
+    expected:
+      exit_code: 0
+      format: none
+      stdout_comparison: exact
+      stdout: empty
+      stderr: empty
+      files: unchanged
+      provider_transcript: github-v1/transcripts/repository-evidence.json
+      github_metadata: unchanged
+      remote_identities:
+        - {provider: github, kind: pull_request, opaque_id: PR_kwDOPlan41, display_id: "#41", url: "https://github.com/JimmyMcBride/plan/pull/41", revision: abc123}
+      classifications: [open, unmerged, head_sha]
+    rerun:
+      kind: identical
+      baseline_mutation: false
+      exit_code: 0
+      stdout: empty
+      stderr: empty
+      files: unchanged
+      provider_transcript: github-v1/transcripts/repository-evidence.json
+      github_metadata: unchanged
+      classifications: [unchanged]
+
+  - id: story.github.compatibility.planning-pr-links
+    family: story.github.compatibility
+    fixture: tracked
+    invocation:
+      kind: manager
+      operation: BuildGitHubStoryIssueContract
+    safety:
+      mutation: false
+      baseline_confirmation: not-required
+      target_confirmation: not-required
+      partial_failure: false
+      manual_fallback_allowed: false
+    expected:
+      exit_code: 0
+      format: none
+      stdout_comparison: exact
+      stdout: empty
+      stderr: empty
+      files: unchanged
+      provider_transcript: github-v1/transcripts/story-evidence.json
+      github_metadata: unchanged
+      remote_identities:
+        - {provider: github, kind: pull_request, opaque_id: PR_kwDOPlan41, display_id: "#41", url: "https://github.com/JimmyMcBride/plan/pull/41", revision: abc123}
+      classifications: [sha_document_links, planning_pr_link]
+    rerun:
+      kind: identical
+      baseline_mutation: false
+      exit_code: 0
+      stdout: empty
+      stderr: empty
+      files: unchanged
+      provider_transcript: github-v1/transcripts/story-evidence.json
+      github_metadata: unchanged
+      classifications: [unchanged]

@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "calls": [
+    {"operation":"repository.current_context","input":{"project_dir":"<PROJECT>"},"output":{"repo":"JimmyMcBride/plan","default_branch":"develop","current_branch":"develop","current_sha":"abc123"}},
+    {"operation":"discussion.get","input":{"repo":"JimmyMcBride/plan","number":49},"output":{"opaque_id":"D_kwDOPlan49","number":49,"revision":"discussion-revision-1"}},
+    {"operation":"discussion.update","input":{"repo":"JimmyMcBride/plan","number":49,"guard_revision":"discussion-revision-1","section":"Specs"},"output":{"opaque_id":"D_kwDOPlan49","number":49,"revision":"discussion-revision-2","url":"https://github.com/JimmyMcBride/plan/discussions/49"}}
+  ]
+}

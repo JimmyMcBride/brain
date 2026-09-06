@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "calls": [
+    {"operation":"repository.current_context","input":{"project_dir":"<PROJECT>"},"output":{"repo":"JimmyMcBride/plan","default_branch":"develop","current_branch":"codex/github-adapter","current_sha":"abc123","planning_pr":{"opaque_id":"PR_kwDOPlan41","number":41,"url":"https://github.com/JimmyMcBride/plan/pull/41","merged":false}}},
+    {"operation":"issue.contract.render","input":{"story":"repository-evidence","doc_ref_mode":"sha","doc_ref":"abc123","planning_pr":41},"output":{"document_links_ref":"abc123","planning_pr_url":"https://github.com/JimmyMcBride/plan/pull/41"}}
+  ]
+}

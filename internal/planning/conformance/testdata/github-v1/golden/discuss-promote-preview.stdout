@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "kind": "promotion_draft",
+  "generated_at": "<TIMESTAMP>",
+  "source": {"mode": "github_discussion", "discussion": "https://github.com/JimmyMcBride/plan/discussions/49"},
+  "assessment": {"state": "ready_multi_spec"},
+  "promotion_decision": "initiative_with_specs",
+  "proposed_initiative_issue": {"title": "GitHub collaboration foundation", "slug": "github-collaboration-foundation", "action": "create"},
+  "proposed_spec_issues": [
+    {"title": "Collaboration source", "slug": "collaboration-source", "action": "create", "readiness": "ready"},
+    {"title": "Publication target", "slug": "publication-target", "action": "create", "readiness": "blocked", "blocked_by": ["Collaboration source"]}
+  ],
+  "milestone_plan": {"title": "GitHub collaboration foundation", "action": "create"},
+  "manual_fallback_allowed": false,
+  "confirmation_required": true
+}

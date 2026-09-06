@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "kind": "guide_packet",
+  "artifact": {
+    "type": "github_discussion",
+    "id": "49",
+    "url": "https://github.com/JimmyMcBride/plan/discussions/49"
+  },
+  "mode": {"stage": "initiative_draft"},
+  "collaboration": {"assessment": {"state": "ready_multi_spec"}, "promotion_draft": {"kind": "promotion_draft"}},
+  "rendered_drafts": [{"kind": "initiative", "title": "GitHub collaboration foundation"}]
+}

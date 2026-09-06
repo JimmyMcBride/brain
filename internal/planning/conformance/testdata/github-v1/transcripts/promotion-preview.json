@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "calls": [
+    {"operation":"repository.current_context","input":{"project_dir":"<PROJECT>"},"output":{"repo":"JimmyMcBride/plan","default_branch":"develop","current_branch":"develop","current_sha":"abc123"}},
+    {"operation":"discussion.get","input":{"repo":"JimmyMcBride/plan","number":49},"output":{"opaque_id":"D_kwDOPlan49","number":49,"revision":"discussion-revision-1"}},
+    {"operation":"issue.list","input":{"repo":"JimmyMcBride/plan","labels":["plan:initiative","plan:spec"],"limit":1000},"output":{"issues":[]}},
+    {"operation":"milestone.find","input":{"repo":"JimmyMcBride/plan","title":"GitHub collaboration foundation"},"output":{"found":false}}
+  ]
+}

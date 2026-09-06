@@ -1,0 +1,8 @@
+{
+  "schema_version": 3,
+  "planning_model": "spec_first_v1",
+  "source_mode": "local",
+  "story_backend": "local",
+  "created_at": "2026-05-17T00:00:00Z",
+  "updated_at": "2026-05-17T00:00:00Z"
+}

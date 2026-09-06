@@ -1,0 +1,9 @@
+{
+  "initiative": {"number": 201, "url": "https://github.com/JimmyMcBride/plan/issues/201"},
+  "specs": [
+    {"number": 202, "url": "https://github.com/JimmyMcBride/plan/issues/202"},
+    {"number": 203, "url": "https://github.com/JimmyMcBride/plan/issues/203"}
+  ],
+  "milestone": {"number": 1, "title": "GitHub collaboration foundation"},
+  "parent_issue": 201
+}

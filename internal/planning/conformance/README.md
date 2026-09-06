@@ -1,7 +1,9 @@
-# Plan CLI Conformance Manifest
+# Planning Conformance Manifests
 
-This package freezes observable standalone Plan behavior before Phase 4 moves a
-command family into Brain-owned shared implementation.
+This package freezes observable standalone Plan behavior before command families
+move into Brain-owned shared implementation.
+
+## Phase 4 local baseline
 
 `testdata/manifest.yaml` owns:
 
@@ -41,3 +43,29 @@ local maturity assessment, and direct-spec promotion preview. Native tests add
 confirmed mutation/audit coverage and prove direct promotion creates no epic or
 persisted story intermediate. Later Phase 4 slices add cases for their command
 families before moving implementation.
+
+## Phase 5 GitHub baseline
+
+`testdata/github-v1/manifest.yaml` separately pins standalone Plan `v0.1.29` at
+commit `898b2a4c470350c0e9115302c99c6ad27bdead9c`. Keeping a second manifest
+preserves the older Phase 4 local baseline instead of silently rebasing it.
+
+The GitHub manifest covers remote assessment, repair, and promotion; enablement,
+adoption, reconciliation, and Project status; GitHub-aware check and guide
+behavior; repository/planning-PR evidence; and only the shared evidence needed
+by compatibility-only GitHub story creation. Each case names its standalone or
+manager invocation, workspace and fake-provider state, normalized output, file
+and `.plan/.meta/github.json` effects, provider-call transcript, remote
+identities, confirmation policy, and identical-rerun outcome. Full text output
+is exact where stable; JSON-heavy agent contracts use valid structural
+projections while retaining action, identity, safety, and recovery fields.
+
+The manifest explicitly records two target hardenings instead of treating them
+as accidental drift: Brain requires preview and confirmation for GitHub
+administration mutations that Plan `v0.1.29` applies immediately, and Brain must
+suppress identical repair/adoption/Project-status writes that the baseline may
+repeat. Partial publication failure retains completed remote identity and permits
+manual fallback only when the typed result says so.
+
+Required CI only loads embedded fixtures and injected-fake transcripts. It never
+authenticates with GitHub, invokes `gh`, or creates a live repository resource.

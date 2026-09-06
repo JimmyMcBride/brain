@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "kind": "maturity_assessment",
+  "generated_at": "<TIMESTAMP>",
+  "source": {
+    "mode": "github_discussion",
+    "discussion": "https://github.com/JimmyMcBride/plan/discussions/49"
+  },
+  "decision": {
+    "state": "ready_multi_spec",
+    "recommended_path": "initiative_with_specs",
+    "suggested_titles": {
+      "initiative": "GitHub collaboration foundation",
+      "specs": ["Collaboration source", "Publication target"]
+    }
+  }
+}
