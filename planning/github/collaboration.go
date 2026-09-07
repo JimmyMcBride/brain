@@ -41,6 +41,10 @@ func providerError(class application.IntegrationErrorClass, operation, message s
 // classes and caller cancellation escape the adapter.
 func (a *Adapter) runProvider(ctx context.Context, operation string, args ...string) ([]byte, error) {
 	result, err := a.runner.Run(ctx, a.projectRoot, args...)
+	return providerOutput(ctx, operation, result, err)
+}
+
+func providerOutput(ctx context.Context, operation string, result RunResult, err error) ([]byte, error) {
 	if err == nil {
 		return result.Stdout, nil
 	}

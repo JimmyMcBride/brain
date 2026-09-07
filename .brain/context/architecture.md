@@ -1,5 +1,5 @@
 ---
-updated: "2026-09-07T16:58:39Z"
+updated: "2026-09-07T23:15:37Z"
 ---
 # Architecture
 
@@ -44,6 +44,8 @@ Use this file for the structural shape of the repository.
 <!-- brain:end context-architecture -->
 
 ## Local Notes
+
+- 2026-09-07: GitHub publication apply implements reviewed issue and relationship actions, reusing the shared planner for pre-write validation. `InputRunner` carries full mutation payloads through stdin; read-only runners remain compatible and mutation calls fail explicitly without stdin support. REST/CLI revisions normalize transport-only fields and label ordering. Creates require canonical Discussion links and stable title slugs; unmapped updates must retain those keys, while mapped renames remain supported. Metadata-backed update exceptions are trusted only when metadata belongs to the target repository. Cancellation and authentication/authorization failures retain their original semantics; only uncertain provider mutation failures become partial failures. Missing labels are created once, unrelated labels and metadata are preserved, and partial results retain completed and failing action evidence. Lost responses require inspection, not automatic retry or deletion. Final cross-client read/write races remain a provider limitation. Milestone/workspace plan decisions, adoption, mapping persistence, and native wiring remain pending.
 
 - 2026-09-07: `Service.ApplyPublication` binds confirmation to complete canonical intent and a reviewed publication plan, re-inspects before apply, and requires read/publish authorization plus an audit sink. It skips remote work for reuse/unchanged-only plans, validates completion order and stable identities, and retains partial evidence and one attempted publication event after provider or audit failure. Adapters still own the final read/write race and per-action revision guards. This service does not persist mappings or wire native commands; GitHub apply, adoption, and mapping persistence remain pending.
 

@@ -30,6 +30,13 @@ type Runner interface {
 	Run(ctx context.Context, projectRoot string, args ...string) (RunResult, error)
 }
 
+// InputRunner supports provider requests whose content must not travel through
+// command arguments. Publication requires this capability for complete spec bodies.
+type InputRunner interface {
+	Runner
+	RunInput(ctx context.Context, projectRoot string, input []byte, args ...string) (RunResult, error)
+}
+
 // Options supplies adapter dependencies.
 type Options struct {
 	ProjectRoot string
@@ -124,8 +131,8 @@ func (p publicationTarget) Inspect(ctx context.Context, request application.Publ
 	return p.adapter.inspectPublication(ctx, request)
 }
 
-func (p publicationTarget) Apply(context.Context, application.PublicationPlan) (application.PublicationResult, error) {
-	return application.PublicationResult{}, p.adapter.unavailable("publication.apply")
+func (p publicationTarget) Apply(ctx context.Context, plan application.PublicationPlan) (application.PublicationResult, error) {
+	return p.adapter.applyPublication(ctx, plan)
 }
 
 type repositoryEvidenceSource struct{ adapter *Adapter }
@@ -164,14 +171,23 @@ func (commandRunner) Run(ctx context.Context, projectRoot string, args ...string
 	return commandRunnerWithExecutable{executable: "gh"}.Run(ctx, projectRoot, args...)
 }
 
+func (commandRunner) RunInput(ctx context.Context, projectRoot string, input []byte, args ...string) (RunResult, error) {
+	return commandRunnerWithExecutable{executable: "gh"}.RunInput(ctx, projectRoot, input, args...)
+}
+
 type commandRunnerWithExecutable struct {
 	executable  string
 	environment []string
 }
 
 func (r commandRunnerWithExecutable) Run(ctx context.Context, projectRoot string, args ...string) (RunResult, error) {
+	return r.RunInput(ctx, projectRoot, nil, args...)
+}
+
+func (r commandRunnerWithExecutable) RunInput(ctx context.Context, projectRoot string, input []byte, args ...string) (RunResult, error) {
 	command := exec.CommandContext(ctx, r.executable, args...)
 	command.Dir = projectRoot
+	command.Stdin = bytes.NewReader(input)
 	if r.environment != nil {
 		command.Env = r.environment
 	}
