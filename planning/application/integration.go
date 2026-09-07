@@ -135,6 +135,7 @@ type PublicationApplyAction struct {
 type PublicationPlan struct {
 	SchemaVersion int                      `json:"schema_version"`
 	Target        ExternalReference        `json:"target"`
+	Source        *ExternalReference       `json:"source,omitempty"`
 	Actions       []PublicationApplyAction `json:"actions"`
 }
 
