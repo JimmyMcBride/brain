@@ -1,5 +1,5 @@
 ---
-updated: "2026-09-06T18:06:25Z"
+updated: "2026-09-07T01:13:52Z"
 ---
 # Planning Module Implementation Roadmap
 
@@ -91,6 +91,13 @@ establish provider-neutral application DTOs and capability-sized ports, and add
 the injected `planning/github` transport plus exact current metadata
 compatibility behind disabled configuration. Export, dependency, typed-error,
 atomic-write, and zero-provider-work guards protect the boundary.
+The collaboration portion of slice 4 adds provider-neutral remote assessment,
+revision-bound repair previews, read and collaboration authorization, mutation
+evidence, and audit handling. The GitHub adapter reads paginated Discussions and
+performs a fresh revision check before repair. GitHub does not offer an atomic
+conditional Discussion update: an edit between that check and mutation remains
+a provider limitation. Native command wiring and full standalone wrapper parity
+remain later rollout gates.
 
 Move retained GitHub collaboration/publication/repository/execution behavior
 behind generic Planning ports. Support planning PRs and retained Discussion,
@@ -145,7 +152,8 @@ lifecycle, diagnostics, and distribution direction.
 
 ## Exact Next Slice
 
-> Migrate collaboration assessment and guarded repair plus deterministic
-> publication and adoption through `planning/application` and `planning/github`.
-> Preserve preview, confirmation, idempotency, and partial-failure recovery; keep
-> native module wiring and execution-workspace behavior deferred.
+> Migrate deterministic publication and adoption through `planning/application`
+> and `planning/github`, preserving structured spec briefs, stable identity,
+> preview, confirmation, idempotency, and partial-failure recovery. Collaboration
+> assessment and guarded repair now have shared services and adapter operations;
+> native module wiring remains in rollout slice 5.

@@ -1,5 +1,5 @@
 ---
-updated: "2026-09-06T18:06:31Z"
+updated: "2026-09-07T01:13:52Z"
 ---
 # Architecture
 
@@ -44,6 +44,8 @@ Use this file for the structural shape of the repository.
 <!-- brain:end context-architecture -->
 
 ## Local Notes
+
+- 2026-09-07: Phase 5 collaboration services assess external source content and contributions, preview canonical Specs repairs, and require read/collaboration grants, a preview revision, confirmation, and an audit sink before applying. Events carry an optional external source reference rather than inventing a local artifact identity. The GitHub adapter owns pagination, source identity checks, redacted errors, and a fresh pre-write revision check; GitHub has no atomic conditional Discussion update, so the final read/write race remains explicit. Publication/adoption and native host wiring remain pending.
 
 - 2026-09-06: `planning/github` is the optional Phase 5 provider package. It exposes capability views for the provider-neutral application ports, owns an injected context-aware `gh` runner, and reads/writes exact current `.plan/.meta/github.json` structure atomically without credential fields. Construction and every disabled operation perform zero process, filesystem, network, or metadata work; enabled capabilities remain explicitly unsupported until migrated behind conformance tests.
 - 2026-09-06: `planning/application/integration.go` owns the Phase 5 provider-neutral external reference, collaboration, publication, repository evidence, durable mapping, adoption/reconciliation, execution workspace, and typed integration-error contracts. The five capability-sized ports depend only on Planning domain and stdlib; application code owns policy and action classification, while provider adapters return opaque evidence. Exact export, dependency, and provider-noun guards protect this boundary before the provider adapter package exists.

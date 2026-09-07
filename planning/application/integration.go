@@ -40,18 +40,21 @@ type CollaborationSourceSnapshot struct {
 	Contributions []CollaborationContribution `json:"contributions,omitempty"`
 }
 
-// CollaborationRepairRequest replaces collaboration content only when the
-// provider still has ExpectedRevision.
+// CollaborationRepairRequest requires the adapter to check ExpectedRevision
+// before replacing content. Adapters must document whether their provider can
+// make that check atomic with the write.
 type CollaborationRepairRequest struct {
 	Source           ExternalReference `json:"source"`
 	ExpectedRevision string            `json:"expected_revision"`
 	Content          string            `json:"content"`
 }
 
-// CollaborationRepairEvidence records the source identity and revision after a
-// guarded repair.
+// CollaborationRepairEvidence records a guarded repair. Revision may be empty
+// when a fresh read is needed; Changed distinguishes a write from an unchanged
+// provider response.
 type CollaborationRepairEvidence struct {
-	Source ExternalReference `json:"source"`
+	Source  ExternalReference `json:"source"`
+	Changed bool              `json:"changed"`
 }
 
 // CollaborationSource is the provider boundary for collaboration reads and
