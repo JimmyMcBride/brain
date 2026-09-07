@@ -52,6 +52,9 @@ func (a *Adapter) applyPublication(ctx context.Context, plan application.Publica
 	if stateErr != nil && !errors.Is(stateErr, os.ErrNotExist) {
 		return result, providerError(application.IntegrationProviderUnavailable, publicationApplyOperation, "cannot verify publication mappings")
 	}
+	if stateErr == nil && ((state.Repo != "" && state.Repo != plan.Target.OpaqueID) || (state.Repo == "" && len(state.Planning) > 0)) {
+		return result, publicationApplyConflict("metadata belongs to a different repository")
+	}
 	for _, action := range plan.Actions {
 		if action.Action != application.MutationUpdate || action.Artifact == nil {
 			continue
@@ -228,6 +231,13 @@ func (a *Adapter) publicationRequest(ctx context.Context, method, endpoint strin
 	output, err := runner.RunInput(ctx, a.projectRoot, raw, "api", "--method", method, endpoint, "--input", "-")
 	data, err := providerOutput(ctx, publicationApplyOperation, output, err)
 	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, err
+		}
+		var integration *application.IntegrationError
+		if errors.As(err, &integration) && (integration.Class == application.IntegrationUnauthenticated || integration.Class == application.IntegrationUnauthorized) {
+			return nil, err
+		}
 		return nil, &application.IntegrationError{Class: application.IntegrationPartialFailure, Provider: providerName, Operation: publicationApplyOperation, Message: "provider mutation outcome may be incomplete; inspect before retrying", Err: err}
 	}
 	return data, nil

@@ -26,6 +26,8 @@ type publicationWriteRunner struct {
 	lostResponse                bool
 	payloads                    []map[string]any
 	beforeRead                  func(string)
+	beforeWrite                 func()
+	failStderr                  string
 }
 
 func newPublicationWriteRunner(t *testing.T) *publicationWriteRunner {
@@ -88,6 +90,9 @@ func (r *publicationWriteRunner) Run(_ context.Context, _ string, args ...string
 }
 
 func (r *publicationWriteRunner) RunInput(_ context.Context, _ string, input []byte, args ...string) (RunResult, error) {
+	if r.beforeWrite != nil {
+		r.beforeWrite()
+	}
 	r.writes++
 	if len(args) != 6 || args[0] != "api" || args[1] != "--method" || args[4] != "--input" || args[5] != "-" {
 		r.t.Fatalf("unsafe mutation arguments: %q", args)
@@ -98,7 +103,11 @@ func (r *publicationWriteRunner) RunInput(_ context.Context, _ string, input []b
 	}
 	r.payloads = append(r.payloads, payload)
 	if r.writes == r.failAt && !r.lostResponse {
-		return RunResult{Stderr: []byte("secret token and private content")}, errors.New("secret")
+		stderr := r.failStderr
+		if stderr == "" {
+			stderr = "secret token and private content"
+		}
+		return RunResult{Stderr: []byte(stderr)}, errors.New("secret")
 	}
 	var response any
 	endpoint := args[3]
@@ -359,6 +368,71 @@ func TestPublicationUpdateGuardsLastReadAndKeepsMetadata(t *testing.T) {
 	writes = runner.writes
 	if _, err := runPublication(t, adapter, input, events); err != nil || runner.writes != writes {
 		t.Fatal("renamed mapping was not reusable", err)
+	}
+}
+
+func TestPublicationRejectsForeignOrOwnerlessMappings(t *testing.T) {
+	for _, repo := range []string{"another/repo", ""} {
+		t.Run(repo, func(t *testing.T) {
+			adapter, runner, input := publicationWriteFixture(t)
+			events := &publicationWriteEvents{}
+			if _, err := runPublication(t, adapter, input, events); err != nil {
+				t.Fatal(err)
+			}
+			state := normalizeGitHubState(githubState{Repo: repo})
+			state.Planning["a"] = githubPlanningRecord{Slug: "a", Kind: "spec", IssueNumber: 101}
+			if err := newFileStateStore(adapter.projectRoot).write(state); err != nil {
+				t.Fatal(err)
+			}
+			input.Artifacts[0].Title = "Renamed mapped issue"
+			input.Artifacts[0].Content = "No recoverable source link"
+			writes := runner.writes
+			_, err := runPublication(t, adapter, input, events)
+			var integration *application.IntegrationError
+			if !errors.As(err, &integration) || integration.Class != application.IntegrationAmbiguousIdentity || runner.writes != writes {
+				t.Fatalf("trusted invalid metadata: %v", err)
+			}
+		})
+	}
+}
+
+func TestPublicationRequestPreservesCancellationAndAuthClasses(t *testing.T) {
+	for _, failure := range []string{"canceled", "unauthenticated", "unauthorized", "uncertain"} {
+		t.Run(failure, func(t *testing.T) {
+			runner := newPublicationWriteRunner(t)
+			runner.failAt = 1
+			ctx := context.Background()
+			if failure == "canceled" {
+				cancelCtx, cancel := context.WithCancel(ctx)
+				ctx = cancelCtx
+				runner.beforeWrite = cancel
+			} else if failure == "unauthenticated" {
+				runner.failStderr = "gh auth login"
+			} else if failure == "unauthorized" {
+				runner.failStderr = "HTTP 403"
+			}
+			adapter := New(Config{Enabled: true}, Options{ProjectRoot: t.TempDir(), Runner: runner})
+			_, err := adapter.publicationRequest(ctx, "POST", "repos/owner/repo/issues", map[string]string{"title": "A"})
+			if failure == "canceled" {
+				if !errors.Is(err, context.Canceled) {
+					t.Fatal(err)
+				}
+				return
+			}
+			var integration *application.IntegrationError
+			if !errors.As(err, &integration) {
+				t.Fatal(err)
+			}
+			want := application.IntegrationPartialFailure
+			if failure == "unauthenticated" {
+				want = application.IntegrationUnauthenticated
+			} else if failure == "unauthorized" {
+				want = application.IntegrationUnauthorized
+			}
+			if integration.Class != want {
+				t.Fatalf("class=%s want=%s", integration.Class, want)
+			}
+		})
 	}
 }
 
