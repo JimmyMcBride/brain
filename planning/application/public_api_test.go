@@ -49,6 +49,7 @@ func TestPublicPlanningApplicationExportSurface(t *testing.T) {
 	t.Parallel()
 	got := exportedNames(t, ".", "application")
 	want := []string{
+		"PublicationPreviewInput", "Service.PreviewPublication",
 		"CollaborationRepairInput", "CollaborationRepairResult", "EventCollaborationRepaired", "PermissionCollaboration",
 		"Service.AssessCollaboration", "Service.PreviewCollaborationRepair", "Service.RepairCollaboration",
 		"AdoptionResult", "ArtifactExternalReference", "ChangeRequestClosed", "ChangeRequestMerged", "ChangeRequestOpen", "ChangeRequestState",

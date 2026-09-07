@@ -1,5 +1,5 @@
 ---
-updated: "2026-09-07T01:13:52Z"
+updated: "2026-09-07T03:25:19Z"
 ---
 # Planning Module Implementation Roadmap
 
@@ -98,6 +98,11 @@ performs a fresh revision check before repair. GitHub does not offer an atomic
 conditional Discussion update: an edit between that check and mutation remains
 a provider limitation. Native command wiring and full standalone wrapper parity
 remain later rollout gates.
+The next publication increment adds application-owned deterministic previews:
+canonical artifact intent and provider evidence yield ordered create, update,
+reuse, or unchanged actions. Stable identity checks reject ambiguous candidates;
+dependency and grouping validation rejects cycles and missing endpoints. Provider
+inspection/apply implementation and adoption remain pending.
 
 Move retained GitHub collaboration/publication/repository/execution behavior
 behind generic Planning ports. Support planning PRs and retained Discussion,
@@ -152,8 +157,7 @@ lifecycle, diagnostics, and distribution direction.
 
 ## Exact Next Slice
 
-> Migrate deterministic publication and adoption through `planning/application`
-> and `planning/github`, preserving structured spec briefs, stable identity,
-> preview, confirmation, idempotency, and partial-failure recovery. Collaboration
-> assessment and guarded repair now have shared services and adapter operations;
-> native module wiring remains in rollout slice 5.
+> Connect the deterministic publication planner to GitHub provider inspection
+> and confirmed apply, then adoption and recoverable mapping persistence.
+> Preserve structured spec briefs, stable identity, confirmation, idempotency,
+> and partial-failure recovery. Native module wiring remains in rollout slice 5.

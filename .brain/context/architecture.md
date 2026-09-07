@@ -1,5 +1,5 @@
 ---
-updated: "2026-09-07T01:13:52Z"
+updated: "2026-09-07T03:25:19Z"
 ---
 # Architecture
 
@@ -44,6 +44,8 @@ Use this file for the structural shape of the repository.
 <!-- brain:end context-architecture -->
 
 ## Local Notes
+
+- 2026-09-07: `Service.PreviewPublication` classifies canonical initiative/spec intent against provider evidence without applying or saving mappings. It preserves complete content and source provenance, orders grouping/dependency prerequisites, rejects ambiguous or missing known identities, and never matches by title. Reuse means a stable remote match without an attached input mapping; unchanged means content already matches a known reference. GitHub inspection/apply and adoption remain pending.
 
 - 2026-09-07: Phase 5 collaboration services assess external source content and contributions, preview canonical Specs repairs, and require read/collaboration grants, a preview revision, confirmation, and an audit sink before applying. Events carry an optional external source reference rather than inventing a local artifact identity. The GitHub adapter owns pagination, source identity checks, redacted errors, and a fresh pre-write revision check; GitHub has no atomic conditional Discussion update, so the final read/write race remains explicit. Publication/adoption and native host wiring remain pending.
 
