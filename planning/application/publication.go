@@ -51,7 +51,7 @@ func (s *Service) PreviewPublication(ctx context.Context, target PublicationTarg
 		return empty, publicationConflict("provider returned a different target or contract version")
 	}
 	existing := map[planning.ArtifactRef]PublicationArtifact{}
-	remoteOwners := map[string]planning.ArtifactRef{}
+	remoteOwners := map[[3]string]planning.ArtifactRef{}
 	for _, artifact := range snapshot.Artifacts {
 		if _, duplicate := existing[artifact.Artifact]; duplicate {
 			return empty, publicationConflict("multiple provider candidates match one artifact")
@@ -59,7 +59,7 @@ func (s *Service) PreviewPublication(ctx context.Context, target PublicationTarg
 		if artifact.Reference == nil || artifact.Reference.OpaqueID == "" || artifact.Reference.Kind == "" || artifact.Reference.Provider != input.Target.Provider {
 			return empty, publicationConflict("provider candidate has no valid stable reference")
 		}
-		key := artifact.Reference.Provider + "\x00" + artifact.Reference.Kind + "\x00" + artifact.Reference.OpaqueID
+		key := [3]string{artifact.Reference.Provider, artifact.Reference.Kind, artifact.Reference.OpaqueID}
 		if owner, duplicate := remoteOwners[key]; duplicate && owner != artifact.Artifact {
 			return empty, publicationConflict("provider identity maps to multiple artifacts")
 		}

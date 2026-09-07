@@ -1,5 +1,5 @@
 ---
-updated: "2026-09-07T03:25:19Z"
+updated: "2026-09-07T14:46:38Z"
 ---
 # Planning Module Implementation Roadmap
 
@@ -100,7 +100,7 @@ a provider limitation. Native command wiring and full standalone wrapper parity
 remain later rollout gates.
 The next publication increment adds application-owned deterministic previews:
 canonical artifact intent and provider evidence yield ordered create, update,
-reuse, or unchanged actions. Stable identity checks reject ambiguous candidates;
+reuse, or unchanged actions. Stable identity checks use composite provider/kind/ID keys to reject ambiguous candidates without delimiter collisions;
 dependency and grouping validation rejects cycles and missing endpoints. Provider
 inspection/apply implementation and adoption remain pending.
 

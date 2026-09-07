@@ -163,3 +163,18 @@ func TestPublicationPreviewDoesNotGuessByTitleOrReadWhenDenied(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestPublicationIdentityComponentsCannotCollide(t *testing.T) {
+	input, target := publicationFixture()
+	a, b := input.Artifacts[0], input.Artifacts[1]
+	a.Reference = &ExternalReference{Provider: "test", Kind: "work\x00item", OpaqueID: "one"}
+	b.Reference = &ExternalReference{Provider: "test", Kind: "work", OpaqueID: "item\x00one"}
+	target.snapshot.Artifacts = []PublicationArtifact{a, b}
+	plan, err := New(nil, Options{}).PreviewPublication(context.Background(), target, input, &collaborationPolicy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Actions[1].Artifact.Reference.OpaqueID != b.Reference.OpaqueID || plan.Actions[2].Artifact.Reference.OpaqueID != a.Reference.OpaqueID {
+		t.Fatal("distinct identities were conflated")
+	}
+}
