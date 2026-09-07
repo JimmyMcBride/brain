@@ -94,7 +94,7 @@ func TestPublicGitHubAdapterExportSurface(t *testing.T) {
 	want := []string{
 		"Adapter", "Adapter.CollaborationSource", "Adapter.Enabled", "Adapter.ExecutionWorkspace",
 		"Adapter.ExternalMappingRepository", "Adapter.PublicationTarget", "Adapter.RepositoryEvidenceSource",
-		"Config", "New", "Options", "RunResult", "Runner",
+		"Config", "InputRunner", "New", "Options", "RunResult", "Runner",
 	}
 	slices.Sort(want)
 	if !slices.Equal(got, want) {

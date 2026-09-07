@@ -1,5 +1,5 @@
 ---
-updated: "2026-09-07T16:58:39Z"
+updated: "2026-09-07T19:26:59Z"
 ---
 # Planning Module Implementation Roadmap
 
@@ -112,8 +112,13 @@ explicit confirmation, an audit sink, and a fresh plan matching the reviewed
 intent and provider revisions. Reuse/unchanged-only plans skip provider writes.
 Partial apply and audit failures retain completed identities without rollback;
 invalid completion evidence cannot become success. This service does not save
-mappings or enable native commands. GitHub apply, adoption, recoverable mapping
-persistence, and retained milestone/workspace planning remain pending.
+mappings or enable native commands. The GitHub adapter now applies those exact
+issue and relationship actions, creates missing managed labels only, preserves
+full briefs through stdin, guards fresh issue revisions, and returns partial
+identity evidence. Source-linked creates and unmapped updates retain recoverable
+slugs; existing mappings support renamed issues without being rewritten.
+Adoption, mapping persistence, and retained milestone/workspace planning remain
+pending. This is not yet the complete retained promotion workflow.
 
 Move retained GitHub collaboration/publication/repository/execution behavior
 behind generic Planning ports. Support planning PRs and retained Discussion,
@@ -168,7 +173,7 @@ lifecycle, diagnostics, and distribution direction.
 
 ## Exact Next Slice
 
-> Add confirmed GitHub publication apply, then adoption and recoverable mapping
-> persistence, including retained grouping and workspace evidence.
+> Add adoption and recoverable mapping persistence, and extend reviewed
+> publication plans with retained milestone and workspace decisions.
 > Preserve structured spec briefs, stable identity, confirmation, idempotency,
 > and partial-failure recovery. Native module wiring remains in rollout slice 5.

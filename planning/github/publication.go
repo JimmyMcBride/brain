@@ -103,6 +103,9 @@ func (a *Adapter) inspectPublication(ctx context.Context, request application.Pu
 			return empty, err
 		}
 		sourceURL = fmt.Sprintf("https://github.com/%s/%s/discussions/%d", owner, name, number)
+		if request.Source.URL != sourceURL {
+			return empty, publicationIdentityError("source URL must use its canonical representation for recovery")
+		}
 	}
 	state, err := a.state.read()
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -244,8 +247,7 @@ func (a *Adapter) publicationSnapshot(ctx context.Context, request application.P
 		if strings.EqualFold(issue.State, "closed") {
 			readiness = planning.ReadinessDone
 		}
-		raw, _ := json.Marshal(issue)
-		external := application.ExternalReference{Provider: providerName, Kind: "issue", OpaqueID: issue.ID, DisplayID: strconv.Itoa(issue.Number), URL: issue.URL, Revision: fmt.Sprintf("%x", sha256.Sum256(raw))}
+		external := publicationIssueReference(issue)
 		numberToIndex[issue.Number] = len(result.Artifacts)
 		result.Artifacts = append(result.Artifacts, application.PublicationArtifact{Artifact: ref, Title: issue.Title, Content: issue.Body, Readiness: readiness, Reference: &external})
 	}
@@ -308,6 +310,23 @@ func (a *Adapter) publicationSnapshot(ctx context.Context, request application.P
 		}
 	}
 	return result, nil
+}
+
+func publicationIssueReference(issue publicationIssue) application.ExternalReference {
+	// Hash only normalized issue evidence, not REST versus CLI transport shape.
+	issue.NodeID, issue.HTMLURL, issue.PullRequest = issue.ID, "", nil
+	issue.State = strings.ToLower(issue.State)
+	issue.Labels = slices.Clone(issue.Labels)
+	if len(issue.Labels) == 0 {
+		issue.Labels = nil
+	}
+	slices.SortFunc(issue.Labels, func(a, b struct {
+		Name string `json:"name"`
+	}) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+	raw, _ := json.Marshal(issue)
+	return application.ExternalReference{Provider: providerName, Kind: "issue", OpaqueID: issue.ID, DisplayID: strconv.Itoa(issue.Number), URL: issue.URL, Revision: fmt.Sprintf("%x", sha256.Sum256(raw))}
 }
 
 func publicationHasLabel(issue publicationIssue, label string) bool {

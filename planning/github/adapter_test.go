@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -184,13 +185,40 @@ func TestCommandRunnerHelperProcess(t *testing.T) {
 	if separator >= 0 {
 		arguments = os.Args[separator+1:]
 	}
-	if err := json.NewEncoder(os.Stdout).Encode(map[string]any{"directory": directory, "arguments": arguments}); err != nil {
+	input, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		panic(err)
+	}
+	if err := json.NewEncoder(os.Stdout).Encode(map[string]any{"directory": directory, "arguments": arguments, "input": string(input)}); err != nil {
 		panic(err)
 	}
 	if _, err := fmt.Fprint(os.Stderr, "provider stderr"); err != nil {
 		panic(err)
 	}
 	os.Exit(0)
+}
+
+func TestCommandRunnerPreservesLargeStdin(t *testing.T) {
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := commandRunnerWithExecutable{executable: executable, environment: append(os.Environ(), "BRAIN_GITHUB_RUNNER_HELPER=1")}
+	input := strings.Repeat("complete brief $(no shell) @file\n", 3000)
+	result, err := runner.RunInput(context.Background(), t.TempDir(), []byte(input), "-test.run=TestCommandRunnerHelperProcess", "--", "--input", "-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload struct {
+		Input     string
+		Arguments []string
+	}
+	if err := json.Unmarshal(result.Stdout, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Input != input || !slices.Equal(payload.Arguments, []string{"--input", "-"}) {
+		t.Fatal("stdin content changed or leaked into arguments")
+	}
 }
 
 func TestMetadataCompatibilityFixturesRoundTrip(t *testing.T) {
