@@ -1,5 +1,5 @@
 ---
-updated: "2026-09-07T14:46:38Z"
+updated: "2026-09-07T15:03:28Z"
 ---
 # Planning Module Implementation Roadmap
 
@@ -102,7 +102,12 @@ The next publication increment adds application-owned deterministic previews:
 canonical artifact intent and provider evidence yield ordered create, update,
 reuse, or unchanged actions. Stable identity checks use composite provider/kind/ID keys to reject ambiguous candidates without delimiter collisions;
 dependency and grouping validation rejects cycles and missing endpoints. Provider
-inspection/apply implementation and adoption remain pending.
+apply implementation and adoption remain pending.
+GitHub publication inspection now feeds the planner with canonical issue content,
+references, and live grouping/dependency evidence. It recovers renamed or
+unlabelled mapped issues and exact source-linked slugs, rejects ambiguous
+identities and incomplete listings, and performs no remote or metadata writes.
+Retained milestone/workspace planning and mutation remain later apply work.
 
 Move retained GitHub collaboration/publication/repository/execution behavior
 behind generic Planning ports. Support planning PRs and retained Discussion,
@@ -157,7 +162,7 @@ lifecycle, diagnostics, and distribution direction.
 
 ## Exact Next Slice
 
-> Connect the deterministic publication planner to GitHub provider inspection
-> and confirmed apply, then adoption and recoverable mapping persistence.
+> Add confirmed GitHub publication apply, then adoption and recoverable mapping
+> persistence, including retained grouping and workspace evidence.
 > Preserve structured spec briefs, stable identity, confirmation, idempotency,
 > and partial-failure recovery. Native module wiring remains in rollout slice 5.

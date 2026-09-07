@@ -1,5 +1,5 @@
 ---
-updated: "2026-09-07T03:25:19Z"
+updated: "2026-09-07T15:03:28Z"
 ---
 # Architecture
 
@@ -44,6 +44,8 @@ Use this file for the structural shape of the repository.
 <!-- brain:end context-architecture -->
 
 ## Local Notes
+
+- 2026-09-07: GitHub publication inspection now implements the application port using bounded issue/relationship reads. Existing `.plan/.meta/github.json` mappings resolve renamed or unlabelled issues; canonical source links plus exact slugs and kind labels support recovery when mappings are absent. Ambiguous identities, cross-repository metadata, incomplete listings, and omitted relationship endpoints fail explicitly. Inspection writes nothing; confirmed apply, adoption, mapping persistence, and retained milestone/workspace planning remain pending.
 
 - 2026-09-07: `Service.PreviewPublication` classifies canonical initiative/spec intent against provider evidence without applying or saving mappings. It preserves complete content and source provenance, orders grouping/dependency prerequisites, rejects ambiguous or missing known identities, and never matches by title. Reuse means a stable remote match without an attached input mapping; unchanged means content already matches a known reference. GitHub inspection/apply and adoption remain pending.
 
