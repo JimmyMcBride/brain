@@ -158,6 +158,13 @@ type PublicationResult struct {
 
 // PublicationTarget is the provider boundary for inspecting and applying
 // initiative/spec publication. Planning owns action classification and order.
+// Apply must guard references against intervening changes, preserve action order,
+// and return the completed prefix (including no-op actions) plus a failing action
+// on partial failure. Evidence retains original actions; new identities belong in
+// References. Reuse and unchanged actions perform no remote writes. References
+// on completed artifact actions must include the resulting stable identity.
+// Known artifact identities must be retained rather than replaced. References on
+// a failed action identify writes already made, not merely inspected objects.
 type PublicationTarget interface {
 	Inspect(context.Context, PublicationInspectRequest) (PublicationSnapshot, error)
 	Apply(context.Context, PublicationPlan) (PublicationResult, error)

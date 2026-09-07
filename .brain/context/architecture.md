@@ -1,5 +1,5 @@
 ---
-updated: "2026-09-07T15:03:28Z"
+updated: "2026-09-07T16:58:39Z"
 ---
 # Architecture
 
@@ -44,6 +44,8 @@ Use this file for the structural shape of the repository.
 <!-- brain:end context-architecture -->
 
 ## Local Notes
+
+- 2026-09-07: `Service.ApplyPublication` binds confirmation to complete canonical intent and a reviewed publication plan, re-inspects before apply, and requires read/publish authorization plus an audit sink. It skips remote work for reuse/unchanged-only plans, validates completion order and stable identities, and retains partial evidence and one attempted publication event after provider or audit failure. Adapters still own the final read/write race and per-action revision guards. This service does not persist mappings or wire native commands; GitHub apply, adoption, and mapping persistence remain pending.
 
 - 2026-09-07: GitHub publication inspection now implements the application port using bounded issue/relationship reads. Existing `.plan/.meta/github.json` mappings resolve renamed or unlabelled issues; canonical source links plus exact slugs and kind labels support recovery when mappings are absent. Ambiguous identities, cross-repository metadata, incomplete listings, and omitted relationship endpoints fail explicitly. Inspection writes nothing; confirmed apply, adoption, mapping persistence, and retained milestone/workspace planning remain pending.
 
