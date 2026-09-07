@@ -194,3 +194,36 @@ func TestPublicationIssueDecodesRESTNumericID(t *testing.T) {
 		t.Fatalf("identity=%q", issue.ID)
 	}
 }
+
+func TestPublicationIssueNormalizesNodeIdentity(t *testing.T) {
+	for _, raw := range []string{`{"id":"I_node"}`, `{"id":123,"node_id":"I_node"}`} {
+		var issue publicationIssue
+		if err := json.Unmarshal([]byte(raw), &issue); err != nil {
+			t.Fatal(err)
+		}
+		if issue.ID != "I_node" || issue.NodeID != "I_node" {
+			t.Fatalf("inconsistent identity: %+v", issue)
+		}
+	}
+	var issue publicationIssue
+	if err := json.Unmarshal([]byte(`{"id":"I_a","node_id":"I_b"}`), &issue); err == nil {
+		t.Fatal("accepted conflicting node identities")
+	}
+}
+
+func TestPublicationSourceLinkBoundaries(t *testing.T) {
+	link := "https://github.com/owner/repo/discussions/49"
+	for _, body := range []string{link, "(" + link + ")", "<" + link + ">", "\n" + link + "\t", link + "0 then " + link} {
+		if !publicationSourceLink(body, link) {
+			t.Errorf("missed source in %q", body)
+		}
+	}
+	for _, body := range []string{"", "prefix" + link, link + "0", link + "/suffix", link + "?query"} {
+		if publicationSourceLink(body, link) {
+			t.Errorf("accepted false source in %q", body)
+		}
+	}
+	if publicationSourceLink("body", "") {
+		t.Fatal("accepted empty source")
+	}
+}

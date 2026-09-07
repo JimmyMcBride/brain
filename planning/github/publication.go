@@ -48,6 +48,13 @@ func (issue *publicationIssue) UnmarshalJSON(raw []byte) error {
 		if err := json.Unmarshal(payload.ID, &decoded.ID); err != nil {
 			return err
 		}
+		if decoded.ID == "" {
+			decoded.ID = decoded.NodeID
+		}
+		if decoded.NodeID != "" && decoded.NodeID != decoded.ID {
+			return fmt.Errorf("conflicting issue node identities")
+		}
+		decoded.NodeID = decoded.ID
 	} else {
 		decoded.ID = decoded.NodeID
 	}
@@ -313,10 +320,27 @@ func publicationHasLabel(issue publicationIssue, label string) bool {
 }
 
 func publicationSourceLink(body, link string) bool {
-	pattern := regexp.MustCompile(`(?:^|[\s(<])` + regexp.QuoteMeta(link) + `(?:[\s)\]>]|$)`)
-	return pattern.MatchString(body)
+	if link == "" {
+		return false
+	}
+	for offset := 0; offset < len(body); {
+		index := strings.Index(body[offset:], link)
+		if index < 0 {
+			return false
+		}
+		start := offset + index
+		end := start + len(link)
+		if (start == 0 || strings.ContainsRune("\t\n\f\r (<", rune(body[start-1]))) &&
+			(end == len(body) || strings.ContainsRune("\t\n\f\r )]>", rune(body[end]))) {
+			return true
+		}
+		offset = start + 1
+	}
+	return false
 }
 
+var publicationSlugSeparator = regexp.MustCompile(`[^a-z0-9]+`)
+
 func publicationSlug(title string) string {
-	return strings.Trim(regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(strings.ToLower(strings.TrimSpace(title)), "-"), "-")
+	return strings.Trim(publicationSlugSeparator.ReplaceAllString(strings.ToLower(strings.TrimSpace(title)), "-"), "-")
 }
