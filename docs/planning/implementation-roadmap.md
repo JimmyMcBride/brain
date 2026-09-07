@@ -1,5 +1,5 @@
 ---
-updated: "2026-09-07T15:03:28Z"
+updated: "2026-09-07T16:58:39Z"
 ---
 # Planning Module Implementation Roadmap
 
@@ -107,7 +107,13 @@ GitHub publication inspection now feeds the planner with canonical issue content
 references, and live grouping/dependency evidence. It recovers renamed or
 unlabelled mapped issues and exact source-linked slugs, rejects ambiguous
 identities and incomplete listings, and performs no remote or metadata writes.
-Retained milestone/workspace planning and mutation remain later apply work.
+The shared confirmed-publication service now requires read/publish grants,
+explicit confirmation, an audit sink, and a fresh plan matching the reviewed
+intent and provider revisions. Reuse/unchanged-only plans skip provider writes.
+Partial apply and audit failures retain completed identities without rollback;
+invalid completion evidence cannot become success. This service does not save
+mappings or enable native commands. GitHub apply, adoption, recoverable mapping
+persistence, and retained milestone/workspace planning remain pending.
 
 Move retained GitHub collaboration/publication/repository/execution behavior
 behind generic Planning ports. Support planning PRs and retained Discussion,
