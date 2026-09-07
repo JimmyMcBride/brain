@@ -120,8 +120,8 @@ func (p collaborationSource) Repair(ctx context.Context, request application.Col
 
 type publicationTarget struct{ adapter *Adapter }
 
-func (p publicationTarget) Inspect(context.Context, application.PublicationInspectRequest) (application.PublicationSnapshot, error) {
-	return application.PublicationSnapshot{}, p.adapter.unavailable("publication.inspect")
+func (p publicationTarget) Inspect(ctx context.Context, request application.PublicationInspectRequest) (application.PublicationSnapshot, error) {
+	return p.adapter.inspectPublication(ctx, request)
 }
 
 func (p publicationTarget) Apply(context.Context, application.PublicationPlan) (application.PublicationResult, error) {
