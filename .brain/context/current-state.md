@@ -1,5 +1,5 @@
 ---
-updated: "2026-09-06T18:06:37Z"
+updated: "2026-09-07T01:13:52Z"
 ---
 <!-- brain:begin context-current-state -->
 This file is a deterministic snapshot of the repository state at the last refresh.
@@ -10,10 +10,10 @@ This file is a deterministic snapshot of the repository state at the last refres
 - Root: `.`
 - Runtime: `go`
 - Go module: `github.com/JimmyMcBride/brain`
-- Current branch: `codex/github-adapter-transition-skeleton`
+- Current branch: `codex/github-collaboration`
 - Default branch: `develop`
 - Remote: `https://github.com/JimmyMcBride/brain.git`
-- Go test files: `50`
+- Go test files: `53`
 
 ## Docs
 
@@ -29,7 +29,7 @@ This file is a deterministic snapshot of the repository state at the last refres
 
 ## Local Notes
 
-- 2026-09-06: Phase 5 implementation began with a separate GitHub conformance manifest pinned to standalone Plan `v0.1.29` at `898b2a4c470350c0e9115302c99c6ad27bdead9c`. It captures 11 retained command/evidence families through embedded workspace and provider fixtures, normalized output, provider-call transcripts, remote identities, current `.plan/.meta/github.json` effects, confirmation, partial failure recovery, and identical reruns without live GitHub resources. The baseline also records that Plan mutates GitHub administration without confirmation and may repeat repair, adoption, or Project-status writes; Brain intentionally hardens those paths with preview, confirmation, and unchanged classification. Provider-neutral application DTOs and five capability-sized ports now cover collaboration, publication, repository evidence, durable mappings, and execution workspaces. The injected `planning/github` transport now adds exact current metadata compatibility, atomic persistence, dependency/export guards, and verified zero-work disabled behavior. The next slice migrates collaboration assessment/guarded repair plus deterministic publication/adoption through these ports with preview, confirmation, idempotency, and partial-failure recovery.
+- 2026-09-06: Phase 5 implementation began with a separate GitHub conformance manifest pinned to standalone Plan `v0.1.29` at `898b2a4c470350c0e9115302c99c6ad27bdead9c`. It captures 11 retained command/evidence families through embedded workspace and provider fixtures, normalized output, provider-call transcripts, remote identities, current `.plan/.meta/github.json` effects, confirmation, partial failure recovery, and identical reruns without live GitHub resources. The baseline also records that Plan mutates GitHub administration without confirmation and may repeat repair, adoption, or Project-status writes; Brain intentionally hardens those paths with preview, confirmation, and unchanged classification. Provider-neutral application DTOs and five capability-sized ports now cover collaboration, publication, repository evidence, durable mappings, and execution workspaces. The injected `planning/github` transport now adds exact current metadata compatibility, atomic persistence, dependency/export guards, and verified zero-work disabled behavior. Collaboration assessment and guarded repair now have shared application services and GitHub adapter operations, including paginated reads, revision-bound previews, authorization, and audit failure evidence. Next is deterministic publication/adoption; native command wiring and complete cross-host conformance remain later gates.
 - 2026-09-02: Phase 5 GitHub Adapter Transition is approved in `.plan/specs/github-adapter-transition.md` after high-confidence single-spec assessment and zero-finding analysis/checklist passes. The contract pins Plan `v0.1.29`, freezes GitHub behavior before movement, adds capability-sized provider-neutral application ports plus optional `planning/github`, keeps existing metadata unchanged, makes adapter enablement independent of artifact ownership, excludes native story/source mutation, and supports GitHub source mode through Phase 9 plus a separate deprecation decision. Exact next work is the conformance manifest and fake-provider transcripts before module-path or implementation changes.
 - 2026-09-01: Phase 4 Plan CLI Compatibility is complete. Brain `v0.1.21` publishes the shared Planning boundary; standalone Plan PR `#88` pins that stable tag, and Plan `v0.1.29` publishes the compatibility wrapper. Both release workflows produced checksums plus Linux, macOS, and Windows amd64/arm64 archives after the full local, race, vet, build, module, and cross-platform matrix passed. `brain plan` is primary for mapped local schema-v3 workflows; standalone `plan` retains GitHub/hybrid and legacy fallbacks. This made the bounded Phase 5 GitHub Adapter Transition spec the then-next planning gate.
 - 2026-09-01: Phase 4's seventh slice merged through standalone Plan PR `#87` at `e172bada36f0`, pinned to merged Brain revision `c2c71279030f` without a local replacement. Compatible schema-v3 local commands use Brain's shared Planning packages; standalone presentation, GitHub/hybrid ownership, and legacy repair fallbacks remain intact. The interactive warning is stderr-only and once per process, with JSON and noninteractive suppression. Final local, race, vet, module, Linux, and Windows verification passed. This left the stable Brain tag, Plan pin, and Plan release as the then-remaining final rollout gate.

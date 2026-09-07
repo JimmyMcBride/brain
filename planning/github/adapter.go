@@ -110,12 +110,12 @@ func (a *Adapter) unavailable(operation string) error {
 
 type collaborationSource struct{ adapter *Adapter }
 
-func (p collaborationSource) Read(context.Context, application.ExternalReference) (application.CollaborationSourceSnapshot, error) {
-	return application.CollaborationSourceSnapshot{}, p.adapter.unavailable("collaboration.read")
+func (p collaborationSource) Read(ctx context.Context, ref application.ExternalReference) (application.CollaborationSourceSnapshot, error) {
+	return p.adapter.readDiscussion(ctx, ref)
 }
 
-func (p collaborationSource) Repair(context.Context, application.CollaborationRepairRequest) (application.CollaborationRepairEvidence, error) {
-	return application.CollaborationRepairEvidence{}, p.adapter.unavailable("collaboration.repair")
+func (p collaborationSource) Repair(ctx context.Context, request application.CollaborationRepairRequest) (application.CollaborationRepairEvidence, error) {
+	return p.adapter.repairDiscussion(ctx, request)
 }
 
 type publicationTarget struct{ adapter *Adapter }
