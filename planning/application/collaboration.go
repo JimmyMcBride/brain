@@ -104,7 +104,7 @@ func (s *Service) RepairCollaboration(ctx context.Context, source CollaborationS
 		return CollaborationRepairResult{}, ErrConfirmationRequired
 	}
 	if input.ExpectedRevision == "" {
-		return CollaborationRepairResult{}, &IntegrationError{Class: IntegrationRevisionConflict, Message: "preview revision is required"}
+		return CollaborationRepairResult{}, &IntegrationError{Class: IntegrationRevisionConflict, Operation: "collaboration.repair", Message: "preview revision is required"}
 	}
 	if authorizer == nil {
 		return CollaborationRepairResult{}, fmt.Errorf("collaboration requires an authorizer")
