@@ -143,12 +143,12 @@ func (p repositoryEvidenceSource) Current(context.Context) (application.Reposito
 
 type externalMappingRepository struct{ adapter *Adapter }
 
-func (p externalMappingRepository) Load(context.Context) (application.ExternalMappingState, error) {
-	return application.ExternalMappingState{}, p.adapter.unavailable("mapping.load")
+func (p externalMappingRepository) Load(ctx context.Context) (application.ExternalMappingState, error) {
+	return p.adapter.loadExternalMappings(ctx)
 }
 
-func (p externalMappingRepository) Save(context.Context, application.ExternalMappingState, string) (application.ExternalMappingState, error) {
-	return application.ExternalMappingState{}, p.adapter.unavailable("mapping.save")
+func (p externalMappingRepository) Save(ctx context.Context, state application.ExternalMappingState, expectedRevision string) (application.ExternalMappingState, error) {
+	return p.adapter.saveExternalMappings(ctx, state, expectedRevision)
 }
 
 type executionWorkspace struct{ adapter *Adapter }

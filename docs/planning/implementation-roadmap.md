@@ -117,8 +117,12 @@ issue and relationship actions, creates missing managed labels only, preserves
 full briefs through stdin, guards fresh issue revisions, and returns partial
 identity evidence. Source-linked creates and unmapped updates retain recoverable
 slugs; existing mappings support renamed issues without being rewritten.
-Adoption, mapping persistence, and retained milestone/workspace planning remain
-pending. This is not yet the complete retained promotion workflow.
+Recoverable mapping persistence now reads and atomically replaces the complete
+provider-neutral mapping view through the existing GitHub metadata shape. It
+preserves legacy-private fields, performs no provider work, rejects stale
+writers by raw-file revision, and keeps semantic no-op saves byte-stable.
+Adoption and retained milestone/workspace planning remain pending. This is not
+yet the complete retained promotion workflow.
 
 Move retained GitHub collaboration/publication/repository/execution behavior
 behind generic Planning ports. Support planning PRs and retained Discussion,
@@ -173,7 +177,7 @@ lifecycle, diagnostics, and distribution direction.
 
 ## Exact Next Slice
 
-> Add adoption and recoverable mapping persistence, and extend reviewed
+> Add adoption using recoverable mapping persistence, then extend reviewed
 > publication plans with retained milestone and workspace decisions.
 > Preserve structured spec briefs, stable identity, confirmation, idempotency,
 > and partial-failure recovery. Native module wiring remains in rollout slice 5.
