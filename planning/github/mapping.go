@@ -282,6 +282,9 @@ func mergeExternalMappings(current githubState, desired application.ExternalMapp
 	if len(desired.SourceReferences) > 1 {
 		return next, mappingError(application.IntegrationUnsupportedCapability, "mapping.save", "legacy metadata cannot assign multiple sources without artifact associations")
 	}
+	if len(desired.SourceReferences) == 1 && len(seenArtifacts) == 0 {
+		return next, mappingError(application.IntegrationUnsupportedCapability, "mapping.save", "legacy metadata cannot retain a source without an artifact mapping")
+	}
 	var source application.ExternalReference
 	if len(desired.SourceReferences) == 1 {
 		source = desired.SourceReferences[0]
@@ -397,7 +400,7 @@ func mappingDiscussionLocation(ref application.ExternalReference) (string, int, 
 func validateMilestoneReference(repo string, ref application.ExternalReference) error {
 	number, err := strconv.Atoi(ref.DisplayID)
 	want := fmt.Sprintf("https://github.com/%s/milestone/%d", repo, number)
-	if ref.Provider != providerName || ref.Kind != "milestone" || number < 1 || err != nil || ref.URL != want || ref.OpaqueID == "" {
+	if ref.Provider != providerName || ref.Kind != "milestone" || number < 1 || err != nil || ref.DisplayID != strconv.Itoa(number) || ref.URL != want || ref.OpaqueID == "" {
 		return mappingError(application.IntegrationAmbiguousIdentity, "mapping.save", "milestone mapping identity is inconsistent")
 	}
 	return nil

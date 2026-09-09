@@ -221,6 +221,13 @@ func TestExternalMappingRejectsAmbiguousAndUnsupportedChanges(t *testing.T) {
 		"multiple sources": func(state *application.ExternalMappingState) {
 			state.SourceReferences = append(state.SourceReferences, application.ExternalReference{Provider: providerName, Kind: "discussion", OpaqueID: "D", DisplayID: "50", URL: "https://github.com/JimmyMcBride/plan/discussions/50"})
 		},
+		"source without artifact": func(state *application.ExternalMappingState) {
+			state.ArtifactReferences = nil
+			state.GroupReferences = nil
+		},
+		"noncanonical milestone display ID": func(state *application.ExternalMappingState) {
+			state.GroupReferences[0].Reference.DisplayID = "07"
+		},
 		"new workspace": func(state *application.ExternalMappingState) {
 			state.WorkspaceReferences = append(state.WorkspaceReferences, application.ExternalReference{Provider: providerName, Kind: "project", OpaqueID: "P", DisplayID: "1", URL: "https://github.com/users/JimmyMcBride/projects/1"})
 		},
@@ -230,6 +237,7 @@ func TestExternalMappingRejectsAmbiguousAndUnsupportedChanges(t *testing.T) {
 			state := loaded
 			state.ArtifactReferences = slices.Clone(loaded.ArtifactReferences)
 			state.SourceReferences = slices.Clone(loaded.SourceReferences)
+			state.GroupReferences = slices.Clone(loaded.GroupReferences)
 			state.WorkspaceReferences = slices.Clone(loaded.WorkspaceReferences)
 			mutate(&state)
 			if _, err := adapter.ExternalMappingRepository().Save(context.Background(), state, loaded.Revision); err == nil {
