@@ -201,6 +201,46 @@ func runPublication(t *testing.T, adapter *Adapter, input application.Publicatio
 	return service.ApplyPublication(context.Background(), adapter.PublicationTarget(), application.PublicationApplyInput{Intent: input, ExpectedPlan: plan, Confirmed: true}, publicationAllow{}, events)
 }
 
+func TestAdoptionUpdatesExplicitUnmanagedIssueThenPersistsMapping(t *testing.T) {
+	runner := newPublicationWriteRunner(t)
+	issue := publicationTestIssue(42, "A", "unmanaged body")
+	issue.Labels = nil
+	runner.issues[issue.Number] = issue
+	root := filepath.Join(t.TempDir(), "project with spaces")
+	adapter := New(Config{Enabled: true}, Options{ProjectRoot: root, Runner: runner})
+	artifact := planning.ArtifactRef{Kind: planning.ArtifactSpec, ID: "a"}
+	source := application.ExternalReference{Provider: "github", Kind: "discussion", OpaqueID: "https://github.com/owner/repo/discussions/49", DisplayID: "49", URL: "https://github.com/owner/repo/discussions/49"}
+	issueURL := "https://github.com/owner/repo/issues/42"
+	intent := application.AdoptionPreviewInput{
+		Target:    application.ExternalReference{Provider: "github", Kind: "repository", OpaqueID: "owner/repo", URL: "https://github.com/owner/repo"},
+		Source:    &source,
+		Artifacts: []application.PublicationArtifact{{Artifact: artifact, Title: "A", Content: "## Source\n" + source.URL + "\n\nCanonical body.", Readiness: planning.ReadinessReady}},
+		Candidates: []application.ArtifactExternalReference{{
+			Artifact:  artifact,
+			Reference: application.ExternalReference{Provider: "github", Kind: "issue", OpaqueID: issueURL, DisplayID: "42", URL: issueURL},
+		}},
+	}
+	service := application.New(nil, application.Options{ModuleID: "planning"})
+	plan, err := service.PreviewAdoption(context.Background(), adapter.PublicationTarget(), adapter.ExternalMappingRepository(), intent, publicationAllow{})
+	if err != nil || len(plan.Publication.Actions) != 1 || plan.Publication.Actions[0].Action != application.MutationUpdate {
+		t.Fatalf("plan=%+v err=%v", plan, err)
+	}
+	events := &publicationWriteEvents{}
+	result, err := service.ApplyAdoption(context.Background(), adapter.PublicationTarget(), adapter.ExternalMappingRepository(), application.AdoptionApplyInput{Intent: intent, ExpectedPlan: plan, Confirmed: true}, publicationAllow{}, events)
+	if err != nil || runner.issues[42].Body != intent.Artifacts[0].Content || len(result.Mappings.ArtifactReferences) != 1 || result.Event == nil || events.calls != 1 {
+		t.Fatalf("result=%+v issue=%+v events=%d err=%v", result, runner.issues[42], events.calls, err)
+	}
+	writes := runner.writes
+	plan, err = service.PreviewAdoption(context.Background(), adapter.PublicationTarget(), adapter.ExternalMappingRepository(), intent, publicationAllow{})
+	if err != nil || plan.Publication.Actions[0].Action != application.MutationReuse {
+		t.Fatalf("rerun plan=%+v err=%v", plan, err)
+	}
+	result, err = service.ApplyAdoption(context.Background(), adapter.PublicationTarget(), adapter.ExternalMappingRepository(), application.AdoptionApplyInput{Intent: intent, ExpectedPlan: plan, Confirmed: true}, publicationAllow{}, events)
+	if err != nil || runner.writes != writes || result.Event != nil || events.calls != 1 {
+		t.Fatalf("rerun result=%+v writes=%d events=%d err=%v", result, runner.writes, events.calls, err)
+	}
+}
+
 func TestPublicationCreateUpdateAndRerunPreserveContent(t *testing.T) {
 	adapter, runner, input := publicationWriteFixture(t)
 	events := &publicationWriteEvents{}

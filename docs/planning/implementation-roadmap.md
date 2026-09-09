@@ -121,8 +121,12 @@ Recoverable mapping persistence now reads and atomically replaces the complete
 provider-neutral mapping view through the existing GitHub metadata shape. It
 preserves legacy-private fields, performs no provider work, rejects stale
 writers by raw-file revision, and keeps semantic no-op saves byte-stable.
-Adoption and retained milestone/workspace planning remain pending. This is not
-yet the complete retained promotion workflow.
+Adoption now resolves explicit unmanaged issues by stable identity, classifies
+canonical updates, revalidates confirmation and revisions, applies provider
+changes before saving mappings, and retains partial evidence without rollback.
+Identical reruns skip provider and audit mutations. Retained milestone/workspace
+planning remains pending. This is not yet the complete retained promotion
+workflow.
 
 Move retained GitHub collaboration/publication/repository/execution behavior
 behind generic Planning ports. Support planning PRs and retained Discussion,

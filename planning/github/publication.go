@@ -93,6 +93,16 @@ func (a *Adapter) inspectPublication(ctx context.Context, request application.Pu
 	if len(wanted) == 0 {
 		return empty, publicationIdentityError("publication inspection requires artifacts")
 	}
+	state, err := a.state.read()
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return empty, providerError(application.IntegrationProviderUnavailable, "publication.inspect", "cannot read adapter metadata")
+	}
+	if err != nil {
+		state = normalizeGitHubState(githubState{})
+	}
+	if (state.Repo != "" && state.Repo != repo) || (state.Repo == "" && len(state.Planning) > 0) {
+		return empty, publicationIdentityError("metadata belongs to a different repository")
+	}
 	sourceURL := ""
 	if request.Source != nil {
 		if request.Source.URL == "" {
@@ -107,22 +117,48 @@ func (a *Adapter) inspectPublication(ctx context.Context, request application.Pu
 			return empty, publicationIdentityError("source URL must use its canonical representation for recovery")
 		}
 	}
-	state, err := a.state.read()
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return empty, providerError(application.IntegrationProviderUnavailable, "publication.inspect", "cannot read adapter metadata")
-	}
-	if err != nil {
-		state = normalizeGitHubState(githubState{})
-	}
-	if (state.Repo != "" && state.Repo != repo) || (state.Repo == "" && len(state.Planning) > 0) {
-		return empty, publicationIdentityError("metadata belongs to a different repository")
-	}
+	mapped := map[planning.ArtifactRef]int{}
 	byNumber := map[int]publicationIssue{}
+	candidateOwners := map[int]planning.ArtifactRef{}
+	for _, candidate := range request.Candidates {
+		if !wanted[candidate.Artifact] {
+			return empty, publicationIdentityError("candidate reference does not match publication scope")
+		}
+		if _, duplicate := mapped[candidate.Artifact]; duplicate {
+			return empty, publicationIdentityError("multiple candidate references match one artifact")
+		}
+		number, err := strconv.Atoi(candidate.Reference.DisplayID)
+		wantURL := fmt.Sprintf("https://github.com/%s/issues/%d", repo, number)
+		if err != nil || number < 1 || candidate.Reference.Provider != providerName || candidate.Reference.Kind != "issue" ||
+			candidate.Reference.OpaqueID == "" || candidate.Reference.URL != wantURL {
+			return empty, publicationIdentityError("candidate has no canonical issue identity")
+		}
+		if owner, duplicate := candidateOwners[number]; duplicate && owner != candidate.Artifact {
+			return empty, publicationIdentityError("one candidate issue matches multiple artifacts")
+		}
+		candidateOwners[number] = candidate.Artifact
+		raw, err := a.runProvider(ctx, "publication.inspect", "api", "--method", "GET", fmt.Sprintf("repos/%s/issues/%d", repo, number))
+		if err != nil {
+			return empty, err
+		}
+		var issue publicationIssue
+		if json.Unmarshal(raw, &issue) != nil || validatePublicationIssue(&issue, repo) != nil || issue.Number != number {
+			return empty, publicationIdentityError("provider returned another candidate issue")
+		}
+		if candidate.Reference.OpaqueID != candidate.Reference.URL && candidate.Reference.OpaqueID != issue.ID {
+			return empty, publicationIdentityError("candidate opaque identity disagrees with provider")
+		}
+		if old, exists := byNumber[number]; exists && !reflect.DeepEqual(old, issue) {
+			return empty, providerError(application.IntegrationRevisionConflict, "publication.inspect", "provider changed candidate evidence during inspection")
+		}
+		mapped[candidate.Artifact] = number
+		byNumber[number] = issue
+	}
 	kinds := []planning.ArtifactKind{planning.ArtifactInitiative, planning.ArtifactSpec}
 	for _, kind := range kinds {
 		needed := false
 		for ref := range wanted {
-			needed = needed || ref.Kind == kind
+			needed = needed || (ref.Kind == kind && mapped[ref] == 0)
 		}
 		if !needed {
 			continue
@@ -150,7 +186,6 @@ func (a *Adapter) inspectPublication(ctx context.Context, request application.Pu
 	}
 	// Metadata is authoritative for renamed or unlabelled issues. Read those
 	// directly; a missing known object must not turn into a create action.
-	mapped := map[planning.ArtifactRef]int{}
 	for slug, record := range state.Planning {
 		ref := planning.ArtifactRef{Kind: planning.ArtifactKind(record.Kind), ID: planning.ArtifactID(slug)}
 		if kind, exists := wantedSlugs[ref.ID]; exists && kind != ref.Kind {
@@ -164,6 +199,9 @@ func (a *Adapter) inspectPublication(ctx context.Context, request application.Pu
 		}
 		if sourceURL != "" && record.DiscussionURL != "" && record.DiscussionURL != sourceURL {
 			return empty, publicationIdentityError("known artifact belongs to another source")
+		}
+		if candidateNumber, candidate := mapped[ref]; candidate && candidateNumber != record.IssueNumber {
+			return empty, publicationIdentityError("candidate disagrees with known publication mapping")
 		}
 		mapped[ref] = record.IssueNumber
 		if _, exists := byNumber[record.IssueNumber]; !exists {
