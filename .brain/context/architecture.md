@@ -1,5 +1,5 @@
 ---
-updated: "2026-09-07T23:15:37Z"
+updated: "2026-09-08T01:09:10Z"
 ---
 # Architecture
 
@@ -44,6 +44,8 @@ Use this file for the structural shape of the repository.
 <!-- brain:end context-architecture -->
 
 ## Local Notes
+
+- 2026-09-07: The GitHub adapter's `ExternalMappingRepository` now projects stable artifact, source, milestone, workspace, and reconciliation identities from the existing `.plan/.meta/github.json` shape without provider calls. Saves replace the complete generic mapping view while preserving legacy-private metadata, use a raw-file SHA-256 revision plus a cooperative lock and final reread to reject stale writers, and leave byte content and revision unchanged for semantic no-ops. Ambiguous or cross-repository identities fail closed. Legacy metadata cannot represent multiple unassociated collaboration sources, and workspace mapping changes remain deferred to the reviewed workspace transition.
 
 - 2026-09-07: GitHub publication apply implements reviewed issue and relationship actions, reusing the shared planner for pre-write validation. `InputRunner` carries full mutation payloads through stdin; read-only runners remain compatible and mutation calls fail explicitly without stdin support. REST/CLI revisions normalize transport-only fields and label ordering. Creates require canonical Discussion links and stable title slugs; unmapped updates must retain those keys, while mapped renames remain supported. Metadata-backed update exceptions are trusted only when metadata belongs to the target repository. Cancellation and authentication/authorization failures retain their original semantics; only uncertain provider mutation failures become partial failures. Missing labels are created once, unrelated labels and metadata are preserved, and partial results retain completed and failing action evidence. Lost responses require inspection, not automatic retry or deletion. Final cross-client read/write races remain a provider limitation. Milestone/workspace plan decisions, adoption, mapping persistence, and native wiring remain pending.
 

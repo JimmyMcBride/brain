@@ -117,13 +117,20 @@ func (s *fileStateStore) read() (githubState, error) {
 	return normalizeGitHubState(state), nil
 }
 
-func (s *fileStateStore) write(state githubState) error {
+func encodeGitHubState(state githubState) ([]byte, error) {
 	state = normalizeGitHubState(state)
 	raw, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
-		return fmt.Errorf("marshal GitHub adapter state: %w", err)
+		return nil, fmt.Errorf("marshal GitHub adapter state: %w", err)
 	}
-	raw = append(raw, '\n')
+	return append(raw, '\n'), nil
+}
+
+func (s *fileStateStore) write(state githubState) error {
+	raw, err := encodeGitHubState(state)
+	if err != nil {
+		return err
+	}
 	if err := atomicWriteFile(s.path, raw, 0o644); err != nil {
 		return fmt.Errorf("write GitHub adapter state: %w", err)
 	}
