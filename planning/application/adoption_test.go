@@ -167,8 +167,13 @@ func TestAdoptionGatesAndStalePreview(t *testing.T) {
 	}
 	service, target, mappings, input, plan := adoptionFixture(t)
 	mappings.state.Revision = "changed"
-	if _, err := service.ApplyAdoption(context.Background(), target, mappings, AdoptionApplyInput{Intent: input, ExpectedPlan: plan, Confirmed: true}, &collaborationPolicy{}, &collaborationEvents{}); err == nil || target.writes != 0 || mappings.saves != 0 {
+	if _, err := service.ApplyAdoption(context.Background(), target, mappings, AdoptionApplyInput{Intent: input, ExpectedPlan: plan, Confirmed: true}, &collaborationPolicy{}, &collaborationEvents{}); !isAdoptionApplyConflict(err) || target.writes != 0 || mappings.saves != 0 {
 		t.Fatal("stale mapping preview reached mutation", err)
+	}
+	_, target, mappings, input, plan = adoptionFixture(t)
+	plan.SchemaVersion = 0
+	if _, err := service.ApplyAdoption(context.Background(), target, mappings, AdoptionApplyInput{Intent: input, ExpectedPlan: plan, Confirmed: true}, &collaborationPolicy{}, &collaborationEvents{}); !isAdoptionApplyConflict(err) || target.reads != 0 || mappings.loads != 0 {
+		t.Fatal("invalid contract reached inspection", err)
 	}
 }
 
@@ -188,6 +193,27 @@ func TestAdoptionRejectsMissingOrAmbiguousCandidatesBeforeMutation(t *testing.T)
 	if _, err := service.PreviewAdoption(context.Background(), target, mappings, input, &collaborationPolicy{}); err == nil {
 		t.Fatal("missing provider object became create")
 	}
+	for _, field := range []string{"provider", "kind", "opaque", "display", "url"} {
+		t.Run("whitespace-"+field, func(t *testing.T) {
+			service, target, mappings, input, _ := adoptionFixture(t)
+			ref := &input.Candidates[0].Reference
+			switch field {
+			case "provider":
+				ref.Provider = " "
+			case "kind":
+				ref.Kind = " work"
+			case "opaque":
+				ref.OpaqueID = " "
+			case "display":
+				ref.DisplayID += " "
+			case "url":
+				ref.URL = " "
+			}
+			if _, err := service.PreviewAdoption(context.Background(), target, mappings, input, &collaborationPolicy{}); err == nil || target.reads != 0 || mappings.loads != 0 {
+				t.Fatal("whitespace identity reached state or provider", err)
+			}
+		})
+	}
 }
 
 func TestAdoptionRetainsEvidenceWhenMappingOrAuditFails(t *testing.T) {
@@ -202,4 +228,9 @@ func TestAdoptionRetainsEvidenceWhenMappingOrAuditFails(t *testing.T) {
 			t.Fatalf("result=%+v err=%v", result, err)
 		}
 	}
+}
+
+func isAdoptionApplyConflict(err error) bool {
+	var integration *IntegrationError
+	return errors.As(err, &integration) && integration.Class == IntegrationRevisionConflict && integration.Operation == "adoption.apply"
 }

@@ -125,7 +125,7 @@ func (s *Service) ApplyAdoption(ctx context.Context, target PublicationTarget, m
 		return result, ErrEventSinkRequired
 	}
 	if input.ExpectedPlan.SchemaVersion != IntegrationContractVersion || input.ExpectedPlan.Publication.SchemaVersion != IntegrationContractVersion || input.ExpectedPlan.Mappings.SchemaVersion != IntegrationContractVersion {
-		return result, adoptionConflict("adoption preview is missing or changed; review a fresh preview")
+		return result, adoptionApplyConflict()
 	}
 	fresh, err := s.PreviewAdoption(ctx, target, mappings, input.Intent, authorizer)
 	if err != nil {
@@ -133,7 +133,7 @@ func (s *Service) ApplyAdoption(ctx context.Context, target PublicationTarget, m
 	}
 	result.Mappings = fresh.Mappings
 	if !samePublicationJSON(fresh, input.ExpectedPlan) {
-		return result, adoptionConflict("adoption preview is missing or changed; review a fresh preview")
+		return result, adoptionApplyConflict()
 	}
 	if err := ctx.Err(); err != nil {
 		return result, err
@@ -205,9 +205,13 @@ func orderedAdoptionCandidates(artifacts []PublicationArtifact, input []Artifact
 	seenOpaqueIDs := map[[3]string]bool{}
 	candidates := slices.Clone(input)
 	for _, candidate := range candidates {
-		location := [4]string{candidate.Reference.Provider, candidate.Reference.Kind, candidate.Reference.DisplayID, candidate.Reference.URL}
-		opaqueID := [3]string{candidate.Reference.Provider, candidate.Reference.Kind, candidate.Reference.OpaqueID}
-		if !wanted[candidate.Artifact] || seenArtifacts[candidate.Artifact] || candidate.Reference.Provider == "" || candidate.Reference.Kind == "" || candidate.Reference.OpaqueID == "" || candidate.Reference.DisplayID == "" || candidate.Reference.URL == "" || seenLocations[location] || seenOpaqueIDs[opaqueID] {
+		ref := candidate.Reference
+		provider, kind := strings.TrimSpace(ref.Provider), strings.TrimSpace(ref.Kind)
+		opaqueIDValue, displayID, url := strings.TrimSpace(ref.OpaqueID), strings.TrimSpace(ref.DisplayID), strings.TrimSpace(ref.URL)
+		location := [4]string{provider, kind, displayID, url}
+		opaqueID := [3]string{provider, kind, opaqueIDValue}
+		if !wanted[candidate.Artifact] || seenArtifacts[candidate.Artifact] || provider == "" || kind == "" || opaqueIDValue == "" || displayID == "" || url == "" ||
+			provider != ref.Provider || kind != ref.Kind || opaqueIDValue != ref.OpaqueID || displayID != ref.DisplayID || url != ref.URL || seenLocations[location] || seenOpaqueIDs[opaqueID] {
 			return nil, adoptionConflict("adoption candidates contain an invalid or duplicate identity")
 		}
 		seenArtifacts[candidate.Artifact] = true
@@ -295,4 +299,8 @@ func externalLocationKey(ref ExternalReference) [4]string {
 
 func adoptionConflict(message string) error {
 	return &IntegrationError{Class: IntegrationAmbiguousIdentity, Operation: "adoption.preview", Message: message}
+}
+
+func adoptionApplyConflict() error {
+	return &IntegrationError{Class: IntegrationRevisionConflict, Operation: "adoption.apply", Message: "adoption preview is missing or changed; review a fresh preview"}
 }
