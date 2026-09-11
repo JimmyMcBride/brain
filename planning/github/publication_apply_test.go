@@ -504,3 +504,25 @@ func TestPublicationRejectsIncompleteLabelListingAndMissingInputRunner(t *testin
 		t.Fatal(err)
 	}
 }
+
+func TestPublicationRejectsCoordinationActionsBeforeProviderWrites(t *testing.T) {
+	for _, kind := range []string{"group", "workspace"} {
+		t.Run(kind, func(t *testing.T) {
+			adapter, runner, input := publicationWriteFixture(t)
+			if kind == "group" {
+				input.Group = &application.PublicationGroup{Title: "Milestone"}
+			} else {
+				input.Workspace = &application.PublicationWorkspaceDecision{Choice: application.PublicationWorkspaceSkip}
+			}
+			plan, err := application.New(nil, application.Options{}).PreviewPublication(context.Background(), adapter.PublicationTarget(), input, publicationAllow{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = adapter.PublicationTarget().Apply(context.Background(), plan)
+			var integration *application.IntegrationError
+			if !errors.As(err, &integration) || integration.Class != application.IntegrationUnsupportedCapability || runner.writes != 0 {
+				t.Fatalf("coordination action reached provider: writes=%d err=%v", runner.writes, err)
+			}
+		})
+	}
+}
