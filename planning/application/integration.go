@@ -71,8 +71,25 @@ type PublicationActionKind string
 const (
 	// PublicationArtifactAction applies an initiative or spec artifact.
 	PublicationArtifactAction PublicationActionKind = "artifact"
+	// PublicationGroupAction applies one shared delivery grouping.
+	PublicationGroupAction PublicationActionKind = "group"
 	// PublicationRelationshipAction applies a relationship between artifacts.
 	PublicationRelationshipAction PublicationActionKind = "relationship"
+	// PublicationWorkspaceAction records an execution-workspace decision.
+	PublicationWorkspaceAction PublicationActionKind = "workspace"
+)
+
+// PublicationWorkspaceChoice is the reviewed handling for an optional
+// execution workspace.
+type PublicationWorkspaceChoice string
+
+const (
+	// PublicationWorkspaceCreate provisions a new execution workspace.
+	PublicationWorkspaceCreate PublicationWorkspaceChoice = "create"
+	// PublicationWorkspaceConnect uses an explicitly selected existing workspace.
+	PublicationWorkspaceConnect PublicationWorkspaceChoice = "connect"
+	// PublicationWorkspaceSkip records an explicit decision not to use a workspace.
+	PublicationWorkspaceSkip PublicationWorkspaceChoice = "skip"
 )
 
 // PublicationRelationshipKind identifies a provider-neutral Planning
@@ -98,6 +115,22 @@ type PublicationArtifact struct {
 	Reference    *ExternalReference      `json:"reference,omitempty"`
 }
 
+// PublicationGroup is one shared delivery grouping for a publication. Its
+// provider representation remains adapter-owned.
+type PublicationGroup struct {
+	Title     string             `json:"title"`
+	Reference *ExternalReference `json:"reference,omitempty"`
+}
+
+// PublicationWorkspaceDecision records whether coordinated execution should
+// create, connect, or explicitly skip an external workspace.
+type PublicationWorkspaceDecision struct {
+	Choice    PublicationWorkspaceChoice `json:"choice"`
+	Title     string                     `json:"title,omitempty"`
+	Reason    string                     `json:"reason,omitempty"`
+	Reference *ExternalReference         `json:"reference,omitempty"`
+}
+
 // PublicationRelationship is a semantic relationship between Planning
 // artifacts.
 type PublicationRelationship struct {
@@ -109,27 +142,33 @@ type PublicationRelationship struct {
 // PublicationInspectRequest selects provider state needed to classify a
 // publication plan.
 type PublicationInspectRequest struct {
-	Target     ExternalReference           `json:"target"`
-	Source     *ExternalReference          `json:"source,omitempty"`
-	Artifacts  []planning.ArtifactRef      `json:"artifacts"`
-	Candidates []ArtifactExternalReference `json:"candidates,omitempty"`
+	Target     ExternalReference             `json:"target"`
+	Source     *ExternalReference            `json:"source,omitempty"`
+	Artifacts  []planning.ArtifactRef        `json:"artifacts"`
+	Candidates []ArtifactExternalReference   `json:"candidates,omitempty"`
+	Group      *PublicationGroup             `json:"group,omitempty"`
+	Workspace  *PublicationWorkspaceDecision `json:"workspace,omitempty"`
 }
 
 // PublicationSnapshot is provider state used by Planning to derive actions.
 type PublicationSnapshot struct {
-	SchemaVersion int                       `json:"schema_version"`
-	Target        ExternalReference         `json:"target"`
-	Artifacts     []PublicationArtifact     `json:"artifacts,omitempty"`
-	Relationships []PublicationRelationship `json:"relationships,omitempty"`
+	SchemaVersion int                           `json:"schema_version"`
+	Target        ExternalReference             `json:"target"`
+	Artifacts     []PublicationArtifact         `json:"artifacts,omitempty"`
+	Relationships []PublicationRelationship     `json:"relationships,omitempty"`
+	Group         *PublicationGroup             `json:"group,omitempty"`
+	Workspace     *PublicationWorkspaceDecision `json:"workspace,omitempty"`
 }
 
-// PublicationApplyAction is one Planning-classified action. Exactly one of
-// Artifact or Relationship corresponds to Kind.
+// PublicationApplyAction is one Planning-classified action. Exactly one subject
+// corresponds to Kind.
 type PublicationApplyAction struct {
-	Kind         PublicationActionKind    `json:"kind"`
-	Action       MutationAction           `json:"action"`
-	Artifact     *PublicationArtifact     `json:"artifact,omitempty"`
-	Relationship *PublicationRelationship `json:"relationship,omitempty"`
+	Kind         PublicationActionKind         `json:"kind"`
+	Action       MutationAction                `json:"action"`
+	Artifact     *PublicationArtifact          `json:"artifact,omitempty"`
+	Group        *PublicationGroup             `json:"group,omitempty"`
+	Relationship *PublicationRelationship      `json:"relationship,omitempty"`
+	Workspace    *PublicationWorkspaceDecision `json:"workspace,omitempty"`
 }
 
 // PublicationPlan is an ordered, provider-neutral publication request.
@@ -163,9 +202,10 @@ type PublicationResult struct {
 // and return the completed prefix (including no-op actions) plus a failing action
 // on partial failure. Evidence retains original actions; new identities belong in
 // References. Reuse and unchanged actions perform no remote writes. References
-// on completed artifact actions must include the resulting stable identity.
-// Known artifact identities must be retained rather than replaced. References on
-// a failed action identify writes already made, not merely inspected objects.
+// on completed artifact, group, and non-skipped workspace actions must include
+// the resulting stable identity. Known identities must be retained rather than
+// replaced. References on a failed action identify writes already made, not
+// merely inspected objects.
 type PublicationTarget interface {
 	Inspect(context.Context, PublicationInspectRequest) (PublicationSnapshot, error)
 	Apply(context.Context, PublicationPlan) (PublicationResult, error)

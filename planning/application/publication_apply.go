@@ -71,8 +71,8 @@ func (s *Service) ApplyPublication(ctx context.Context, target PublicationTarget
 	if !changed {
 		for _, action := range plan.Actions {
 			evidence := PublicationActionEvidence{Action: action}
-			if action.Artifact != nil && action.Artifact.Reference != nil {
-				evidence.References = []ExternalReference{*action.Artifact.Reference}
+			if ref := publicationActionReference(action); ref != nil {
+				evidence.References = []ExternalReference{*ref}
 			}
 			result.Evidence.Completed = append(result.Evidence.Completed, evidence)
 		}
@@ -139,11 +139,12 @@ func validatePublicationCompletion(plan PublicationPlan, evidence PublicationRes
 		if !samePublicationJSON(completed.Action, plan.Actions[i]) {
 			return invalid()
 		}
-		if artifact := completed.Action.Artifact; artifact != nil {
+		if publicationActionNeedsReference(completed.Action) {
+			expected := publicationActionReference(completed.Action)
 			matched := false
 			for _, ref := range completed.References {
 				if ref.Provider == plan.Target.Provider && ref.Kind != "" && ref.OpaqueID != "" &&
-					(artifact.Reference == nil || sameExternalIdentity(ref, *artifact.Reference)) {
+					(expected == nil || sameExternalIdentity(ref, *expected)) {
 					matched = true
 				}
 			}
@@ -161,4 +162,21 @@ func validatePublicationCompletion(plan PublicationPlan, evidence PublicationRes
 		return invalid()
 	}
 	return nil
+}
+
+func publicationActionReference(action PublicationApplyAction) *ExternalReference {
+	switch {
+	case action.Artifact != nil:
+		return action.Artifact.Reference
+	case action.Group != nil:
+		return action.Group.Reference
+	case action.Workspace != nil && action.Workspace.Choice != PublicationWorkspaceSkip:
+		return action.Workspace.Reference
+	default:
+		return nil
+	}
+}
+
+func publicationActionNeedsReference(action PublicationApplyAction) bool {
+	return action.Artifact != nil || action.Group != nil || action.Workspace != nil && action.Workspace.Choice != PublicationWorkspaceSkip
 }

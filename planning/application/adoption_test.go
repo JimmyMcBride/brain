@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -132,6 +134,25 @@ func TestAdoptionPreviewApplyAndNoOpRerun(t *testing.T) {
 	result, err = service.ApplyAdoption(context.Background(), target, mappings, AdoptionApplyInput{Intent: input, ExpectedPlan: plan, Confirmed: true}, &collaborationPolicy{}, events)
 	if err != nil || target.writes != writes || mappings.saves != saves+1 || events.calls != eventCalls || result.Event != nil || result.Mappings.Revision != "next" {
 		t.Fatalf("no-op result=%+v err=%v", result, err)
+	}
+}
+
+func TestAdoptionPreviewDoesNotRequirePublicationWorkspaceDecision(t *testing.T) {
+	targetRef := ExternalReference{Provider: "test", Kind: "repository", OpaqueID: "owner/repo", URL: "https://example.test/owner/repo"}
+	input := AdoptionPreviewInput{Target: targetRef}
+	target := &adoptionTargetMemory{snapshot: PublicationSnapshot{SchemaVersion: IntegrationContractVersion, Target: targetRef}}
+	for number, id := range []planning.ArtifactID{"a", "b", "c", "d", "e"} {
+		artifact := planning.ArtifactRef{Kind: planning.ArtifactSpec, ID: id}
+		url := "https://example.test/issues/" + string(id)
+		ref := ExternalReference{Provider: "test", Kind: "work", OpaqueID: "node-" + string(id), DisplayID: fmt.Sprint(number + 1), URL: url, Revision: "r1"}
+		input.Artifacts = append(input.Artifacts, PublicationArtifact{Artifact: artifact, Title: strings.ToUpper(string(id)), Content: "same", Readiness: planning.ReadinessReady})
+		input.Candidates = append(input.Candidates, ArtifactExternalReference{Artifact: artifact, Reference: ExternalReference{Provider: "test", Kind: "work", OpaqueID: url, DisplayID: ref.DisplayID, URL: url}})
+		target.snapshot.Artifacts = append(target.snapshot.Artifacts, PublicationArtifact{Artifact: artifact, Title: strings.ToUpper(string(id)), Content: "same", Readiness: planning.ReadinessReady, Reference: &ref})
+	}
+	mappings := &adoptionMappingMemory{state: ExternalMappingState{SchemaVersion: IntegrationContractVersion, Revision: "base"}}
+	plan, err := New(nil, Options{}).PreviewAdoption(context.Background(), target, mappings, input, &collaborationPolicy{})
+	if err != nil || len(plan.Publication.Actions) != 5 || target.reads != 1 {
+		t.Fatalf("plan=%+v reads=%d err=%v", plan, target.reads, err)
 	}
 }
 

@@ -124,9 +124,13 @@ writers by raw-file revision, and keeps semantic no-op saves byte-stable.
 Adoption now resolves explicit unmanaged issues by stable identity, classifies
 canonical updates, revalidates confirmation and revisions, applies provider
 changes before saving mappings, and retains partial evidence without rollback.
-Identical reruns skip provider and audit mutations. Retained milestone/workspace
-planning remains pending. This is not yet the complete retained promotion
-workflow.
+Identical reruns skip provider and audit mutations. Reviewed publication plans
+now include a provider-neutral shared group plus an explicit create, connect, or
+skip workspace decision; direct five-or-more-spec publication previews require
+that workspace choice before provider inspection. Existing identities classify
+as reuse or unchanged, and no-op apply evidence retains group/workspace
+references. GitHub milestone and Project inspection/apply remain pending, so
+this is not yet the complete retained promotion workflow.
 
 Move retained GitHub collaboration/publication/repository/execution behavior
 behind generic Planning ports. Support planning PRs and retained Discussion,
@@ -181,7 +185,8 @@ lifecycle, diagnostics, and distribution direction.
 
 ## Exact Next Slice
 
-> Add adoption using recoverable mapping persistence, then extend reviewed
-> publication plans with retained milestone and workspace decisions.
-> Preserve structured spec briefs, stable identity, confirmation, idempotency,
-> and partial-failure recovery. Native module wiring remains in rollout slice 5.
+> Implement GitHub milestone inspection/apply for the reviewed shared-group
+> action, then implement Project inspection/apply for reviewed create/connect/
+> skip workspace decisions. Preserve structured spec briefs, stable identity,
+> confirmation, idempotency, and partial-failure recovery. Native module wiring
+> remains in rollout slice 5.

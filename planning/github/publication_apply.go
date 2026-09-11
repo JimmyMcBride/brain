@@ -144,6 +144,9 @@ func publicationPlanIntent(plan application.PublicationPlan) (application.Public
 		return input, publicationApplyConflict("a versioned publication plan is required")
 	}
 	for _, action := range plan.Actions {
+		if action.Kind == application.PublicationGroupAction || action.Kind == application.PublicationWorkspaceAction {
+			return input, providerError(application.IntegrationUnsupportedCapability, publicationApplyOperation, "publication group and workspace actions are not implemented by the GitHub adapter")
+		}
 		if action.Kind == application.PublicationRelationshipAction && action.Relationship != nil && action.Artifact == nil {
 			continue
 		}

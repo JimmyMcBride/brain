@@ -35,14 +35,26 @@ func confirmedPublicationFixture(t *testing.T) (*Service, *publicationApplyMemor
 		result := PublicationResult{SchemaVersion: IntegrationContractVersion}
 		for _, action := range plan.Actions {
 			evidence := PublicationActionEvidence{Action: action}
-			if action.Artifact != nil {
+			if action.Group != nil {
+				group := *action.Group
+				ref := ExternalReference{Provider: "test", Kind: "group", OpaqueID: "group", DisplayID: "1", URL: "https://example.test/groups/1"}
+				group.Reference = &ref
+				target.snapshot.Group = &group
+				evidence.References = []ExternalReference{ref}
+			} else if action.Artifact != nil {
 				artifact := *action.Artifact
 				ref := ExternalReference{Provider: "test", Kind: "work", OpaqueID: string(artifact.Artifact.ID), Revision: "first"}
 				artifact.Reference = &ref
 				target.snapshot.Artifacts = append(target.snapshot.Artifacts, artifact)
 				evidence.References = []ExternalReference{ref}
-			} else {
+			} else if action.Relationship != nil {
 				target.snapshot.Relationships = append(target.snapshot.Relationships, *action.Relationship)
+			} else if action.Workspace != nil && action.Workspace.Choice != PublicationWorkspaceSkip {
+				workspace := *action.Workspace
+				ref := ExternalReference{Provider: "test", Kind: "workspace", OpaqueID: "workspace-1", DisplayID: "1", URL: "https://example.test/workspaces/1"}
+				workspace.Reference = &ref
+				target.snapshot.Workspace = &workspace
+				evidence.References = []ExternalReference{ref}
 			}
 			result.Completed = append(result.Completed, evidence)
 		}
@@ -64,7 +76,7 @@ func TestPublicationApplyLifecycleAndNoOpRerun(t *testing.T) {
 	}
 	policy, events := &collaborationPolicy{}, &collaborationEvents{}
 	result, err := service.ApplyPublication(context.Background(), target, roundTrip, policy, events)
-	if err != nil || target.writes != 1 || target.reads != 1 || events.calls != 1 || len(result.Evidence.Completed) != 6 {
+	if err != nil || target.writes != 1 || target.reads != 1 || events.calls != 1 || len(result.Evidence.Completed) != 7 {
 		t.Fatalf("result=%+v reads=%d writes=%d events=%d err=%v", result, target.reads, target.writes, events.calls, err)
 	}
 	if !reflect.DeepEqual(policy.calls, []string{PermissionPublish, PermissionRead}) || result.Event.Name != EventPublicationApplied || result.Event.Source.OpaqueID != input.Intent.Target.OpaqueID || result.Event.ModuleID != "test" || !result.Event.OccurredAt.Equal(time.Unix(1, 0)) {
@@ -83,12 +95,61 @@ func TestPublicationApplyLifecycleAndNoOpRerun(t *testing.T) {
 			t.Fatal(err)
 		}
 		result, err = service.ApplyPublication(context.Background(), target, input, policy, events)
-		if err != nil || target.writes != 1 || events.calls != 1 || result.Event != nil || len(result.Evidence.Completed) != 6 {
+		if err != nil || target.writes != 1 || events.calls != 1 || result.Event != nil || len(result.Evidence.Completed) != 7 {
 			t.Fatalf("no-op rerun mapped=%v result=%+v err=%v", mapped, result, err)
 		}
 		if len(result.Evidence.Completed[0].References) != 1 {
 			t.Fatal("lost reusable identity")
 		}
+	}
+}
+
+func TestPublicationApplyNoOpRetainsCoordinationEvidence(t *testing.T) {
+	input, memory := fiveSpecPublicationFixture()
+	service := New(nil, Options{})
+	initial, err := service.PreviewPublication(context.Background(), memory, input, &collaborationPolicy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, action := range initial.Actions {
+		switch {
+		case action.Group != nil:
+			group := *action.Group
+			ref := ExternalReference{Provider: "test", Kind: "group", OpaqueID: "group-1", DisplayID: "1", URL: "https://example.test/groups/1"}
+			group.Reference = &ref
+			memory.snapshot.Group = &group
+			input.Group = &group
+		case action.Artifact != nil:
+			artifact := *action.Artifact
+			ref := ExternalReference{Provider: "test", Kind: "work", OpaqueID: string(artifact.Artifact.ID)}
+			artifact.Reference = &ref
+			memory.snapshot.Artifacts = append(memory.snapshot.Artifacts, artifact)
+		case action.Relationship != nil:
+			memory.snapshot.Relationships = append(memory.snapshot.Relationships, *action.Relationship)
+		case action.Workspace != nil:
+			ref := ExternalReference{Provider: "test", Kind: "workspace", OpaqueID: "workspace-1", DisplayID: "1", URL: "https://example.test/workspaces/1"}
+			memory.snapshot.Workspace = &PublicationWorkspaceDecision{Choice: PublicationWorkspaceCreate, Title: action.Workspace.Title, Reference: &ref}
+			input.Workspace = &PublicationWorkspaceDecision{Choice: PublicationWorkspaceConnect, Reason: "Use reviewed workspace.", Reference: &ref}
+		}
+	}
+	input.Artifacts = memory.snapshot.Artifacts
+	plan, err := service.PreviewPublication(context.Background(), memory, input, &collaborationPolicy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := &publicationApplyMemory{publicationMemory: memory, apply: func(context.Context, PublicationPlan) (PublicationResult, error) {
+		t.Fatal("no-op coordination plan reached provider apply")
+		return PublicationResult{}, nil
+	}}
+	result, err := service.ApplyPublication(context.Background(), target, PublicationApplyInput{Intent: input, ExpectedPlan: plan, Confirmed: true}, &collaborationPolicy{}, &collaborationEvents{})
+	if err != nil || target.writes != 0 || result.Event != nil {
+		t.Fatalf("result=%+v writes=%d err=%v", result, target.writes, err)
+	}
+	if got := result.Evidence.Completed[0].References; len(got) != 1 || got[0].Kind != "group" {
+		t.Fatalf("group evidence=%+v", got)
+	}
+	if got := result.Evidence.Completed[len(result.Evidence.Completed)-1].References; len(got) != 1 || got[0].Kind != "workspace" {
+		t.Fatalf("workspace evidence=%+v", got)
 	}
 }
 
