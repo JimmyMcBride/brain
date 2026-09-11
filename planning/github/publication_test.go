@@ -39,6 +39,12 @@ func (r *publicationRunner) Run(_ context.Context, _ string, args ...string) (Ru
 					found = true
 				}
 			}
+			for _, issue := range r.listed {
+				if !found && args[3] == fmt.Sprintf("repos/owner/repo/issues/%d", issue.Number) {
+					value = issue
+					found = true
+				}
+			}
 			if !found && strings.Contains(args[3], "?per_page=100") {
 				value = []publicationIssue{}
 			} else if !found {
@@ -127,6 +133,28 @@ func TestPublicationReadsRenamedUnlabelledMappedIssue(t *testing.T) {
 	delete(runner.direct, 10)
 	if _, err := adapter.PublicationTarget().Inspect(context.Background(), publicationTestRequest()); err == nil {
 		t.Fatal("missing known object treated as create")
+	}
+}
+
+func TestPublicationResolvesExplicitAdoptionCandidate(t *testing.T) {
+	issue := publicationTestIssue(10, "Unmanaged title", "unmanaged body")
+	issue.Labels = nil
+	runner := &publicationRunner{t: t, listed: []publicationIssue{}, direct: map[int]publicationIssue{10: issue}}
+	adapter := New(Config{Enabled: true}, Options{ProjectRoot: t.TempDir(), Runner: runner})
+	request := publicationTestRequest()
+	request.Candidates = []application.ArtifactExternalReference{{
+		Artifact: request.Artifacts[0],
+		Reference: application.ExternalReference{
+			Provider: "github", OpaqueID: issue.URL, Kind: "issue", DisplayID: "10", URL: issue.URL,
+		},
+	}}
+	snapshot, err := adapter.PublicationTarget().Inspect(context.Background(), request)
+	if err != nil || len(snapshot.Artifacts) != 1 || snapshot.Artifacts[0].Reference.OpaqueID != "I_10" || snapshot.Artifacts[0].Title != "Unmanaged title" {
+		t.Fatalf("snapshot=%+v err=%v", snapshot, err)
+	}
+	request.Candidates[0].Reference.OpaqueID = "different-node"
+	if _, err := adapter.PublicationTarget().Inspect(context.Background(), request); err == nil {
+		t.Fatal("accepted candidate with conflicting opaque identity")
 	}
 }
 

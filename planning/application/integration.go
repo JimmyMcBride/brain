@@ -109,9 +109,10 @@ type PublicationRelationship struct {
 // PublicationInspectRequest selects provider state needed to classify a
 // publication plan.
 type PublicationInspectRequest struct {
-	Target    ExternalReference      `json:"target"`
-	Source    *ExternalReference     `json:"source,omitempty"`
-	Artifacts []planning.ArtifactRef `json:"artifacts"`
+	Target     ExternalReference           `json:"target"`
+	Source     *ExternalReference          `json:"source,omitempty"`
+	Artifacts  []planning.ArtifactRef      `json:"artifacts"`
+	Candidates []ArtifactExternalReference `json:"candidates,omitempty"`
 }
 
 // PublicationSnapshot is provider state used by Planning to derive actions.
@@ -246,9 +247,13 @@ type ExternalMappingRepository interface {
 // AdoptionResult reports provider objects adopted into stable Planning
 // mappings. Actions retain the application-owned classification.
 type AdoptionResult struct {
-	SchemaVersion int                         `json:"schema_version"`
-	Actions       []PublicationActionEvidence `json:"actions,omitempty"`
-	Mappings      ExternalMappingState        `json:"mappings"`
+	SchemaVersion         int                         `json:"schema_version"`
+	Actions               []PublicationActionEvidence `json:"actions,omitempty"`
+	Failed                *PublicationActionEvidence  `json:"failed,omitempty"`
+	ManualFallbackAllowed bool                        `json:"manual_fallback_allowed"`
+	ManualFallbackReason  string                      `json:"manual_fallback_reason,omitempty"`
+	Mappings              ExternalMappingState        `json:"mappings"`
+	Event                 *Event                      `json:"event,omitempty"`
 }
 
 // ExecutionStatus is the provider-neutral delivery status Planning can apply.

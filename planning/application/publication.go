@@ -13,9 +13,10 @@ import (
 // PublicationPreviewInput supplies canonical artifact intent, including complete
 // content. The planner never synthesizes spec text or matches objects by title.
 type PublicationPreviewInput struct {
-	Target    ExternalReference     `json:"target"`
-	Source    *ExternalReference    `json:"source,omitempty"`
-	Artifacts []PublicationArtifact `json:"artifacts"`
+	Target     ExternalReference           `json:"target"`
+	Source     *ExternalReference          `json:"source,omitempty"`
+	Artifacts  []PublicationArtifact       `json:"artifacts"`
+	Candidates []ArtifactExternalReference `json:"candidates,omitempty"`
 }
 
 // PreviewPublication inspects provider evidence and returns a deterministic plan
@@ -40,10 +41,27 @@ func (s *Service) PreviewPublication(ctx context.Context, target PublicationTarg
 		return empty, err
 	}
 	refs := make([]planning.ArtifactRef, len(artifacts))
+	candidates := slices.Clone(input.Candidates)
+	selected := map[planning.ArtifactRef]bool{}
+	for _, candidate := range candidates {
+		selected[candidate.Artifact] = true
+	}
 	for i, artifact := range artifacts {
 		refs[i] = artifact.Artifact
+		if artifact.Reference != nil && !selected[artifact.Artifact] {
+			candidates = append(candidates, ArtifactExternalReference{Artifact: artifact.Artifact, Reference: *artifact.Reference})
+		}
 	}
-	snapshot, err := target.Inspect(ctx, PublicationInspectRequest{Target: input.Target, Source: input.Source, Artifacts: refs})
+	snapshot, err := target.Inspect(ctx, PublicationInspectRequest{Target: input.Target, Source: input.Source, Artifacts: refs, Candidates: candidates})
+	if err != nil {
+		return empty, err
+	}
+	return publicationPlanFromSnapshot(input, snapshot)
+}
+
+func publicationPlanFromSnapshot(input PublicationPreviewInput, snapshot PublicationSnapshot) (PublicationPlan, error) {
+	var empty PublicationPlan
+	artifacts, err := orderedPublicationArtifacts(input.Artifacts)
 	if err != nil {
 		return empty, err
 	}

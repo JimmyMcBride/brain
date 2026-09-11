@@ -49,6 +49,7 @@ func TestPublicPlanningApplicationExportSurface(t *testing.T) {
 	t.Parallel()
 	got := exportedNames(t, ".", "application")
 	want := []string{
+		"AdoptionApplyInput", "AdoptionPlan", "AdoptionPreviewInput",
 		"PublicationApplyInput", "PublicationApplyResult", "Service.ApplyPublication", "PermissionPublish", "EventPublicationApplied",
 		"PublicationPreviewInput", "Service.PreviewPublication",
 		"CollaborationRepairInput", "CollaborationRepairResult", "EventCollaborationRepaired", "PermissionCollaboration",
@@ -60,7 +61,7 @@ func TestPublicPlanningApplicationExportSurface(t *testing.T) {
 		"CollaborationAssessment", "CollaborationContribution", "CollaborationRepairEvidence", "CollaborationRepairRequest",
 		"CollaborationSource", "CollaborationSourceSnapshot", "CreateBrainstormInput", "ErrArtifactConflict", "ErrConfirmationRequired",
 		"ErrEventSinkRequired", "ErrWorkspaceNotReadable", "ErrWorkspaceNotWritable", "Event",
-		"EventBrainstormCreated", "EventBrainstormPromoted", "EventBrainstormUpdated", "EventGuidedSessionUpdated",
+		"EventBrainstormCreated", "EventBrainstormPromoted", "EventBrainstormUpdated", "EventGuidedSessionUpdated", "EventIntegrationAdopted",
 		"EventRoadmapUpdated", "EventSink", "EventSpecExecutionStarted", "EventSpecUpdated", "GuidePacket", "GuidedSessionMutationInput", "GuidedSessionRecord",
 		"GuidedSessionResult", "GuidedSessionState", "ExecutionAttachRequest", "ExecutionDone", "ExecutionField", "ExecutionFieldRoleStatus",
 		"ExecutionInProgress", "ExecutionInReview", "ExecutionStatus", "ExecutionStatusRequest", "ExecutionTodo", "ExecutionWorkItem",
@@ -77,12 +78,12 @@ func TestPublicPlanningApplicationExportSurface(t *testing.T) {
 		"PublicationRelationshipAction", "PublicationRelationshipContains", "PublicationRelationshipDependsOn",
 		"PublicationRelationshipKind", "PublicationResult", "PublicationSnapshot", "PublicationTarget", "ReconciliationEvidence", "ReconciliationPlan", "ReconciliationResult",
 		"Repository", "RepositoryEvidence", "RepositoryEvidenceSource", "RoadmapDocument", "RoadmapParkingInput", "RoadmapPreview", "RoadmapResult",
-		"Service", "Service.AnalyzeSpec", "Service.AssessLocalBrainstorm", "Service.BeginSpecExecution", "Service.ChallengeBrainstorm", "Service.Check",
+		"Service", "Service.AnalyzeSpec", "Service.ApplyAdoption", "Service.AssessLocalBrainstorm", "Service.BeginSpecExecution", "Service.ChallengeBrainstorm", "Service.Check",
 		"Service.CreateBrainstorm", "Service.CurrentGuidePacket", "Service.CurrentGuidedSession", "Service.GetBrainstorm",
 		"Service.EditSpec", "Service.GetGuidedSession", "Service.GetSpec", "Service.GuidePacketForChain", "Service.HandoffSpec", "Service.ListBrainstorms",
 		"Service.ListGuidedSessions", "Service.ListSpecs", "Service.ParkRoadmap", "Service.PreviewBrainstorm",
 		"Service.PreviewBrainstormChallenge", "Service.PreviewBrainstormRefinement", "Service.PreviewBrainstormUpdate",
-		"Service.PreviewLocalPromotion", "Service.PreviewLocalPromotionRepair", "Service.PreviewRoadmap", "Service.PreviewRoadmapParking", "Service.ProjectStatus",
+		"Service.PreviewAdoption", "Service.PreviewLocalPromotion", "Service.PreviewLocalPromotionRepair", "Service.PreviewRoadmap", "Service.PreviewRoadmapParking", "Service.ProjectStatus",
 		"Service.PreviewSpecAnalysis", "Service.PreviewSpecChecklist", "Service.PreviewSpecEdit", "Service.PreviewSpecExecution", "Service.PreviewSpecHandoff", "Service.PreviewSpecInitiative", "Service.PreviewSpecStatus",
 		"Service.PromoteLocalBrainstorm", "Service.ReadRoadmap", "Service.RefineBrainstorm", "Service.ReopenGuidedSession",
 		"Service.RepairLocalPromotionSource", "Service.ReviewGuidedSession", "Service.RunSpecChecklist", "Service.SetSpecInitiative", "Service.SetSpecStatus", "Service.Status", "Service.SwitchGuidedSession",

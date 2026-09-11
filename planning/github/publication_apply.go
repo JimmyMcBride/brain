@@ -151,6 +151,9 @@ func publicationPlanIntent(plan application.PublicationPlan) (application.Public
 			return input, publicationApplyConflict("invalid publication action")
 		}
 		artifact := *action.Artifact
+		if artifact.Reference != nil {
+			input.Candidates = append(input.Candidates, application.ArtifactExternalReference{Artifact: artifact.Artifact, Reference: *artifact.Reference})
+		}
 		if action.Action == application.MutationCreate || action.Action == application.MutationUpdate {
 			switch artifact.Readiness {
 			case planning.ReadinessReady, planning.ReadinessBlocked, planning.ReadinessNeedsRefinement, planning.ReadinessDone:
