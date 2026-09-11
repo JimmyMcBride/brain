@@ -42,9 +42,12 @@ func (s *Service) PreviewPublication(ctx context.Context, target PublicationTarg
 	if err != nil {
 		return empty, err
 	}
-	group, workspace, err := publicationCoordinationInput(input.Target.Provider, artifacts, input.Group, input.Workspace)
+	group, workspace, err := publicationCoordinationInput(input.Target.Provider, input.Group, input.Workspace)
 	if err != nil {
 		return empty, err
+	}
+	if publicationRequiresWorkspaceChoice(artifacts) && workspace == nil {
+		return empty, publicationConflict("publication with five or more specs requires an explicit workspace choice")
 	}
 	refs := make([]planning.ArtifactRef, len(artifacts))
 	candidates := slices.Clone(input.Candidates)
@@ -71,7 +74,7 @@ func publicationPlanFromSnapshot(input PublicationPreviewInput, snapshot Publica
 	if err != nil {
 		return empty, err
 	}
-	group, workspace, err := publicationCoordinationInput(input.Target.Provider, artifacts, input.Group, input.Workspace)
+	group, workspace, err := publicationCoordinationInput(input.Target.Provider, input.Group, input.Workspace)
 	if err != nil {
 		return empty, err
 	}
@@ -153,7 +156,7 @@ func publicationPlanFromSnapshot(input PublicationPreviewInput, snapshot Publica
 	return plan, nil
 }
 
-func publicationCoordinationInput(provider string, artifacts []PublicationArtifact, group *PublicationGroup, workspace *PublicationWorkspaceDecision) (*PublicationGroup, *PublicationWorkspaceDecision, error) {
+func publicationCoordinationInput(provider string, group *PublicationGroup, workspace *PublicationWorkspaceDecision) (*PublicationGroup, *PublicationWorkspaceDecision, error) {
 	var groupCopy *PublicationGroup
 	if group != nil {
 		value := *group
@@ -168,15 +171,6 @@ func publicationCoordinationInput(provider string, artifacts []PublicationArtifa
 			value.Reference = &ref
 		}
 		groupCopy = &value
-	}
-	specs := 0
-	for _, artifact := range artifacts {
-		if artifact.Artifact.Kind == planning.ArtifactSpec {
-			specs++
-		}
-	}
-	if specs >= 5 && workspace == nil {
-		return nil, nil, publicationConflict("publication with five or more specs requires an explicit workspace choice")
 	}
 	if workspace == nil {
 		return groupCopy, nil, nil
@@ -209,6 +203,16 @@ func publicationCoordinationInput(provider string, artifacts []PublicationArtifa
 		value.Reference = &ref
 	}
 	return groupCopy, &value, nil
+}
+
+func publicationRequiresWorkspaceChoice(artifacts []PublicationArtifact) bool {
+	specs := 0
+	for _, artifact := range artifacts {
+		if artifact.Artifact.Kind == planning.ArtifactSpec {
+			specs++
+		}
+	}
+	return specs >= 5
 }
 
 func publicationGroupAction(provider string, desired, current *PublicationGroup) (*PublicationApplyAction, error) {

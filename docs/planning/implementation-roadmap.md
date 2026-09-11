@@ -126,11 +126,11 @@ canonical updates, revalidates confirmation and revisions, applies provider
 changes before saving mappings, and retains partial evidence without rollback.
 Identical reruns skip provider and audit mutations. Reviewed publication plans
 now include a provider-neutral shared group plus an explicit create, connect, or
-skip workspace decision; five-or-more-spec publications require that workspace
-choice before provider inspection. Existing identities classify as reuse or
-unchanged, and no-op apply evidence retains group/workspace references. GitHub
-milestone and Project inspection/apply remain pending, so this is not yet the
-complete retained promotion workflow.
+skip workspace decision; direct five-or-more-spec publication previews require
+that workspace choice before provider inspection. Existing identities classify
+as reuse or unchanged, and no-op apply evidence retains group/workspace
+references. GitHub milestone and Project inspection/apply remain pending, so
+this is not yet the complete retained promotion workflow.
 
 Move retained GitHub collaboration/publication/repository/execution behavior
 behind generic Planning ports. Support planning PRs and retained Discussion,
