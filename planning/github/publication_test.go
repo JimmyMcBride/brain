@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -34,7 +35,12 @@ func (r *publicationRunner) Run(_ context.Context, _ string, args ...string) (Ru
 		if links, ok := r.relationships[args[3]]; ok {
 			value = links
 		} else if strings.HasSuffix(args[3], "/milestones?state=all&per_page=100") {
-			value = r.milestones
+			milestones := make([]publicationMilestone, 0, len(r.milestones))
+			for _, milestone := range r.milestones {
+				milestones = append(milestones, milestone)
+			}
+			slices.SortFunc(milestones, func(a, b publicationMilestone) int { return a.Number - b.Number })
+			value = milestones
 		} else if strings.Contains(args[3], "/milestones/") {
 			parts := strings.Split(args[3], "/")
 			number, _ := strconv.Atoi(parts[len(parts)-1])
@@ -223,6 +229,20 @@ func TestPublicationInspectsMilestoneIdentityAndMembership(t *testing.T) {
 	snapshot, err = adapter.PublicationTarget().Inspect(context.Background(), request)
 	if err != nil || snapshot.Group.Reference.Revision == "" {
 		t.Fatalf("direct snapshot=%+v err=%v", snapshot, err)
+	}
+}
+
+func TestPublicationRecoversMilestoneByExactTitleWithoutMembership(t *testing.T) {
+	body := publicationTestRequest().Source.URL
+	issue := publicationTestIssue(10, "A", body)
+	milestone := publicationMilestone{NodeID: "MI_2", Number: 2, URL: "https://github.com/owner/repo/milestone/2", Title: "Phase 5", State: "open"}
+	runner := &publicationRunner{t: t, listed: []publicationIssue{issue}, milestones: map[int]publicationMilestone{2: milestone}}
+	adapter := New(Config{Enabled: true}, Options{ProjectRoot: t.TempDir(), Runner: runner})
+	request := publicationTestRequest()
+	request.Group = &application.PublicationGroup{Title: "phase 5"}
+	snapshot, err := adapter.PublicationTarget().Inspect(context.Background(), request)
+	if err != nil || snapshot.Group == nil || snapshot.Group.Reference.DisplayID != "2" || snapshot.Group.Reference.URL != milestone.URL || snapshot.Group.Reference.Revision == "" || len(snapshot.Group.Members) != 0 {
+		t.Fatalf("snapshot=%+v err=%v", snapshot, err)
 	}
 }
 

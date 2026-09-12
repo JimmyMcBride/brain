@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"reflect"
 	"regexp"
 	"slices"
 	"strconv"
@@ -159,7 +158,7 @@ func (a *Adapter) inspectPublication(ctx context.Context, request application.Pu
 		if candidate.Reference.OpaqueID != candidate.Reference.URL && candidate.Reference.OpaqueID != issue.ID {
 			return empty, publicationIdentityError("candidate opaque identity disagrees with provider")
 		}
-		if old, exists := byNumber[number]; exists && !reflect.DeepEqual(old, issue) {
+		if old, exists := byNumber[number]; exists && publicationIssueReference(old) != publicationIssueReference(issue) {
 			return empty, providerError(application.IntegrationRevisionConflict, "publication.inspect", "provider changed candidate evidence during inspection")
 		}
 		mapped[candidate.Artifact] = number
@@ -189,7 +188,7 @@ func (a *Adapter) inspectPublication(ctx context.Context, request application.Pu
 			if err := validatePublicationIssue(&issue, repo); err != nil {
 				return empty, err
 			}
-			if old, exists := byNumber[issue.Number]; exists && !reflect.DeepEqual(old, issue) {
+			if old, exists := byNumber[issue.Number]; exists && publicationIssueReference(old) != publicationIssueReference(issue) {
 				return empty, providerError(application.IntegrationRevisionConflict, "publication.inspect", "provider changed issue evidence during listing")
 			}
 			byNumber[issue.Number] = issue

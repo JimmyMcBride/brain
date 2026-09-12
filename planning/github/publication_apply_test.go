@@ -388,6 +388,23 @@ func TestPublicationMilestoneRepairsMembershipWithoutArtifactRewrite(t *testing.
 	}
 }
 
+func TestPublicationGroupedArtifactUpdateRetainsMilestone(t *testing.T) {
+	adapter, runner, input := publicationWriteFixture(t)
+	input.Group = &application.PublicationGroup{Title: "Phase 5"}
+	if _, err := runPublication(t, adapter, input, &publicationWriteEvents{}); err != nil {
+		t.Fatal(err)
+	}
+	input.Artifacts[0].Content += "\nUpdated grouped criteria."
+	input.Artifacts[0].Readiness = planning.ReadinessBlocked
+	result, err := runPublication(t, adapter, input, &publicationWriteEvents{})
+	issue := runner.issues[101]
+	payload := runner.payloads[len(runner.payloads)-1]
+	milestoneNumber, included := payload["milestone"].(float64)
+	if err != nil || result.Evidence.Completed[0].Action.Action != application.MutationReuse || result.Evidence.Completed[1].Action.Action != application.MutationUpdate || issue.Milestone == nil || issue.Milestone.Number != 1 || !included || int(milestoneNumber) != 1 {
+		t.Fatalf("result=%+v issue=%+v payload=%+v err=%v", result, issue, payload, err)
+	}
+}
+
 func TestPublicationMilestoneLostResponseRecoversWithoutDuplicate(t *testing.T) {
 	adapter, runner, input := publicationWriteFixture(t)
 	input.Group = &application.PublicationGroup{Title: "Phase 5"}
@@ -479,8 +496,15 @@ func TestPublicationRejectsUnsafePlansBeforeMutation(t *testing.T) {
 
 func TestPublicationRevisionNormalizesTransportShape(t *testing.T) {
 	issue := publicationTestIssue(101, "A", "body")
+	issue.Milestone = &publicationMilestone{Number: 2, Title: "Phase 5"}
 	rest := publicationREST(issue)
 	rest["state"] = "OPEN"
+	milestone := rest["milestone"].(map[string]any)
+	milestone["node_id"] = "MI_2"
+	milestone["url"] = "https://api.github.com/repos/owner/repo/milestones/2"
+	milestone["html_url"] = "https://github.com/owner/repo/milestone/2"
+	milestone["description"] = "REST-only transport detail"
+	milestone["state"] = "open"
 	raw, _ := json.Marshal(rest)
 	var decoded publicationIssue
 	if err := json.Unmarshal(raw, &decoded); err != nil {
