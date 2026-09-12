@@ -1,5 +1,5 @@
 ---
-updated: "2026-09-08T01:09:10Z"
+updated: "2026-09-12T01:07:09Z"
 ---
 # Architecture
 
@@ -45,7 +45,7 @@ Use this file for the structural shape of the repository.
 
 ## Local Notes
 
-- 2026-09-11: Publication coordination is application-owned and provider-neutral. A `PublicationGroup` represents one shared delivery grouping; `PublicationWorkspaceDecision` records create, connect, or skip. Group actions precede artifact/relationship actions and workspace actions follow them. Direct publication previews with at least five specs require an explicit workspace choice before provider reads, matching standalone Plan's retained gate; adoption remains outside that gate until coordination identity can be applied and persisted end to end. Stable current identities classify as reuse/unchanged, create/connect identity conflicts fail closed, and completed non-skipped coordination actions require stable evidence. The GitHub adapter intentionally returns unsupported before writes until milestone and Project operations are implemented.
+- 2026-09-11: Publication coordination is application-owned and provider-neutral. A `PublicationGroup` represents one shared delivery grouping and carries the canonical complete artifact membership used to classify drift; `PublicationWorkspaceDecision` records create, connect, or skip. Group actions precede artifact/relationship actions and workspace actions follow them. Direct publication previews with at least five specs require an explicit workspace choice before provider reads, matching standalone Plan's retained gate; adoption remains outside that gate until coordination identity can be applied and persisted end to end. The GitHub adapter maps groups to milestones using stable number/URL identity, revision-bound title updates, and issue membership. Inspection resolves known, attached, or exact-title identities with bounded ambiguity checks. Apply creates or renames the milestone before issue writes, attaches unchanged issues separately, includes the milestone in issue create/update payloads, retains partial evidence, and makes recovered/identical reruns write-free. Milestone titles are revisioned by the group while issue revisions track only stable milestone membership, preventing a group rename from appearing as concurrent edits to every issue. GitHub Project operations remain pending.
 
 - 2026-09-07: The GitHub adapter's `ExternalMappingRepository` now projects stable artifact, source, milestone, workspace, and reconciliation identities from the existing `.plan/.meta/github.json` shape without provider calls. Saves replace the complete generic mapping view while preserving legacy-private metadata, use a raw-file SHA-256 revision plus a cooperative lock and final reread to reject stale writers, and leave byte content and revision unchanged for semantic no-ops. Ambiguous or cross-repository identities fail closed. Legacy metadata cannot represent multiple unassociated collaboration sources, and workspace mapping changes remain deferred to the reviewed workspace transition.
 

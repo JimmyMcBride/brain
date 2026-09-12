@@ -129,8 +129,13 @@ now include a provider-neutral shared group plus an explicit create, connect, or
 skip workspace decision; direct five-or-more-spec publication previews require
 that workspace choice before provider inspection. Existing identities classify
 as reuse or unchanged, and no-op apply evidence retains group/workspace
-references. GitHub milestone and Project inspection/apply remain pending, so
-this is not yet the complete retained promotion workflow.
+references. GitHub milestone inspection/apply now resolves shared groups from
+known mappings, issue membership, or an exact bounded title match; creates and
+renames milestones with revision guards; attaches every publication issue; and
+recovers partial or lost-response runs without duplicate milestones. Group
+membership is part of the reviewed snapshot, so drift classifies as update and
+identical reruns make no provider writes. GitHub Project inspection/apply remains
+pending, so this is not yet the complete retained promotion workflow.
 
 Move retained GitHub collaboration/publication/repository/execution behavior
 behind generic Planning ports. Support planning PRs and retained Discussion,
@@ -185,8 +190,8 @@ lifecycle, diagnostics, and distribution direction.
 
 ## Exact Next Slice
 
-> Implement GitHub milestone inspection/apply for the reviewed shared-group
-> action, then implement Project inspection/apply for reviewed create/connect/
-> skip workspace decisions. Preserve structured spec briefs, stable identity,
-> confirmation, idempotency, and partial-failure recovery. Native module wiring
-> remains in rollout slice 5.
+> Implement GitHub Project inspection/apply for reviewed create/connect/skip
+> workspace decisions, then persist the resulting milestone and workspace
+> identities through adoption/reconciliation. Preserve structured spec briefs,
+> stable identity, confirmation, idempotency, and partial-failure recovery.
+> Native module wiring remains in rollout slice 5.

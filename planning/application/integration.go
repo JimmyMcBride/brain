@@ -118,8 +118,9 @@ type PublicationArtifact struct {
 // PublicationGroup is one shared delivery grouping for a publication. Its
 // provider representation remains adapter-owned.
 type PublicationGroup struct {
-	Title     string             `json:"title"`
-	Reference *ExternalReference `json:"reference,omitempty"`
+	Title     string                 `json:"title"`
+	Members   []planning.ArtifactRef `json:"members"`
+	Reference *ExternalReference     `json:"reference,omitempty"`
 }
 
 // PublicationWorkspaceDecision records whether coordinated execution should

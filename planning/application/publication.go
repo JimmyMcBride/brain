@@ -42,7 +42,7 @@ func (s *Service) PreviewPublication(ctx context.Context, target PublicationTarg
 	if err != nil {
 		return empty, err
 	}
-	group, workspace, err := publicationCoordinationInput(input.Target.Provider, input.Group, input.Workspace)
+	group, workspace, err := publicationCoordinationInput(input.Target.Provider, artifacts, input.Group, input.Workspace)
 	if err != nil {
 		return empty, err
 	}
@@ -74,7 +74,7 @@ func publicationPlanFromSnapshot(input PublicationPreviewInput, snapshot Publica
 	if err != nil {
 		return empty, err
 	}
-	group, workspace, err := publicationCoordinationInput(input.Target.Provider, input.Group, input.Workspace)
+	group, workspace, err := publicationCoordinationInput(input.Target.Provider, artifacts, input.Group, input.Workspace)
 	if err != nil {
 		return empty, err
 	}
@@ -156,7 +156,7 @@ func publicationPlanFromSnapshot(input PublicationPreviewInput, snapshot Publica
 	return plan, nil
 }
 
-func publicationCoordinationInput(provider string, group *PublicationGroup, workspace *PublicationWorkspaceDecision) (*PublicationGroup, *PublicationWorkspaceDecision, error) {
+func publicationCoordinationInput(provider string, artifacts []PublicationArtifact, group *PublicationGroup, workspace *PublicationWorkspaceDecision) (*PublicationGroup, *PublicationWorkspaceDecision, error) {
 	var groupCopy *PublicationGroup
 	if group != nil {
 		value := *group
@@ -170,6 +170,18 @@ func publicationCoordinationInput(provider string, group *PublicationGroup, work
 			ref := *value.Reference
 			value.Reference = &ref
 		}
+		members := make([]planning.ArtifactRef, len(artifacts))
+		for i, artifact := range artifacts {
+			members[i] = artifact.Artifact
+		}
+		members, _ = orderedPublicationMembers(members)
+		if len(value.Members) > 0 {
+			provided, valid := orderedPublicationMembers(value.Members)
+			if !valid || !slices.Equal(provided, members) {
+				return nil, nil, publicationConflict("publication group must contain every publication artifact exactly once")
+			}
+		}
+		value.Members = members
 		groupCopy = &value
 	}
 	if workspace == nil {
@@ -235,6 +247,10 @@ func publicationGroupAction(provider string, desired, current *PublicationGroup)
 	if current.Reference == nil || !validPublicationReference(*current.Reference) || current.Reference.Provider != provider {
 		return nil, publicationConflict("provider group has no valid stable reference")
 	}
+	currentMembers, valid := orderedPublicationMembers(current.Members)
+	if !valid {
+		return nil, publicationConflict("provider group has invalid member identities")
+	}
 	if desired.Reference != nil && !sameExternalIdentity(*desired.Reference, *current.Reference) {
 		return nil, publicationConflict("known publication group could not be reconciled")
 	}
@@ -244,10 +260,24 @@ func publicationGroupAction(provider string, desired, current *PublicationGroup)
 	if desired.Reference != nil {
 		action = MutationUnchanged
 	}
-	if desired.Title != current.Title {
+	if desired.Title != current.Title || !slices.Equal(desired.Members, currentMembers) {
 		action = MutationUpdate
 	}
 	return &PublicationApplyAction{Kind: PublicationGroupAction, Action: action, Group: &value}, nil
+}
+
+func orderedPublicationMembers(input []planning.ArtifactRef) ([]planning.ArtifactRef, bool) {
+	members := slices.Clone(input)
+	for _, member := range members {
+		if member.Validate() != nil || member.Kind != planning.ArtifactInitiative && member.Kind != planning.ArtifactSpec {
+			return nil, false
+		}
+	}
+	slices.SortFunc(members, artifactLess)
+	if len(slices.Compact(members)) != len(members) {
+		return nil, false
+	}
+	return members, true
 }
 
 func publicationWorkspaceAction(provider string, desired, current *PublicationWorkspaceDecision) (*PublicationApplyAction, error) {

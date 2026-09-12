@@ -18,20 +18,21 @@ import (
 )
 
 type publicationWriteRunner struct {
-	t                           *testing.T
-	issues                      map[int]publicationIssue
-	labels                      map[string]bool
-	links                       map[string][]int
-	calls, writes, next, failAt int
-	lostResponse                bool
-	payloads                    []map[string]any
-	beforeRead                  func(string)
-	beforeWrite                 func()
-	failStderr                  string
+	t                                          *testing.T
+	issues                                     map[int]publicationIssue
+	milestones                                 map[int]publicationMilestone
+	labels                                     map[string]bool
+	links                                      map[string][]int
+	calls, writes, next, nextMilestone, failAt int
+	lostResponse                               bool
+	payloads                                   []map[string]any
+	beforeRead                                 func(string)
+	beforeWrite                                func()
+	failStderr                                 string
 }
 
 func newPublicationWriteRunner(t *testing.T) *publicationWriteRunner {
-	return &publicationWriteRunner{t: t, issues: map[int]publicationIssue{}, labels: map[string]bool{}, links: map[string][]int{}, next: 101}
+	return &publicationWriteRunner{t: t, issues: map[int]publicationIssue{}, milestones: map[int]publicationMilestone{}, labels: map[string]bool{}, links: map[string][]int{}, next: 101, nextMilestone: 1}
 }
 
 func publicationREST(issue publicationIssue) map[string]any {
@@ -40,6 +41,15 @@ func publicationREST(issue publicationIssue) map[string]any {
 	_ = json.Unmarshal(raw, &result)
 	result["id"], result["node_id"], result["html_url"] = issue.Number+1000, issue.ID, issue.URL
 	result["url"] = fmt.Sprintf("https://api.github.com/repos/owner/repo/issues/%d", issue.Number)
+	return result
+}
+
+func publicationMilestoneREST(milestone publicationMilestone) map[string]any {
+	raw, _ := json.Marshal(milestone)
+	var result map[string]any
+	_ = json.Unmarshal(raw, &result)
+	result["url"] = fmt.Sprintf("https://api.github.com/repos/owner/repo/milestones/%d", milestone.Number)
+	result["html_url"] = milestone.URL
 	return result
 }
 
@@ -67,6 +77,21 @@ func (r *publicationWriteRunner) Run(_ context.Context, _ string, args ...string
 				labels = append(labels, map[string]string{"name": name})
 			}
 			value = labels
+		case strings.HasSuffix(endpoint, "/milestones?state=all&per_page=100"):
+			milestones := []publicationMilestone{}
+			for _, milestone := range r.milestones {
+				milestones = append(milestones, milestone)
+			}
+			slices.SortFunc(milestones, func(a, b publicationMilestone) int { return a.Number - b.Number })
+			value = milestones
+		case strings.Contains(endpoint, "/milestones/"):
+			parts := strings.Split(endpoint, "/")
+			number, _ := strconv.Atoi(parts[len(parts)-1])
+			milestone, exists := r.milestones[number]
+			if !exists {
+				return RunResult{}, errors.New("missing milestone")
+			}
+			value = publicationMilestoneREST(milestone)
 		case strings.HasSuffix(endpoint, "?per_page=100"):
 			linked := []map[string]any{}
 			for _, number := range r.links[endpoint] {
@@ -119,6 +144,32 @@ func (r *publicationWriteRunner) RunInput(_ context.Context, _ string, input []b
 		}
 		r.labels[name] = true
 		response = payload
+	case strings.HasSuffix(endpoint, "/milestones"):
+		for _, existing := range r.milestones {
+			if strings.EqualFold(existing.Title, payload["title"].(string)) {
+				r.t.Fatal("duplicate milestone create", existing.Title)
+			}
+		}
+		milestone := publicationMilestone{NodeID: fmt.Sprintf("MI_%d", r.nextMilestone), Number: r.nextMilestone, URL: fmt.Sprintf("https://github.com/owner/repo/milestone/%d", r.nextMilestone), Title: payload["title"].(string), State: "open"}
+		r.nextMilestone++
+		r.milestones[milestone.Number] = milestone
+		response = publicationMilestoneREST(milestone)
+	case strings.Contains(endpoint, "/milestones/"):
+		parts := strings.Split(endpoint, "/")
+		number, _ := strconv.Atoi(parts[len(parts)-1])
+		milestone := r.milestones[number]
+		if milestone.Number == 0 {
+			r.t.Fatal("milestone update target missing")
+		}
+		milestone.Title = payload["title"].(string)
+		r.milestones[number] = milestone
+		for issueNumber, issue := range r.issues {
+			if issue.Milestone != nil && issue.Milestone.Number == number {
+				issue.Milestone.Title = milestone.Title
+				r.issues[issueNumber] = issue
+			}
+		}
+		response = publicationMilestoneREST(milestone)
 	case endpoint == "graphql":
 		variables := payload["variables"].(map[string]any)
 		var source, target publicationIssue
@@ -156,15 +207,25 @@ func (r *publicationWriteRunner) RunInput(_ context.Context, _ string, input []b
 				r.t.Fatal("update target missing")
 			}
 		}
-		issue.Title, issue.Body = payload["title"].(string), payload["body"].(string)
-		issue.Labels = nil
-		for _, label := range payload["labels"].([]any) {
-			issue.Labels = append(issue.Labels, struct {
-				Name string `json:"name"`
-			}{label.(string)})
+		if title, exists := payload["title"]; exists {
+			issue.Title, issue.Body = title.(string), payload["body"].(string)
+			issue.Labels = nil
+			for _, label := range payload["labels"].([]any) {
+				issue.Labels = append(issue.Labels, struct {
+					Name string `json:"name"`
+				}{label.(string)})
+			}
 		}
 		if state, exists := payload["state"]; exists {
 			issue.State = state.(string)
+		}
+		if value, exists := payload["milestone"]; exists {
+			number := int(value.(float64))
+			milestone, found := r.milestones[number]
+			if !found {
+				r.t.Fatal("milestone target missing")
+			}
+			issue.Milestone = &publicationMilestone{Number: milestone.Number, Title: milestone.Title}
 		}
 		r.issues[issue.Number] = issue
 		response = publicationREST(issue)
@@ -273,6 +334,72 @@ func TestPublicationCreateUpdateAndRerunPreserveContent(t *testing.T) {
 	writes = runner.writes
 	if _, err := runPublication(t, adapter, input, events); err != nil || runner.writes != writes {
 		t.Fatal("updated rerun mutated", err)
+	}
+}
+
+func TestPublicationMilestoneCreateRenameAndRerun(t *testing.T) {
+	adapter, runner, input := publicationWriteFixture(t)
+	input.Group = &application.PublicationGroup{Title: "Phase 5"}
+	events := &publicationWriteEvents{}
+	result, err := runPublication(t, adapter, input, events)
+	if err != nil || len(runner.milestones) != 1 || runner.writes != 4 || runner.issues[101].Milestone == nil || runner.issues[101].Milestone.Number != 1 {
+		t.Fatalf("create result=%+v milestone=%+v issue=%+v writes=%d err=%v", result, runner.milestones, runner.issues[101], runner.writes, err)
+	}
+	if result.Evidence.Completed[0].Action.Kind != application.PublicationGroupAction || result.Evidence.Completed[0].References[0].Kind != "milestone" {
+		t.Fatal("missing milestone evidence", result.Evidence.Completed)
+	}
+	writes := runner.writes
+	result, err = runPublication(t, adapter, input, events)
+	if err != nil || runner.writes != writes || result.Evidence.Completed[0].Action.Action != application.MutationReuse {
+		t.Fatalf("reuse result=%+v writes=%d err=%v", result, runner.writes, err)
+	}
+	ref := publicationMilestoneReference(runner.milestones[1])
+	input.Group = &application.PublicationGroup{Title: "Phase 5 release", Reference: &ref}
+	result, err = runPublication(t, adapter, input, events)
+	if err != nil || runner.writes != writes+1 || runner.milestones[1].Title != input.Group.Title || result.Evidence.Completed[0].Action.Action != application.MutationUpdate {
+		t.Fatalf("rename result=%+v milestone=%+v writes=%d err=%v", result, runner.milestones[1], runner.writes, err)
+	}
+	writes = runner.writes
+	if _, err := runPublication(t, adapter, input, events); err != nil || runner.writes != writes {
+		t.Fatal("renamed milestone rerun mutated", err)
+	}
+}
+
+func TestPublicationMilestoneRepairsMembershipWithoutArtifactRewrite(t *testing.T) {
+	adapter, runner, input := publicationWriteFixture(t)
+	input.Group = &application.PublicationGroup{Title: "Phase 5"}
+	if _, err := runPublication(t, adapter, input, &publicationWriteEvents{}); err != nil {
+		t.Fatal(err)
+	}
+	issue := runner.issues[101]
+	issue.Milestone = nil
+	runner.issues[101] = issue
+	writes := runner.writes
+	result, err := runPublication(t, adapter, input, &publicationWriteEvents{})
+	if err != nil || runner.writes != writes+1 || result.Evidence.Completed[0].Action.Action != application.MutationUpdate || result.Evidence.Completed[1].Action.Action != application.MutationReuse {
+		t.Fatalf("repair result=%+v writes=%d err=%v", result, runner.writes, err)
+	}
+	if runner.issues[101].Milestone == nil || runner.issues[101].Milestone.Number != 1 {
+		t.Fatal("milestone membership not repaired")
+	}
+	writes = runner.writes
+	if _, err := runPublication(t, adapter, input, &publicationWriteEvents{}); err != nil || runner.writes != writes {
+		t.Fatal("membership repair rerun mutated", err)
+	}
+}
+
+func TestPublicationMilestoneLostResponseRecoversWithoutDuplicate(t *testing.T) {
+	adapter, runner, input := publicationWriteFixture(t)
+	input.Group = &application.PublicationGroup{Title: "Phase 5"}
+	runner.failAt, runner.lostResponse = 1, true
+	result, err := runPublication(t, adapter, input, &publicationWriteEvents{})
+	var integration *application.IntegrationError
+	if !errors.As(err, &integration) || integration.Class != application.IntegrationPartialFailure || result.Evidence.Failed == nil || len(runner.milestones) != 1 {
+		t.Fatalf("lost response result=%+v milestones=%+v err=%v", result, runner.milestones, err)
+	}
+	runner.failAt = 0
+	if _, err := runPublication(t, adapter, input, &publicationWriteEvents{}); err != nil || len(runner.milestones) != 1 || len(runner.issues) != 1 {
+		t.Fatal("milestone recovery duplicated provider state", err)
 	}
 }
 
@@ -505,24 +632,16 @@ func TestPublicationRejectsIncompleteLabelListingAndMissingInputRunner(t *testin
 	}
 }
 
-func TestPublicationRejectsCoordinationActionsBeforeProviderWrites(t *testing.T) {
-	for _, kind := range []string{"group", "workspace"} {
-		t.Run(kind, func(t *testing.T) {
-			adapter, runner, input := publicationWriteFixture(t)
-			if kind == "group" {
-				input.Group = &application.PublicationGroup{Title: "Milestone"}
-			} else {
-				input.Workspace = &application.PublicationWorkspaceDecision{Choice: application.PublicationWorkspaceSkip}
-			}
-			plan, err := application.New(nil, application.Options{}).PreviewPublication(context.Background(), adapter.PublicationTarget(), input, publicationAllow{})
-			if err != nil {
-				t.Fatal(err)
-			}
-			_, err = adapter.PublicationTarget().Apply(context.Background(), plan)
-			var integration *application.IntegrationError
-			if !errors.As(err, &integration) || integration.Class != application.IntegrationUnsupportedCapability || runner.writes != 0 {
-				t.Fatalf("coordination action reached provider: writes=%d err=%v", runner.writes, err)
-			}
-		})
+func TestPublicationRejectsWorkspaceActionsBeforeProviderWrites(t *testing.T) {
+	adapter, runner, input := publicationWriteFixture(t)
+	input.Workspace = &application.PublicationWorkspaceDecision{Choice: application.PublicationWorkspaceSkip}
+	plan, err := application.New(nil, application.Options{}).PreviewPublication(context.Background(), adapter.PublicationTarget(), input, publicationAllow{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = adapter.PublicationTarget().Apply(context.Background(), plan)
+	var integration *application.IntegrationError
+	if !errors.As(err, &integration) || integration.Class != application.IntegrationUnsupportedCapability || runner.writes != 0 {
+		t.Fatalf("workspace action reached provider: writes=%d err=%v", runner.writes, err)
 	}
 }
