@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"reflect"
 	"regexp"
 	"slices"
 	"strconv"
@@ -29,7 +28,18 @@ type publicationIssue struct {
 	Labels  []struct {
 		Name string `json:"name"`
 	} `json:"labels"`
-	PullRequest json.RawMessage `json:"pull_request"`
+	Milestone   *publicationMilestone `json:"milestone,omitempty"`
+	PullRequest json.RawMessage       `json:"pull_request"`
+}
+
+type publicationMilestone struct {
+	NodeID      string `json:"node_id"`
+	Number      int    `json:"number"`
+	URL         string `json:"url"`
+	HTMLURL     string `json:"html_url"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	State       string `json:"state"`
 }
 
 // gh issue list exposes a string node ID as id; REST exposes a numeric id plus
@@ -148,7 +158,7 @@ func (a *Adapter) inspectPublication(ctx context.Context, request application.Pu
 		if candidate.Reference.OpaqueID != candidate.Reference.URL && candidate.Reference.OpaqueID != issue.ID {
 			return empty, publicationIdentityError("candidate opaque identity disagrees with provider")
 		}
-		if old, exists := byNumber[number]; exists && !reflect.DeepEqual(old, issue) {
+		if old, exists := byNumber[number]; exists && publicationIssueReference(old) != publicationIssueReference(issue) {
 			return empty, providerError(application.IntegrationRevisionConflict, "publication.inspect", "provider changed candidate evidence during inspection")
 		}
 		mapped[candidate.Artifact] = number
@@ -163,7 +173,7 @@ func (a *Adapter) inspectPublication(ctx context.Context, request application.Pu
 		if !needed {
 			continue
 		}
-		raw, err := a.runProvider(ctx, "publication.inspect", "issue", "list", "--repo", repo, "--state", "all", "--limit", "1000", "--json", "id,number,url,title,body,state,labels", "--label", "plan:"+string(kind))
+		raw, err := a.runProvider(ctx, "publication.inspect", "issue", "list", "--repo", repo, "--state", "all", "--limit", "1000", "--json", "id,number,url,title,body,state,labels,milestone", "--label", "plan:"+string(kind))
 		if err != nil {
 			return empty, err
 		}
@@ -178,7 +188,7 @@ func (a *Adapter) inspectPublication(ctx context.Context, request application.Pu
 			if err := validatePublicationIssue(&issue, repo); err != nil {
 				return empty, err
 			}
-			if old, exists := byNumber[issue.Number]; exists && !reflect.DeepEqual(old, issue) {
+			if old, exists := byNumber[issue.Number]; exists && publicationIssueReference(old) != publicationIssueReference(issue) {
 				return empty, providerError(application.IntegrationRevisionConflict, "publication.inspect", "provider changed issue evidence during listing")
 			}
 			byNumber[issue.Number] = issue
@@ -225,7 +235,7 @@ func (a *Adapter) inspectPublication(ctx context.Context, request application.Pu
 			return empty, publicationIdentityError("mapped issue URL disagrees with provider")
 		}
 	}
-	return a.publicationSnapshot(ctx, request, repo, sourceURL, wanted, mapped, byNumber)
+	return a.publicationSnapshot(ctx, request, repo, sourceURL, state, wanted, mapped, byNumber)
 }
 
 func validatePublicationIssue(issue *publicationIssue, repo string) error {
@@ -241,7 +251,7 @@ func validatePublicationIssue(issue *publicationIssue, repo string) error {
 	return nil
 }
 
-func (a *Adapter) publicationSnapshot(ctx context.Context, request application.PublicationInspectRequest, repo, sourceURL string, wanted map[planning.ArtifactRef]bool, mapped map[planning.ArtifactRef]int, issues map[int]publicationIssue) (application.PublicationSnapshot, error) {
+func (a *Adapter) publicationSnapshot(ctx context.Context, request application.PublicationInspectRequest, repo, sourceURL string, state githubState, wanted map[planning.ArtifactRef]bool, mapped map[planning.ArtifactRef]int, issues map[int]publicationIssue) (application.PublicationSnapshot, error) {
 	var refs []planning.ArtifactRef
 	for ref := range wanted {
 		refs = append(refs, ref)
@@ -289,6 +299,11 @@ func (a *Adapter) publicationSnapshot(ctx context.Context, request application.P
 		numberToIndex[issue.Number] = len(result.Artifacts)
 		result.Artifacts = append(result.Artifacts, application.PublicationArtifact{Artifact: ref, Title: issue.Title, Content: issue.Body, Readiness: readiness, Reference: &external})
 	}
+	group, err := a.publicationGroupSnapshot(ctx, request.Group, repo, state, result.Artifacts, issues)
+	if err != nil {
+		return application.PublicationSnapshot{}, err
+	}
+	result.Group = group
 	for i := range result.Artifacts {
 		artifact := &result.Artifacts[i]
 		number, _ := strconv.Atoi(artifact.Reference.DisplayID)
@@ -350,9 +365,139 @@ func (a *Adapter) publicationSnapshot(ctx context.Context, request application.P
 	return result, nil
 }
 
+func (a *Adapter) publicationGroupSnapshot(ctx context.Context, desired *application.PublicationGroup, repo string, state githubState, artifacts []application.PublicationArtifact, issues map[int]publicationIssue) (*application.PublicationGroup, error) {
+	if desired == nil {
+		return nil, nil
+	}
+	numbers := map[int]bool{}
+	if desired.Reference != nil {
+		number, err := publicationMilestoneNumber(repo, *desired.Reference)
+		if err != nil {
+			return nil, err
+		}
+		numbers[number] = true
+	}
+	for _, artifact := range artifacts {
+		number, _ := strconv.Atoi(artifact.Reference.DisplayID)
+		if milestone := issues[number].Milestone; milestone != nil {
+			if milestone.Number < 1 || strings.TrimSpace(milestone.Title) == "" {
+				return nil, publicationIdentityError("issue has an invalid milestone identity")
+			}
+			numbers[milestone.Number] = true
+		}
+		if record, ok := state.Planning[string(artifact.Artifact.ID)]; ok && (record.MilestoneNumber > 0 || record.MilestoneTitle != "") {
+			if record.MilestoneNumber < 1 {
+				return nil, publicationIdentityError("milestone mapping has no stable number")
+			}
+			numbers[record.MilestoneNumber] = true
+		}
+	}
+	if len(numbers) > 1 {
+		return nil, publicationIdentityError("publication artifacts resolve to different milestones")
+	}
+	var milestone *publicationMilestone
+	for number := range numbers {
+		found, err := a.publicationGetMilestone(ctx, "publication.inspect", repo, number)
+		if err != nil {
+			return nil, err
+		}
+		milestone = &found
+	}
+	if milestone == nil {
+		raw, err := a.runProvider(ctx, "publication.inspect", "api", "--method", "GET", fmt.Sprintf("repos/%s/milestones?state=all&per_page=100", repo))
+		if err != nil {
+			return nil, err
+		}
+		var listed []publicationMilestone
+		if json.Unmarshal(raw, &listed) != nil || strings.TrimSpace(string(raw)) == "null" {
+			return nil, providerError(application.IntegrationProviderUnavailable, "publication.inspect", "invalid milestone listing")
+		}
+		if len(listed) >= 100 {
+			return nil, providerError(application.IntegrationProviderUnavailable, "publication.inspect", "milestone listing reached safety limit")
+		}
+		for i := range listed {
+			if err := validatePublicationMilestone(&listed[i], repo); err != nil {
+				return nil, err
+			}
+			if strings.EqualFold(strings.TrimSpace(listed[i].Title), desired.Title) {
+				if milestone != nil {
+					return nil, publicationIdentityError("multiple milestones match the publication group title")
+				}
+				copy := listed[i]
+				milestone = &copy
+			}
+		}
+	}
+	if milestone == nil {
+		return nil, nil
+	}
+	ref := publicationMilestoneReference(*milestone)
+	if desired.Reference != nil && (desired.Reference.Provider != ref.Provider || desired.Reference.Kind != ref.Kind || desired.Reference.OpaqueID != ref.OpaqueID) {
+		return nil, publicationIdentityError("known milestone identity disagrees with provider")
+	}
+	members := []planning.ArtifactRef{}
+	for _, artifact := range artifacts {
+		number, _ := strconv.Atoi(artifact.Reference.DisplayID)
+		if issueMilestone := issues[number].Milestone; issueMilestone != nil && issueMilestone.Number == milestone.Number {
+			members = append(members, artifact.Artifact)
+		}
+	}
+	slices.SortFunc(members, func(a, b planning.ArtifactRef) int {
+		if a.Kind != b.Kind {
+			return strings.Compare(string(a.Kind), string(b.Kind))
+		}
+		return strings.Compare(string(a.ID), string(b.ID))
+	})
+	return &application.PublicationGroup{Title: milestone.Title, Members: members, Reference: &ref}, nil
+}
+
+func publicationMilestoneNumber(repo string, ref application.ExternalReference) (int, error) {
+	number, err := strconv.Atoi(ref.DisplayID)
+	wantURL := fmt.Sprintf("https://github.com/%s/milestone/%d", repo, number)
+	if err != nil || number < 1 || ref.Provider != providerName || ref.Kind != "milestone" || ref.OpaqueID != wantURL || ref.URL != wantURL {
+		return 0, publicationIdentityError("milestone reference has no canonical stable identity")
+	}
+	return number, nil
+}
+
+func (a *Adapter) publicationGetMilestone(ctx context.Context, operation, repo string, number int) (publicationMilestone, error) {
+	var milestone publicationMilestone
+	raw, err := a.runProvider(ctx, operation, "api", "--method", "GET", fmt.Sprintf("repos/%s/milestones/%d", repo, number))
+	if err != nil {
+		return milestone, err
+	}
+	if json.Unmarshal(raw, &milestone) != nil || validatePublicationMilestone(&milestone, repo) != nil || milestone.Number != number {
+		return publicationMilestone{}, providerError(application.IntegrationAmbiguousIdentity, operation, "provider returned another milestone")
+	}
+	return milestone, nil
+}
+
+func validatePublicationMilestone(milestone *publicationMilestone, repo string) error {
+	if milestone.HTMLURL != "" {
+		milestone.URL = milestone.HTMLURL
+	}
+	if milestone.Number < 1 || strings.TrimSpace(milestone.Title) == "" || milestone.URL != fmt.Sprintf("https://github.com/%s/milestone/%d", repo, milestone.Number) {
+		return publicationIdentityError("provider returned invalid milestone identity")
+	}
+	return nil
+}
+
+func publicationMilestoneReference(milestone publicationMilestone) application.ExternalReference {
+	milestone.HTMLURL = ""
+	milestone.State = strings.ToLower(milestone.State)
+	raw, _ := json.Marshal(milestone)
+	return application.ExternalReference{Provider: providerName, Kind: "milestone", OpaqueID: milestone.URL, DisplayID: strconv.Itoa(milestone.Number), URL: milestone.URL, Revision: fmt.Sprintf("%x", sha256.Sum256(raw))}
+}
+
 func publicationIssueReference(issue publicationIssue) application.ExternalReference {
 	// Hash only normalized issue evidence, not REST versus CLI transport shape.
 	issue.NodeID, issue.HTMLURL, issue.PullRequest = issue.ID, "", nil
+	if issue.Milestone != nil {
+		// Milestone title is revisioned by the group reference. Issue revisions
+		// track membership by stable milestone number so a group rename does not
+		// manufacture concurrent edits for every member issue.
+		issue.Milestone = &publicationMilestone{Number: issue.Milestone.Number}
+	}
 	issue.State = strings.ToLower(issue.State)
 	issue.Labels = slices.Clone(issue.Labels)
 	if len(issue.Labels) == 0 {

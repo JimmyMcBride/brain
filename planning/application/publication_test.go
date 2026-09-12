@@ -55,7 +55,7 @@ func TestPublicationPreviewDeterministicOrderAndRerun(t *testing.T) {
 			t.Fatal(plan.Actions[i+1])
 		}
 	}
-	if plan.Actions[3].Artifact.Content != "Preserve B criteria" || !reflect.DeepEqual(plan.Source, input.Source) || !reflect.DeepEqual(target.request.Group, input.Group) {
+	if plan.Actions[3].Artifact.Content != "Preserve B criteria" || !reflect.DeepEqual(plan.Source, input.Source) || target.request.Group.Title != input.Group.Title || len(target.request.Group.Members) != len(input.Artifacts) {
 		t.Fatal("lost canonical content/provenance")
 	}
 	slices.Reverse(input.Artifacts)
@@ -131,7 +131,7 @@ func TestPublicationPreviewPlansSharedGroupAndWorkspaceDecision(t *testing.T) {
 	if plan.Actions[0].Kind != PublicationGroupAction || plan.Actions[0].Action != MutationCreate || plan.Actions[len(plan.Actions)-1].Kind != PublicationWorkspaceAction || plan.Actions[len(plan.Actions)-1].Action != MutationCreate {
 		t.Fatalf("coordination actions=%+v", plan.Actions)
 	}
-	if !reflect.DeepEqual(target.request.Group, input.Group) || !reflect.DeepEqual(target.request.Workspace, input.Workspace) {
+	if target.request.Group == nil || target.request.Group.Title != input.Group.Title || !reflect.DeepEqual(target.request.Group.Members, plan.Actions[0].Group.Members) || !reflect.DeepEqual(target.request.Workspace, input.Workspace) {
 		t.Fatalf("inspect request=%+v", target.request)
 	}
 	slices.Reverse(input.Artifacts)
@@ -141,12 +141,18 @@ func TestPublicationPreviewPlansSharedGroupAndWorkspaceDecision(t *testing.T) {
 	}
 	groupRef := ExternalReference{Provider: "test", Kind: "group", OpaqueID: "milestone-3", DisplayID: "3", URL: "https://example.test/milestones/3"}
 	workspaceRef := ExternalReference{Provider: "test", Kind: "workspace", OpaqueID: "project-7", DisplayID: "7", URL: "https://example.test/projects/7"}
-	target.snapshot.Group = &PublicationGroup{Title: input.Group.Title, Reference: &groupRef}
+	target.snapshot.Group = &PublicationGroup{Title: input.Group.Title, Members: slices.Clone(plan.Actions[0].Group.Members), Reference: &groupRef}
 	target.snapshot.Workspace = &PublicationWorkspaceDecision{Choice: PublicationWorkspaceCreate, Title: input.Workspace.Title, Reason: input.Workspace.Reason, Reference: &workspaceRef}
 	rerun, err := service.PreviewPublication(context.Background(), target, input, &collaborationPolicy{})
 	if err != nil || rerun.Actions[0].Action != MutationReuse || rerun.Actions[len(rerun.Actions)-1].Action != MutationReuse {
 		t.Fatalf("rerun=%+v err=%v", rerun, err)
 	}
+	target.snapshot.Group.Members = target.snapshot.Group.Members[:len(target.snapshot.Group.Members)-1]
+	drifted, err := service.PreviewPublication(context.Background(), target, input, &collaborationPolicy{})
+	if err != nil || drifted.Actions[0].Action != MutationUpdate {
+		t.Fatalf("membership drift=%+v err=%v", drifted, err)
+	}
+	target.snapshot.Group.Members = slices.Clone(plan.Actions[0].Group.Members)
 	input.Group.Reference = &groupRef
 	input.Workspace = &PublicationWorkspaceDecision{Choice: PublicationWorkspaceConnect, Reason: "Use the reviewed board.", Reference: &workspaceRef}
 	connected, err := service.PreviewPublication(context.Background(), target, input, &collaborationPolicy{})
@@ -169,6 +175,14 @@ func TestPublicationPreviewRejectsInvalidCoordinationBeforeProviderRead(t *testi
 		}},
 		{"skip with title", func(i *PublicationPreviewInput) { i.Workspace.Choice = PublicationWorkspaceSkip }},
 		{"whitespace group", func(i *PublicationPreviewInput) { i.Group.Title = " Milestone" }},
+		{"incomplete group members", func(i *PublicationPreviewInput) { i.Group.Members = []planning.ArtifactRef{i.Artifacts[0].Artifact} }},
+		{"duplicate group members", func(i *PublicationPreviewInput) {
+			i.Group.Members = make([]planning.ArtifactRef, len(i.Artifacts))
+			for j, artifact := range i.Artifacts {
+				i.Group.Members[j] = artifact.Artifact
+			}
+			i.Group.Members[len(i.Group.Members)-1] = i.Group.Members[0]
+		}},
 		{"foreign group", func(i *PublicationPreviewInput) {
 			i.Group.Reference = &ExternalReference{Provider: "other", Kind: "group", OpaqueID: "one", DisplayID: "1", URL: "https://example.test/groups/1"}
 		}},

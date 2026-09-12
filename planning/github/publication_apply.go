@@ -66,21 +66,25 @@ func (a *Adapter) applyPublication(ctx context.Context, plan application.Publica
 			return result, publicationApplyConflict("update would lose recoverable identity before mappings are saved")
 		}
 	}
-	write := false
+	write, artifactWrite := false, false
 	for _, action := range plan.Actions {
 		write = write || action.Action == application.MutationCreate || action.Action == application.MutationUpdate
+		artifactWrite = artifactWrite || action.Artifact != nil && (action.Action == application.MutationCreate || action.Action == application.MutationUpdate)
 	}
 	labels := map[string]bool{}
 	if write {
 		if _, ok := a.runner.(InputRunner); !ok {
 			return result, providerError(application.IntegrationUnsupportedCapability, publicationApplyOperation, "publication requires a runner with stdin support")
 		}
-		labels, err = a.publicationLabels(ctx, plan.Target.OpaqueID)
-		if err != nil {
-			return result, err
+		if artifactWrite {
+			labels, err = a.publicationLabels(ctx, plan.Target.OpaqueID)
+			if err != nil {
+				return result, err
+			}
 		}
 	}
 	resolved := map[planning.ArtifactRef]application.ExternalReference{}
+	var groupRef *application.ExternalReference
 	for _, action := range plan.Actions {
 		evidence := application.PublicationActionEvidence{Action: action}
 		fail := func(err error) (application.PublicationResult, error) {
@@ -97,7 +101,26 @@ func (a *Adapter) applyPublication(ctx context.Context, plan application.Publica
 		if err := ctx.Err(); err != nil {
 			return fail(err)
 		}
-		if artifact := action.Artifact; artifact != nil {
+		if group := action.Group; group != nil {
+			if action.Action == application.MutationReuse || action.Action == application.MutationUnchanged {
+				ref := *group.Reference
+				evidence.References = []application.ExternalReference{ref}
+				groupRef = &ref
+			} else {
+				milestone, references, err := a.writePublicationGroup(ctx, plan, action)
+				evidence.References = append(evidence.References, references...)
+				if err == nil && milestone != nil {
+					ref := publicationMilestoneReference(*milestone)
+					if len(evidence.References) == 0 || evidence.References[0] != ref {
+						evidence.References = append([]application.ExternalReference{ref}, evidence.References...)
+					}
+					groupRef = &ref
+				}
+				if err != nil {
+					return fail(err)
+				}
+			}
+		} else if artifact := action.Artifact; artifact != nil {
 			if action.Action == application.MutationReuse || action.Action == application.MutationUnchanged {
 				evidence.References = []application.ExternalReference{*artifact.Reference}
 				resolved[artifact.Artifact] = *artifact.Reference
@@ -118,7 +141,7 @@ func (a *Adapter) applyPublication(ctx context.Context, plan application.Publica
 					labels[label] = true
 					evidence.References = append(evidence.References, application.ExternalReference{Provider: providerName, Kind: "label", OpaqueID: plan.Target.OpaqueID + "/" + label, DisplayID: label})
 				}
-				issue, err := a.writePublicationIssue(ctx, plan, input, action)
+				issue, err := a.writePublicationIssue(ctx, plan, input, action, groupRef)
 				if issue != nil {
 					ref := publicationIssueReference(*issue)
 					evidence.References = append(evidence.References, ref)
@@ -128,7 +151,7 @@ func (a *Adapter) applyPublication(ctx context.Context, plan application.Publica
 					return fail(err)
 				}
 			}
-		} else if action.Action == application.MutationCreate {
+		} else if action.Relationship != nil && action.Action == application.MutationCreate {
 			if err := a.writePublicationRelationship(ctx, *action.Relationship, resolved); err != nil {
 				return fail(err)
 			}
@@ -144,13 +167,36 @@ func publicationPlanIntent(plan application.PublicationPlan) (application.Public
 		return input, publicationApplyConflict("a versioned publication plan is required")
 	}
 	for _, action := range plan.Actions {
-		if action.Kind == application.PublicationGroupAction || action.Kind == application.PublicationWorkspaceAction {
-			return input, providerError(application.IntegrationUnsupportedCapability, publicationApplyOperation, "publication group and workspace actions are not implemented by the GitHub adapter")
+		if action.Kind == application.PublicationWorkspaceAction {
+			return input, providerError(application.IntegrationUnsupportedCapability, publicationApplyOperation, "publication workspace actions are not implemented by the GitHub adapter")
 		}
-		if action.Kind == application.PublicationRelationshipAction && action.Relationship != nil && action.Artifact == nil {
+		if action.Kind == application.PublicationGroupAction {
+			if input.Group != nil || action.Group == nil || action.Artifact != nil || action.Relationship != nil || action.Workspace != nil {
+				return input, publicationApplyConflict("invalid publication group action")
+			}
+			group := *action.Group
+			switch action.Action {
+			case application.MutationCreate:
+				if group.Reference != nil {
+					return input, publicationApplyConflict("new milestones cannot carry an existing reference")
+				}
+			case application.MutationUpdate, application.MutationReuse, application.MutationUnchanged:
+				if group.Reference == nil || group.Reference.Revision == "" {
+					return input, publicationApplyConflict("existing milestones require revision-bound references")
+				}
+				if action.Action == application.MutationReuse {
+					group.Reference = nil
+				}
+			default:
+				return input, publicationApplyConflict("invalid milestone action")
+			}
+			input.Group = &group
 			continue
 		}
-		if action.Kind != application.PublicationArtifactAction || action.Artifact == nil || action.Relationship != nil {
+		if action.Kind == application.PublicationRelationshipAction && action.Relationship != nil && action.Artifact == nil && action.Group == nil && action.Workspace == nil {
+			continue
+		}
+		if action.Kind != application.PublicationArtifactAction || action.Artifact == nil || action.Group != nil || action.Relationship != nil || action.Workspace != nil {
 			return input, publicationApplyConflict("invalid publication action")
 		}
 		artifact := *action.Artifact
@@ -249,7 +295,98 @@ func (a *Adapter) publicationRequest(ctx context.Context, method, endpoint strin
 	return data, nil
 }
 
-func (a *Adapter) writePublicationIssue(ctx context.Context, plan application.PublicationPlan, input application.PublicationPreviewInput, action application.PublicationApplyAction) (*publicationIssue, error) {
+func (a *Adapter) writePublicationGroup(ctx context.Context, plan application.PublicationPlan, action application.PublicationApplyAction) (*publicationMilestone, []application.ExternalReference, error) {
+	group := *action.Group
+	repo := plan.Target.OpaqueID
+	var milestone publicationMilestone
+	var written []application.ExternalReference
+	if action.Action == application.MutationCreate {
+		// Recheck the title immediately before creation. This closes the common
+		// lost-response retry path without pretending the final read/write race is atomic.
+		raw, err := a.runProvider(ctx, publicationApplyOperation, "api", "--method", "GET", fmt.Sprintf("repos/%s/milestones?state=all&per_page=100", repo))
+		if err != nil {
+			return nil, written, err
+		}
+		var listed []publicationMilestone
+		if json.Unmarshal(raw, &listed) != nil || strings.TrimSpace(string(raw)) == "null" || len(listed) >= 100 {
+			return nil, written, providerError(application.IntegrationProviderUnavailable, publicationApplyOperation, "invalid or incomplete milestone listing")
+		}
+		for i := range listed {
+			if err := validatePublicationMilestone(&listed[i], repo); err != nil {
+				return nil, written, publicationApplyConflict("provider returned invalid milestone identity")
+			}
+			if strings.EqualFold(strings.TrimSpace(listed[i].Title), group.Title) {
+				return nil, written, publicationApplyConflict("milestone appeared before create")
+			}
+		}
+		raw, err = a.publicationRequest(ctx, "POST", "repos/"+repo+"/milestones", map[string]string{"title": group.Title})
+		if err != nil {
+			return nil, written, err
+		}
+		if json.Unmarshal(raw, &milestone) != nil || validatePublicationMilestone(&milestone, repo) != nil || milestone.Title != group.Title {
+			return nil, written, providerError(application.IntegrationPartialFailure, publicationApplyOperation, "milestone mutation returned invalid evidence; inspect before retrying")
+		}
+		written = append(written, publicationMilestoneReference(milestone))
+	} else {
+		number, err := publicationMilestoneNumber(repo, *group.Reference)
+		if err != nil {
+			return nil, written, publicationApplyConflict("invalid milestone reference")
+		}
+		milestone, err = a.publicationGetMilestone(ctx, publicationApplyOperation, repo, number)
+		if err != nil {
+			return nil, written, err
+		}
+		if publicationMilestoneReference(milestone).Revision != group.Reference.Revision {
+			return nil, written, publicationApplyConflict("milestone changed before update")
+		}
+		if milestone.Title != group.Title {
+			raw, err := a.publicationRequest(ctx, "PATCH", fmt.Sprintf("repos/%s/milestones/%d", repo, number), map[string]string{"title": group.Title})
+			if err != nil {
+				return nil, written, err
+			}
+			if json.Unmarshal(raw, &milestone) != nil || validatePublicationMilestone(&milestone, repo) != nil || milestone.Number != number || milestone.Title != group.Title {
+				return nil, written, providerError(application.IntegrationPartialFailure, publicationApplyOperation, "milestone mutation returned invalid evidence; inspect before retrying")
+			}
+			written = append(written, publicationMilestoneReference(milestone))
+		}
+	}
+
+	members := map[planning.ArtifactRef]bool{}
+	for _, member := range group.Members {
+		members[member] = true
+	}
+	// Issues already classified for create/update receive the milestone in their
+	// own mutation. Attach only unchanged/reused issues here so their revision is
+	// not invalidated before a later guarded artifact update.
+	for _, artifactAction := range plan.Actions {
+		artifact := artifactAction.Artifact
+		if artifact == nil || !members[artifact.Artifact] || (artifactAction.Action != application.MutationReuse && artifactAction.Action != application.MutationUnchanged) {
+			continue
+		}
+		issue, err := a.publicationGetIssue(ctx, repo, *artifact.Reference)
+		if err != nil {
+			return &milestone, written, err
+		}
+		if issue.Milestone != nil && issue.Milestone.Number == milestone.Number {
+			continue
+		}
+		if publicationIssueReference(issue).Revision != artifact.Reference.Revision {
+			return &milestone, written, publicationApplyConflict("issue changed before milestone attachment")
+		}
+		raw, err := a.publicationRequest(ctx, "PATCH", fmt.Sprintf("repos/%s/issues/%d", repo, issue.Number), map[string]int{"milestone": milestone.Number})
+		if err != nil {
+			return &milestone, written, err
+		}
+		var updated publicationIssue
+		if json.Unmarshal(raw, &updated) != nil || validatePublicationIssue(&updated, repo) != nil || updated.ID != issue.ID || updated.Number != issue.Number || updated.Milestone == nil || updated.Milestone.Number != milestone.Number {
+			return &milestone, written, providerError(application.IntegrationPartialFailure, publicationApplyOperation, "milestone attachment returned invalid evidence; inspect before retrying")
+		}
+		written = append(written, publicationIssueReference(updated))
+	}
+	return &milestone, written, nil
+}
+
+func (a *Adapter) writePublicationIssue(ctx context.Context, plan application.PublicationPlan, input application.PublicationPreviewInput, action application.PublicationApplyAction, groupRef *application.ExternalReference) (*publicationIssue, error) {
 	artifact := *action.Artifact
 	repo := plan.Target.OpaqueID
 	method, endpoint := "POST", "repos/"+repo+"/issues"
@@ -288,6 +425,13 @@ func (a *Adapter) writePublicationIssue(ctx context.Context, plan application.Pu
 	slices.Sort(labels)
 	labels = slices.Compact(labels)
 	payload := map[string]any{"title": artifact.Title, "body": artifact.Content, "labels": labels}
+	if groupRef != nil {
+		number, err := publicationMilestoneNumber(repo, *groupRef)
+		if err != nil {
+			return nil, publicationApplyConflict("resolved milestone identity is invalid")
+		}
+		payload["milestone"] = number
+	}
 	if method == "PATCH" {
 		payload["state"] = "open"
 		if artifact.Readiness == planning.ReadinessDone {
@@ -307,6 +451,12 @@ func (a *Adapter) writePublicationIssue(ctx context.Context, plan application.Pu
 	}
 	if issue.Title != artifact.Title || issue.Body != artifact.Content {
 		return &issue, providerError(application.IntegrationPartialFailure, publicationApplyOperation, "issue mutation returned different content; inspect before retrying")
+	}
+	if groupRef != nil {
+		number, _ := publicationMilestoneNumber(repo, *groupRef)
+		if issue.Milestone == nil || issue.Milestone.Number != number {
+			return &issue, providerError(application.IntegrationPartialFailure, publicationApplyOperation, "issue mutation returned a different milestone; inspect before retrying")
+		}
 	}
 	for _, label := range labels {
 		if !publicationHasLabel(issue, label) {

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -18,6 +20,7 @@ type publicationRunner struct {
 	t             *testing.T
 	listed        []publicationIssue
 	direct        map[int]publicationIssue
+	milestones    map[int]publicationMilestone
 	relationships map[string][]publicationIssue
 	calls         int
 }
@@ -31,6 +34,21 @@ func (r *publicationRunner) Run(_ context.Context, _ string, args ...string) (Ru
 	case len(args) == 4 && args[0] == "api" && args[1] == "--method" && args[2] == "GET":
 		if links, ok := r.relationships[args[3]]; ok {
 			value = links
+		} else if strings.HasSuffix(args[3], "/milestones?state=all&per_page=100") {
+			milestones := make([]publicationMilestone, 0, len(r.milestones))
+			for _, milestone := range r.milestones {
+				milestones = append(milestones, milestone)
+			}
+			slices.SortFunc(milestones, func(a, b publicationMilestone) int { return a.Number - b.Number })
+			value = milestones
+		} else if strings.Contains(args[3], "/milestones/") {
+			parts := strings.Split(args[3], "/")
+			number, _ := strconv.Atoi(parts[len(parts)-1])
+			milestone, found := r.milestones[number]
+			if !found {
+				return RunResult{}, errors.New("mapped milestone missing")
+			}
+			value = milestone
 		} else {
 			found := false
 			for number, issue := range r.direct {
@@ -191,6 +209,75 @@ func TestPublicationRelationshipsAndIncompleteScope(t *testing.T) {
 	var integration *application.IntegrationError
 	if !errors.As(err, &integration) || integration.Class != application.IntegrationManualRemediationRequired {
 		t.Fatal(err)
+	}
+}
+
+func TestPublicationInspectsMilestoneIdentityAndMembership(t *testing.T) {
+	body := publicationTestRequest().Source.URL
+	issue := publicationTestIssue(10, "A", body)
+	milestone := publicationMilestone{NodeID: "MI_2", Number: 2, URL: "https://github.com/owner/repo/milestone/2", Title: "Phase 5", State: "open"}
+	issue.Milestone = &publicationMilestone{Number: milestone.Number, Title: milestone.Title}
+	runner := &publicationRunner{t: t, listed: []publicationIssue{issue}, milestones: map[int]publicationMilestone{2: milestone}}
+	adapter := New(Config{Enabled: true}, Options{ProjectRoot: t.TempDir(), Runner: runner})
+	request := publicationTestRequest()
+	request.Group = &application.PublicationGroup{Title: milestone.Title}
+	snapshot, err := adapter.PublicationTarget().Inspect(context.Background(), request)
+	if err != nil || snapshot.Group == nil || snapshot.Group.Reference.DisplayID != "2" || len(snapshot.Group.Members) != 1 || snapshot.Group.Members[0] != request.Artifacts[0] {
+		t.Fatalf("snapshot=%+v err=%v", snapshot, err)
+	}
+	request.Group.Reference = snapshot.Group.Reference
+	snapshot, err = adapter.PublicationTarget().Inspect(context.Background(), request)
+	if err != nil || snapshot.Group.Reference.Revision == "" {
+		t.Fatalf("direct snapshot=%+v err=%v", snapshot, err)
+	}
+}
+
+func TestPublicationRecoversMilestoneByExactTitleWithoutMembership(t *testing.T) {
+	body := publicationTestRequest().Source.URL
+	issue := publicationTestIssue(10, "A", body)
+	milestone := publicationMilestone{NodeID: "MI_2", Number: 2, URL: "https://github.com/owner/repo/milestone/2", Title: "Phase 5", State: "open"}
+	runner := &publicationRunner{t: t, listed: []publicationIssue{issue}, milestones: map[int]publicationMilestone{2: milestone}}
+	adapter := New(Config{Enabled: true}, Options{ProjectRoot: t.TempDir(), Runner: runner})
+	request := publicationTestRequest()
+	request.Group = &application.PublicationGroup{Title: "phase 5"}
+	snapshot, err := adapter.PublicationTarget().Inspect(context.Background(), request)
+	if err != nil || snapshot.Group == nil || snapshot.Group.Reference.DisplayID != "2" || snapshot.Group.Reference.URL != milestone.URL || snapshot.Group.Reference.Revision == "" || len(snapshot.Group.Members) != 0 {
+		t.Fatalf("snapshot=%+v err=%v", snapshot, err)
+	}
+}
+
+func TestPublicationRejectsAmbiguousOrIncompleteMilestones(t *testing.T) {
+	for _, scenario := range []string{"duplicate-title", "different-members", "listing-limit"} {
+		t.Run(scenario, func(t *testing.T) {
+			body := publicationTestRequest().Source.URL
+			a := publicationTestIssue(10, "A", body)
+			runner := &publicationRunner{t: t, listed: []publicationIssue{a}, milestones: map[int]publicationMilestone{}}
+			request := publicationTestRequest()
+			request.Group = &application.PublicationGroup{Title: "Phase 5"}
+			switch scenario {
+			case "duplicate-title":
+				runner.milestones[1] = publicationMilestone{Number: 1, URL: "https://github.com/owner/repo/milestone/1", Title: "Phase 5"}
+				runner.milestones[2] = publicationMilestone{Number: 2, URL: "https://github.com/owner/repo/milestone/2", Title: "phase 5"}
+			case "different-members":
+				b := publicationTestIssue(11, "B", body)
+				b.Title = "B"
+				a.Milestone = &publicationMilestone{Number: 1, Title: "One"}
+				b.Milestone = &publicationMilestone{Number: 2, Title: "Two"}
+				runner.listed = []publicationIssue{a, b}
+				runner.milestones[1] = publicationMilestone{Number: 1, URL: "https://github.com/owner/repo/milestone/1", Title: "One"}
+				runner.milestones[2] = publicationMilestone{Number: 2, URL: "https://github.com/owner/repo/milestone/2", Title: "Two"}
+				request.Artifacts = append(request.Artifacts, planning.ArtifactRef{Kind: planning.ArtifactSpec, ID: "b"})
+			case "listing-limit":
+				for i := 1; i <= 100; i++ {
+					runner.milestones[i] = publicationMilestone{Number: i, URL: fmt.Sprintf("https://github.com/owner/repo/milestone/%d", i), Title: fmt.Sprintf("M%d", i)}
+				}
+			}
+			adapter := New(Config{Enabled: true}, Options{ProjectRoot: t.TempDir(), Runner: runner})
+			_, err := adapter.PublicationTarget().Inspect(context.Background(), request)
+			if err == nil {
+				t.Fatal("accepted ambiguous or incomplete milestone evidence")
+			}
+		})
 	}
 }
 
