@@ -21,8 +21,11 @@ type publicationRunner struct {
 	listed        []publicationIssue
 	direct        map[int]publicationIssue
 	milestones    map[int]publicationMilestone
+	projects      map[string]publicationProject
+	projectsMore  bool
 	relationships map[string][]publicationIssue
 	calls         int
+	projectReads  int
 }
 
 func (r *publicationRunner) Run(_ context.Context, _ string, args ...string) (RunResult, error) {
@@ -31,6 +34,27 @@ func (r *publicationRunner) Run(_ context.Context, _ string, args ...string) (Ru
 	switch {
 	case len(args) > 1 && args[0] == "issue" && args[1] == "list":
 		value = r.listed
+	case len(args) >= 2 && args[0] == "api" && args[1] == "graphql":
+		r.projectReads++
+		query := publicationTestArgument(args, "query")
+		switch {
+		case strings.Contains(query, "projectsV2(first:100)"):
+			projects := make([]publicationProject, 0, len(r.projects))
+			for _, project := range r.projects {
+				projects = append(projects, project)
+			}
+			slices.SortFunc(projects, func(a, b publicationProject) int { return a.Number - b.Number })
+			value = map[string]any{"data": map[string]any{"repositoryOwner": map[string]any{"login": "owner", "projects": map[string]any{"nodes": projects, "pageInfo": map[string]bool{"hasNextPage": r.projectsMore}}}}}
+		case strings.Contains(query, "node(id:$id)"):
+			project, found := r.projects[publicationTestArgument(args, "id")]
+			if !found {
+				value = map[string]any{"data": map[string]any{"node": nil}}
+			} else {
+				value = map[string]any{"data": map[string]any{"node": project}}
+			}
+		default:
+			r.t.Fatalf("unexpected publication GraphQL query: %s", query)
+		}
 	case len(args) == 4 && args[0] == "api" && args[1] == "--method" && args[2] == "GET":
 		if links, ok := r.relationships[args[3]]; ok {
 			value = links
@@ -74,6 +98,32 @@ func (r *publicationRunner) Run(_ context.Context, _ string, args ...string) (Ru
 	}
 	raw, err := json.Marshal(value)
 	return RunResult{Stdout: raw}, err
+}
+
+func publicationTestArgument(args []string, key string) string {
+	prefix := key + "="
+	for _, arg := range args {
+		if strings.HasPrefix(arg, prefix) {
+			return strings.TrimPrefix(arg, prefix)
+		}
+	}
+	return ""
+}
+
+func publicationTestProject(number int, title string, repositories ...string) publicationProject {
+	var project publicationProject
+	project.ID = fmt.Sprintf("PVT_%d", number)
+	project.Number = number
+	project.URL = fmt.Sprintf("https://github.com/users/owner/projects/%d", number)
+	project.Title = title
+	project.Owner.Typename = "User"
+	project.Owner.Login = "owner"
+	for _, repository := range repositories {
+		project.Repositories.Nodes = append(project.Repositories.Nodes, struct {
+			NameWithOwner string `json:"nameWithOwner"`
+		}{repository})
+	}
+	return project
 }
 
 func publicationTestIssue(number int, title, body string) publicationIssue {
@@ -243,6 +293,63 @@ func TestPublicationRecoversMilestoneByExactTitleWithoutMembership(t *testing.T)
 	snapshot, err := adapter.PublicationTarget().Inspect(context.Background(), request)
 	if err != nil || snapshot.Group == nil || snapshot.Group.Reference.DisplayID != "2" || snapshot.Group.Reference.URL != milestone.URL || snapshot.Group.Reference.Revision == "" || len(snapshot.Group.Members) != 0 {
 		t.Fatalf("snapshot=%+v err=%v", snapshot, err)
+	}
+}
+
+func TestPublicationInspectsProjectCreateConnectAndSkip(t *testing.T) {
+	issue := publicationTestIssue(10, "A", publicationTestRequest().Source.URL)
+	project := publicationTestProject(12, "Phase 5 workspace", "owner/repo")
+	runner := &publicationRunner{t: t, listed: []publicationIssue{issue}, projects: map[string]publicationProject{project.ID: project}}
+	adapter := New(Config{Enabled: true}, Options{ProjectRoot: t.TempDir(), Runner: runner})
+	request := publicationTestRequest()
+	request.Workspace = &application.PublicationWorkspaceDecision{Choice: application.PublicationWorkspaceCreate, Title: project.Title}
+	snapshot, err := adapter.PublicationTarget().Inspect(context.Background(), request)
+	if err != nil || snapshot.Workspace == nil || snapshot.Workspace.Reference.OpaqueID != project.ID || snapshot.Workspace.Reference.Revision == "" {
+		t.Fatalf("create recovery snapshot=%+v err=%v", snapshot, err)
+	}
+	ref := publicationProjectReference(project)
+	ref.Revision = ""
+	request.Workspace = &application.PublicationWorkspaceDecision{Choice: application.PublicationWorkspaceConnect, Reason: "Reviewed existing workspace.", Reference: &ref}
+	snapshot, err = adapter.PublicationTarget().Inspect(context.Background(), request)
+	if err != nil || snapshot.Workspace == nil || snapshot.Workspace.Reference.Revision == "" || snapshot.Workspace.Reason != request.Workspace.Reason {
+		t.Fatalf("connect snapshot=%+v err=%v", snapshot, err)
+	}
+	reads := runner.projectReads
+	request.Workspace = &application.PublicationWorkspaceDecision{Choice: application.PublicationWorkspaceSkip}
+	snapshot, err = adapter.PublicationTarget().Inspect(context.Background(), request)
+	if err != nil || snapshot.Workspace != nil || runner.projectReads != reads {
+		t.Fatalf("skip snapshot=%+v project_reads=%d err=%v", snapshot, runner.projectReads, err)
+	}
+}
+
+func TestPublicationProjectRecoveryRequiresUniqueRepositoryLink(t *testing.T) {
+	for _, scenario := range []string{"unlinked", "duplicate", "listing-limit"} {
+		t.Run(scenario, func(t *testing.T) {
+			issue := publicationTestIssue(10, "A", publicationTestRequest().Source.URL)
+			runner := &publicationRunner{t: t, listed: []publicationIssue{issue}, projects: map[string]publicationProject{}}
+			first := publicationTestProject(1, "Workspace", "another/repo")
+			runner.projects[first.ID] = first
+			switch scenario {
+			case "duplicate":
+				first = publicationTestProject(1, "Workspace", "owner/repo")
+				runner.projects[first.ID] = first
+				second := publicationTestProject(2, "workspace", "owner/repo")
+				runner.projects[second.ID] = second
+			case "listing-limit":
+				runner.projectsMore = true
+			}
+			adapter := New(Config{Enabled: true}, Options{ProjectRoot: t.TempDir(), Runner: runner})
+			request := publicationTestRequest()
+			request.Workspace = &application.PublicationWorkspaceDecision{Choice: application.PublicationWorkspaceCreate, Title: "Workspace"}
+			snapshot, err := adapter.PublicationTarget().Inspect(context.Background(), request)
+			if scenario == "unlinked" {
+				if err != nil || snapshot.Workspace != nil {
+					t.Fatalf("unlinked snapshot=%+v err=%v", snapshot, err)
+				}
+			} else if err == nil {
+				t.Fatal("accepted ambiguous or incomplete Project listing")
+			}
+		})
 	}
 }
 

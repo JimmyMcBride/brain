@@ -18,21 +18,22 @@ import (
 )
 
 type publicationWriteRunner struct {
-	t                                          *testing.T
-	issues                                     map[int]publicationIssue
-	milestones                                 map[int]publicationMilestone
-	labels                                     map[string]bool
-	links                                      map[string][]int
-	calls, writes, next, nextMilestone, failAt int
-	lostResponse                               bool
-	payloads                                   []map[string]any
-	beforeRead                                 func(string)
-	beforeWrite                                func()
-	failStderr                                 string
+	t                                                       *testing.T
+	issues                                                  map[int]publicationIssue
+	milestones                                              map[int]publicationMilestone
+	projects                                                map[string]publicationProject
+	labels                                                  map[string]bool
+	links                                                   map[string][]int
+	calls, writes, next, nextMilestone, nextProject, failAt int
+	lostResponse                                            bool
+	payloads                                                []map[string]any
+	beforeRead                                              func(string)
+	beforeWrite                                             func()
+	failStderr                                              string
 }
 
 func newPublicationWriteRunner(t *testing.T) *publicationWriteRunner {
-	return &publicationWriteRunner{t: t, issues: map[int]publicationIssue{}, milestones: map[int]publicationMilestone{}, labels: map[string]bool{}, links: map[string][]int{}, next: 101, nextMilestone: 1}
+	return &publicationWriteRunner{t: t, issues: map[int]publicationIssue{}, milestones: map[int]publicationMilestone{}, projects: map[string]publicationProject{}, labels: map[string]bool{}, links: map[string][]int{}, next: 101, nextMilestone: 1, nextProject: 1}
 }
 
 func publicationREST(issue publicationIssue) map[string]any {
@@ -65,6 +66,28 @@ func (r *publicationWriteRunner) Run(_ context.Context, _ string, args ...string
 		}
 		slices.SortFunc(listed, func(a, b publicationIssue) int { return a.Number - b.Number })
 		value = listed
+	} else if len(args) >= 2 && args[0] == "api" && args[1] == "graphql" {
+		query := publicationTestArgument(args, "query")
+		switch {
+		case strings.Contains(query, "projectsV2(first:100)"):
+			projects := make([]publicationProject, 0, len(r.projects))
+			for _, project := range r.projects {
+				projects = append(projects, project)
+			}
+			slices.SortFunc(projects, func(a, b publicationProject) int { return a.Number - b.Number })
+			value = map[string]any{"data": map[string]any{"repositoryOwner": map[string]any{"login": "owner", "projects": map[string]any{"nodes": projects, "pageInfo": map[string]bool{"hasNextPage": false}}}}}
+		case strings.Contains(query, "node(id:$id)"):
+			project, found := r.projects[publicationTestArgument(args, "id")]
+			if !found {
+				value = map[string]any{"data": map[string]any{"node": nil}}
+			} else {
+				value = map[string]any{"data": map[string]any{"node": project}}
+			}
+		case strings.Contains(query, "repositoryOwner(login:$owner)") && strings.Contains(query, "repository(owner:$owner"):
+			value = map[string]any{"data": map[string]any{"repositoryOwner": map[string]string{"id": "U_owner", "login": "owner"}, "repository": map[string]string{"id": "R_repo", "nameWithOwner": "owner/repo"}}}
+		default:
+			r.t.Fatalf("unexpected publication GraphQL query: %s", query)
+		}
 	} else if len(args) == 4 && args[0] == "api" && args[2] == "GET" {
 		endpoint := args[3]
 		if r.beforeRead != nil {
@@ -170,6 +193,15 @@ func (r *publicationWriteRunner) RunInput(_ context.Context, _ string, input []b
 			}
 		}
 		response = publicationMilestoneREST(milestone)
+	case endpoint == "graphql" && strings.Contains(payload["query"].(string), "createProjectV2"):
+		variables := payload["variables"].(map[string]any)
+		project := publicationTestProject(r.nextProject, variables["title"].(string), "owner/repo")
+		r.nextProject++
+		if _, duplicate := r.projects[project.ID]; duplicate {
+			r.t.Fatal("duplicate Project create")
+		}
+		r.projects[project.ID] = project
+		response = map[string]any{"data": map[string]any{"createProjectV2": map[string]any{"projectV2": project}}}
 	case endpoint == "graphql":
 		variables := payload["variables"].(map[string]any)
 		var source, target publicationIssue
@@ -656,16 +688,91 @@ func TestPublicationRejectsIncompleteLabelListingAndMissingInputRunner(t *testin
 	}
 }
 
-func TestPublicationRejectsWorkspaceActionsBeforeProviderWrites(t *testing.T) {
-	adapter, runner, input := publicationWriteFixture(t)
-	input.Workspace = &application.PublicationWorkspaceDecision{Choice: application.PublicationWorkspaceSkip}
-	plan, err := application.New(nil, application.Options{}).PreviewPublication(context.Background(), adapter.PublicationTarget(), input, publicationAllow{})
-	if err != nil {
-		t.Fatal(err)
+func TestPublicationWorkspaceCreateConnectSkipAndRerun(t *testing.T) {
+	t.Run("create", func(t *testing.T) {
+		adapter, runner, input := publicationWriteFixture(t)
+		input.Workspace = &application.PublicationWorkspaceDecision{Choice: application.PublicationWorkspaceCreate, Title: "Phase 5 workspace"}
+		result, err := runPublication(t, adapter, input, &publicationWriteEvents{})
+		if err != nil || len(runner.projects) != 1 || runner.writes != 4 || result.Evidence.Completed[len(result.Evidence.Completed)-1].References[0].Kind != "project" {
+			t.Fatalf("result=%+v projects=%+v writes=%d err=%v", result, runner.projects, runner.writes, err)
+		}
+		writes := runner.writes
+		result, err = runPublication(t, adapter, input, &publicationWriteEvents{})
+		if err != nil || runner.writes != writes || len(runner.projects) != 1 || result.Evidence.Completed[len(result.Evidence.Completed)-1].Action.Action != application.MutationReuse {
+			t.Fatalf("rerun result=%+v projects=%+v writes=%d err=%v", result, runner.projects, runner.writes, err)
+		}
+	})
+	t.Run("connect", func(t *testing.T) {
+		adapter, runner, input := publicationWriteFixture(t)
+		project := publicationTestProject(12, "Existing workspace", "owner/repo")
+		runner.projects[project.ID] = project
+		ref := publicationProjectReference(project)
+		ref.Revision = ""
+		input.Workspace = &application.PublicationWorkspaceDecision{Choice: application.PublicationWorkspaceConnect, Reason: "Reviewed existing workspace.", Reference: &ref}
+		result, err := runPublication(t, adapter, input, &publicationWriteEvents{})
+		if err != nil || len(result.Evidence.Completed) == 0 {
+			t.Fatalf("result=%+v projects=%+v writes=%d err=%v", result, runner.projects, runner.writes, err)
+		}
+		last := result.Evidence.Completed[len(result.Evidence.Completed)-1]
+		if len(runner.projects) != 1 || runner.writes != 3 || last.Action.Action != application.MutationReuse || len(last.References) != 1 || last.References[0].OpaqueID != project.ID {
+			t.Fatalf("result=%+v projects=%+v writes=%d err=%v", result, runner.projects, runner.writes, err)
+		}
+	})
+	t.Run("skip", func(t *testing.T) {
+		adapter, runner, input := publicationWriteFixture(t)
+		input.Workspace = &application.PublicationWorkspaceDecision{Choice: application.PublicationWorkspaceSkip}
+		result, err := runPublication(t, adapter, input, &publicationWriteEvents{})
+		if err != nil || len(result.Evidence.Completed) == 0 {
+			t.Fatalf("result=%+v projects=%+v writes=%d err=%v", result, runner.projects, runner.writes, err)
+		}
+		last := result.Evidence.Completed[len(result.Evidence.Completed)-1]
+		if len(runner.projects) != 0 || runner.writes != 3 || last.Action.Action != application.MutationUnchanged || len(last.References) != 0 {
+			t.Fatalf("result=%+v projects=%+v writes=%d err=%v", result, runner.projects, runner.writes, err)
+		}
+	})
+}
+
+func TestPublicationRejectsTamperedWorkspacePlansBeforeMutation(t *testing.T) {
+	for _, change := range []string{"action", "choice", "reference"} {
+		t.Run(change, func(t *testing.T) {
+			adapter, runner, input := publicationWriteFixture(t)
+			input.Workspace = &application.PublicationWorkspaceDecision{Choice: application.PublicationWorkspaceCreate, Title: "Phase 5 workspace"}
+			plan, err := application.New(nil, application.Options{}).PreviewPublication(context.Background(), adapter.PublicationTarget(), input, publicationAllow{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			workspace := &plan.Actions[len(plan.Actions)-1]
+			if workspace.Kind != application.PublicationWorkspaceAction {
+				t.Fatal("workspace action not ordered last", plan.Actions)
+			}
+			switch change {
+			case "action":
+				workspace.Action = application.MutationUpdate
+			case "choice":
+				workspace.Workspace.Choice = application.PublicationWorkspaceConnect
+			case "reference":
+				ref := application.ExternalReference{Provider: providerName, Kind: "project", OpaqueID: "PVT_12", DisplayID: "12", URL: "https://github.com/users/owner/projects/12", Revision: "tampered"}
+				workspace.Workspace.Reference = &ref
+			}
+			if _, err := adapter.PublicationTarget().Apply(context.Background(), plan); err == nil || runner.writes != 0 {
+				t.Fatal("tampered workspace plan mutated", err)
+			}
+		})
 	}
-	_, err = adapter.PublicationTarget().Apply(context.Background(), plan)
+}
+
+func TestPublicationProjectLostResponseRecoversWithoutDuplicate(t *testing.T) {
+	adapter, runner, input := publicationWriteFixture(t)
+	input.Workspace = &application.PublicationWorkspaceDecision{Choice: application.PublicationWorkspaceCreate, Title: "Phase 5 workspace"}
+	runner.failAt, runner.lostResponse = 4, true
+	result, err := runPublication(t, adapter, input, &publicationWriteEvents{})
 	var integration *application.IntegrationError
-	if !errors.As(err, &integration) || integration.Class != application.IntegrationUnsupportedCapability || runner.writes != 0 {
-		t.Fatalf("workspace action reached provider: writes=%d err=%v", runner.writes, err)
+	if !errors.As(err, &integration) || integration.Class != application.IntegrationPartialFailure || result.Evidence.Failed == nil || len(runner.projects) != 1 {
+		t.Fatalf("result=%+v projects=%+v err=%v", result, runner.projects, err)
+	}
+	runner.failAt = 0
+	writes := runner.writes
+	if _, err := runPublication(t, adapter, input, &publicationWriteEvents{}); err != nil || len(runner.projects) != 1 || runner.writes != writes {
+		t.Fatal("Project recovery duplicated provider state", err)
 	}
 }

@@ -1,5 +1,5 @@
 ---
-updated: "2026-09-07T19:26:59Z"
+updated: "2026-09-26T22:30:48Z"
 ---
 # Planning Module Implementation Roadmap
 
@@ -134,8 +134,15 @@ known mappings, issue membership, or an exact bounded title match; creates and
 renames milestones with revision guards; attaches every publication issue; and
 recovers partial or lost-response runs without duplicate milestones. Group
 membership is part of the reviewed snapshot, so drift classifies as update and
-identical reruns make no provider writes. GitHub Project inspection/apply remains
-pending, so this is not yet the complete retained promotion workflow.
+identical reruns make no provider writes. GitHub Project inspection/apply now
+implements the reviewed create/connect/skip workspace decision. Inspection uses
+canonical node/URL identity or a unique exact-title Project already linked to
+the target repository; create performs a final bounded recovery check, records
+revisioned identity evidence, and makes recovered or identical reruns
+write-free. This slice deliberately owns Project identity only: field schema,
+item attachment, status, and drift remain with the execution-workspace port so
+they cannot occur as hidden publication side effects. Coordination identity
+persistence remains before the retained promotion workflow is complete.
 
 Move retained GitHub collaboration/publication/repository/execution behavior
 behind generic Planning ports. Support planning PRs and retained Discussion,
@@ -190,8 +197,8 @@ lifecycle, diagnostics, and distribution direction.
 
 ## Exact Next Slice
 
-> Implement GitHub Project inspection/apply for reviewed create/connect/skip
-> workspace decisions, then persist the resulting milestone and workspace
-> identities through adoption/reconciliation. Preserve structured spec briefs,
-> stable identity, confirmation, idempotency, and partial-failure recovery.
-> Native module wiring remains in rollout slice 5.
+> Persist resulting milestone and workspace identities through
+> adoption/reconciliation, then implement reviewed execution-workspace field,
+> item, status, and drift behavior. Preserve structured spec briefs, stable
+> identity, confirmation, idempotency, and partial-failure recovery. Native
+> module wiring remains in rollout slice 5.
