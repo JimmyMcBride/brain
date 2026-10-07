@@ -151,6 +151,20 @@ func (a *Adapter) applyPublication(ctx context.Context, plan application.Publica
 					return fail(err)
 				}
 			}
+		} else if workspace := action.Workspace; workspace != nil {
+			if workspace.Choice == application.PublicationWorkspaceSkip {
+				// The reviewed skip decision has no provider identity or write.
+			} else if action.Action == application.MutationReuse {
+				evidence.References = []application.ExternalReference{*workspace.Reference}
+			} else {
+				project, err := a.writePublicationWorkspace(ctx, plan, action)
+				if project != nil {
+					evidence.References = []application.ExternalReference{publicationProjectReference(*project)}
+				}
+				if err != nil {
+					return fail(err)
+				}
+			}
 		} else if action.Relationship != nil && action.Action == application.MutationCreate {
 			if err := a.writePublicationRelationship(ctx, *action.Relationship, resolved); err != nil {
 				return fail(err)
@@ -168,7 +182,37 @@ func publicationPlanIntent(plan application.PublicationPlan) (application.Public
 	}
 	for _, action := range plan.Actions {
 		if action.Kind == application.PublicationWorkspaceAction {
-			return input, providerError(application.IntegrationUnsupportedCapability, publicationApplyOperation, "publication workspace actions are not implemented by the GitHub adapter")
+			if input.Workspace != nil || action.Workspace == nil || action.Artifact != nil || action.Group != nil || action.Relationship != nil {
+				return input, publicationApplyConflict("invalid publication workspace action")
+			}
+			workspace := *action.Workspace
+			switch workspace.Choice {
+			case application.PublicationWorkspaceSkip:
+				if action.Action != application.MutationUnchanged || workspace.Reference != nil {
+					return input, publicationApplyConflict("invalid skipped Project action")
+				}
+			case application.PublicationWorkspaceCreate:
+				if action.Action == application.MutationCreate {
+					if workspace.Reference != nil {
+						return input, publicationApplyConflict("new Projects cannot carry an existing reference")
+					}
+				} else if action.Action == application.MutationReuse {
+					if workspace.Reference == nil || workspace.Reference.Revision == "" {
+						return input, publicationApplyConflict("recovered Projects require revision-bound references")
+					}
+					workspace.Reference = nil
+				} else {
+					return input, publicationApplyConflict("invalid Project create action")
+				}
+			case application.PublicationWorkspaceConnect:
+				if action.Action != application.MutationReuse || workspace.Reference == nil || workspace.Reference.Revision == "" {
+					return input, publicationApplyConflict("connected Projects require revision-bound references")
+				}
+			default:
+				return input, publicationApplyConflict("invalid Project workspace choice")
+			}
+			input.Workspace = &workspace
+			continue
 		}
 		if action.Kind == application.PublicationGroupAction {
 			if input.Group != nil || action.Group == nil || action.Artifact != nil || action.Relationship != nil || action.Workspace != nil {

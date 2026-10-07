@@ -304,6 +304,11 @@ func (a *Adapter) publicationSnapshot(ctx context.Context, request application.P
 		return application.PublicationSnapshot{}, err
 	}
 	result.Group = group
+	workspace, err := a.publicationWorkspaceSnapshot(ctx, request.Workspace, repo)
+	if err != nil {
+		return application.PublicationSnapshot{}, err
+	}
+	result.Workspace = workspace
 	for i := range result.Artifacts {
 		artifact := &result.Artifacts[i]
 		number, _ := strconv.Atoi(artifact.Reference.DisplayID)
