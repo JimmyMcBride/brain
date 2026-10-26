@@ -182,6 +182,48 @@ func TestReconciliationExecutionRejectsConcurrentItemRevision(t *testing.T) {
 	}
 }
 
+func TestReconciliationPartialExecutionWritesRetainEvidenceAndAudit(t *testing.T) {
+	for _, mutation := range []string{"attach", "status"} {
+		t.Run(mutation, func(t *testing.T) {
+			service, target, repository, mappings, input := reconciliationFixture()
+			target.snapshot.Artifacts[0].Content = input.Publication.Artifacts[0].Content
+			target.snapshot.Artifacts[0].Readiness = input.Publication.Artifacts[0].Readiness
+			artifact := input.Publication.Artifacts[0].Artifact
+			issue := *target.snapshot.Artifacts[0].Reference
+			issueSelector := issue
+			issueSelector.OpaqueID = issue.URL
+			issueSelector.Revision = ""
+			workspaceRef := ExternalReference{Provider: "test", Kind: "project", OpaqueID: "project-1", DisplayID: "1", URL: "https://example.test/projects/1", Revision: "workspace-1"}
+			mappings.state.WorkspaceReferences = []ExternalReference{workspaceRef}
+			execution := &executionMemory{snapshot: ExecutionWorkspaceSnapshot{SchemaVersion: IntegrationContractVersion, Workspace: workspaceRef, ConfigurationRevision: "configuration-1", Fields: []ExecutionField{{Role: ExecutionFieldRoleStatus, SupportedStatuses: []ExecutionStatus{ExecutionTodo, ExecutionInProgress, ExecutionInReview, ExecutionDone}}}}}
+			input.Execution = []ExecutionIntent{{Artifact: artifact, PublishedWork: issueSelector, Status: ExecutionDone}}
+			if mutation == "status" {
+				execution.snapshot.Items = []ExecutionWorkItem{{Artifact: artifact, PublishedWork: issue, Reference: ExternalReference{Provider: "test", Kind: "project_item", OpaqueID: "item-1", DisplayID: "#1", URL: issue.URL, Revision: "item-1"}, Status: ExecutionTodo}}
+			}
+
+			plan, err := service.PreviewReconciliation(context.Background(), target, repository, mappings, execution, input, &collaborationPolicy{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			partial := &IntegrationError{Class: IntegrationPartialFailure, Operation: "test", Message: "verification failed"}
+			if mutation == "attach" {
+				execution.attachErr = partial
+				execution.attachEvidence = ExecutionWorkItem{Artifact: artifact, PublishedWork: issue, Reference: ExternalReference{Provider: "test", Kind: "project_item", OpaqueID: "item-1", DisplayID: "#1", URL: issue.URL}}
+			} else {
+				execution.statusErr = partial
+				execution.statusEvidence = execution.snapshot.Items[0]
+				execution.statusEvidence.Status = ExecutionDone
+				execution.statusEvidence.Reference.Revision = ""
+			}
+			events := &collaborationEvents{}
+			result, err := service.ApplyReconciliation(context.Background(), target, repository, mappings, execution, ReconciliationApplyInput{Intent: input, ExpectedPlan: plan, Confirmed: true}, &collaborationPolicy{}, events)
+			if !isIntegrationClass(err, IntegrationPartialFailure) || len(result.Execution) != 1 || result.Event == nil || events.calls != 1 || target.writes != 0 {
+				t.Fatalf("result=%+v events=%d provider writes=%d err=%v", result, events.calls, target.writes, err)
+			}
+		})
+	}
+}
+
 func TestReconciliationGatesAndStaleEvidence(t *testing.T) {
 	for _, test := range []string{"confirmation", "publish", "read", "events", "plan", "repository", "mapping"} {
 		t.Run(test, func(t *testing.T) {

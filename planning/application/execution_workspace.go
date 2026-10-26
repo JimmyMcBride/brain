@@ -169,7 +169,7 @@ func (s *Service) ApplyExecutionStatus(ctx context.Context, workspace ExecutionW
 	}
 	item, err := workspace.ApplyStatus(ctx, fresh.Request)
 	if err != nil {
-		if item.Artifact == fresh.Item.Artifact && sameExternalLocation(item.Reference, fresh.Item.Reference) && item.Status == fresh.Request.Status {
+		if validPartialExecutionStatusItem(item, fresh.Item, fresh.Request) {
 			result.Item = item
 			event := Event{Name: EventExecutionStatusUpdated, ModuleID: s.moduleID, Artifact: item.Artifact, Source: &item.Reference, Outcome: MutationUpdate, OccurredAt: s.now().UTC()}
 			result.Event = &event
@@ -270,6 +270,10 @@ func validateAttachedExecutionItem(item ExecutionWorkItem, request ExecutionAtta
 
 func validPartialAttachedExecutionItem(item ExecutionWorkItem, request ExecutionAttachRequest) bool {
 	return item.Artifact == request.Artifact && sameExternalLocation(item.PublishedWork, request.PublishedWork) && validExecutionReference(item.Reference, "project_item")
+}
+
+func validPartialExecutionStatusItem(item, previous ExecutionWorkItem, request ExecutionStatusRequest) bool {
+	return item.Artifact == previous.Artifact && sameExternalLocation(item.Reference, previous.Reference) && item.Status == request.Status
 }
 
 func executionStatusSupported(fields []ExecutionField, status ExecutionStatus) bool {

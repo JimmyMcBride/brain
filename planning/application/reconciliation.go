@@ -267,6 +267,10 @@ func applyReconciliationExecution(ctx context.Context, workspace ExecutionWorksp
 		}
 		item, err := workspace.Attach(ctx, request)
 		if err != nil {
+			if validPartialAttachedExecutionItem(item, request) {
+				result = append(result, item)
+				changed = true
+			}
 			return result, changed, reconciliationExecutionFailure(changed, err)
 		}
 		result = append(result, item)
@@ -299,6 +303,10 @@ func applyReconciliationExecution(ctx context.Context, workspace ExecutionWorksp
 		}
 		item, err := workspace.ApplyStatus(ctx, request)
 		if err != nil {
+			if validPartialExecutionStatusItem(item, *current, request) {
+				result = append(result, item)
+				changed = true
+			}
 			return result, changed, reconciliationExecutionFailure(changed, err)
 		}
 		result = append(result, item)
