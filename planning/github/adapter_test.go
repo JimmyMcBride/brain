@@ -47,6 +47,9 @@ func TestDisabledAdapterPerformsNoProviderOrMetadataWork(t *testing.T) {
 	adapter.state = state
 
 	operations := []func() error{
+		func() error { _, err := adapter.Preflight(context.Background()); return err },
+		func() error { _, err := adapter.Enable(context.Background()); return err },
+		func() error { return adapter.Health(context.Background()) },
 		func() error {
 			_, err := adapter.CollaborationSource().Read(context.Background(), application.ExternalReference{})
 			return err

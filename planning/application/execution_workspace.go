@@ -10,7 +10,7 @@ const (
 	// EventExecutionAttached records a newly tracked Planning artifact.
 	EventExecutionAttached = "planning.execution.attached"
 	// EventExecutionStatusUpdated records a changed semantic delivery status.
-	EventExecutionStatusUpdated = "planning.execution.status_updated"
+	EventExecutionStatusUpdated = "planning.execution.status-updated"
 )
 
 // PreviewExecutionAttach classifies one published artifact as an existing or

@@ -3,10 +3,10 @@ created_at: "2026-10-26T14:28:47Z"
 initiative: github-adapter-transition
 project: brain
 slug: native-github-planning-rollout
-status: approved
+status: implementing
 title: Native GitHub Planning Rollout
 type: spec
-updated_at: "2026-10-26T15:12:28Z"
+updated_at: "2026-10-26T20:09:53Z"
 ---
 
 # Native GitHub Planning Rollout
@@ -193,7 +193,6 @@ coordinates cross-host proof and publication.
 ### Recommended Revisions
 
 - None.
-
 ## Checklist
 
 ### general
