@@ -9,9 +9,10 @@ import (
 )
 
 type executionMemory struct {
-	snapshot                  ExecutionWorkspaceSnapshot
-	reads, attaches, statuses int
-	attachErr, statusErr      error
+	snapshot                       ExecutionWorkspaceSnapshot
+	reads, attaches, statuses      int
+	attachErr, statusErr           error
+	attachEvidence, statusEvidence ExecutionWorkItem
 }
 
 func (m *executionMemory) Inspect(context.Context, ExternalReference) (ExecutionWorkspaceSnapshot, error) {
@@ -21,7 +22,7 @@ func (m *executionMemory) Inspect(context.Context, ExternalReference) (Execution
 
 func (m *executionMemory) Attach(_ context.Context, request ExecutionAttachRequest) (ExecutionWorkItem, error) {
 	if m.attachErr != nil {
-		return ExecutionWorkItem{}, m.attachErr
+		return m.attachEvidence, m.attachErr
 	}
 	m.attaches++
 	item := ExecutionWorkItem{Artifact: request.Artifact, PublishedWork: request.PublishedWork, Reference: ExternalReference{Provider: "test", Kind: "project_item", OpaqueID: "item-1", DisplayID: "#1", URL: request.PublishedWork.URL, Revision: "item-1"}, Status: ExecutionTodo}
@@ -32,7 +33,7 @@ func (m *executionMemory) Attach(_ context.Context, request ExecutionAttachReque
 
 func (m *executionMemory) ApplyStatus(_ context.Context, request ExecutionStatusRequest) (ExecutionWorkItem, error) {
 	if m.statusErr != nil {
-		return ExecutionWorkItem{}, m.statusErr
+		return m.statusEvidence, m.statusErr
 	}
 	m.statuses++
 	for i := range m.snapshot.Items {
@@ -129,6 +130,37 @@ func TestExecutionStatusCanInitializeUnsetField(t *testing.T) {
 	plan, err := service.PreviewExecutionStatus(context.Background(), workspace, request, &collaborationPolicy{})
 	if err != nil || plan.Action != MutationUpdate {
 		t.Fatalf("plan=%+v err=%v", plan, err)
+	}
+}
+
+func TestExecutionPartialVerificationStillAuditsConfirmedWrites(t *testing.T) {
+	service, workspace, artifact, issue := executionFixture()
+	policy, events := &collaborationPolicy{}, &collaborationEvents{}
+	partial := &IntegrationError{Class: IntegrationPartialFailure, Operation: "test", Message: "verification failed"}
+	attachPlan, err := service.PreviewExecutionAttach(context.Background(), workspace, ExecutionAttachRequest{Workspace: workspace.snapshot.Workspace, Artifact: artifact, PublishedWork: issue}, policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace.attachErr = partial
+	workspace.attachEvidence = ExecutionWorkItem{Artifact: artifact, PublishedWork: issue, Reference: ExternalReference{Provider: "test", Kind: "project_item", OpaqueID: "item-1", DisplayID: "#1", URL: issue.URL}}
+	result, err := service.ApplyExecutionAttach(context.Background(), workspace, ExecutionAttachApplyInput{ExpectedPlan: attachPlan, Confirmed: true}, policy, events)
+	if !isIntegrationClass(err, IntegrationPartialFailure) || result.Event == nil || events.calls != 1 {
+		t.Fatalf("attach result=%+v events=%d err=%v", result, events.calls, err)
+	}
+
+	workspace.attachErr = nil
+	workspace.snapshot.Items = []ExecutionWorkItem{{Artifact: artifact, PublishedWork: issue, Reference: ExternalReference{Provider: "test", Kind: "project_item", OpaqueID: "item-1", DisplayID: "#1", URL: issue.URL, Revision: "item-1"}, Status: ExecutionTodo}}
+	statusPlan, err := service.PreviewExecutionStatus(context.Background(), workspace, ExecutionStatusRequest{Workspace: workspace.snapshot.Workspace, WorkItem: workspace.snapshot.Items[0].Reference, Status: ExecutionDone}, policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace.statusErr = partial
+	workspace.statusEvidence = workspace.snapshot.Items[0]
+	workspace.statusEvidence.Status = ExecutionDone
+	workspace.statusEvidence.Reference.Revision = ""
+	result, err = service.ApplyExecutionStatus(context.Background(), workspace, ExecutionStatusApplyInput{ExpectedPlan: statusPlan, Confirmed: true}, policy, events)
+	if !isIntegrationClass(err, IntegrationPartialFailure) || result.Event == nil || events.calls != 2 {
+		t.Fatalf("status result=%+v events=%d err=%v", result, events.calls, err)
 	}
 }
 

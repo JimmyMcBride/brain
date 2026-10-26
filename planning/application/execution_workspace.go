@@ -75,6 +75,14 @@ func (s *Service) ApplyExecutionAttach(ctx context.Context, workspace ExecutionW
 	}
 	item, err := workspace.Attach(ctx, fresh.Request)
 	if err != nil {
+		if validPartialAttachedExecutionItem(item, fresh.Request) {
+			result.Item = item
+			event := Event{Name: EventExecutionAttached, ModuleID: s.moduleID, Artifact: item.Artifact, Source: &item.Reference, Outcome: MutationCreate, OccurredAt: s.now().UTC()}
+			result.Event = &event
+			if auditErr := events.Publish(context.WithoutCancel(ctx), event); auditErr != nil {
+				err = errors.Join(err, &IntegrationError{Class: IntegrationPartialFailure, Operation: "execution.attach.audit", Message: "Project item changed but audit persistence failed", Err: auditErr})
+			}
+		}
 		return result, err
 	}
 	if err := validateAttachedExecutionItem(item, fresh.Request); err != nil {
@@ -161,6 +169,14 @@ func (s *Service) ApplyExecutionStatus(ctx context.Context, workspace ExecutionW
 	}
 	item, err := workspace.ApplyStatus(ctx, fresh.Request)
 	if err != nil {
+		if item.Artifact == fresh.Item.Artifact && sameExternalLocation(item.Reference, fresh.Item.Reference) && item.Status == fresh.Request.Status {
+			result.Item = item
+			event := Event{Name: EventExecutionStatusUpdated, ModuleID: s.moduleID, Artifact: item.Artifact, Source: &item.Reference, Outcome: MutationUpdate, OccurredAt: s.now().UTC()}
+			result.Event = &event
+			if auditErr := events.Publish(context.WithoutCancel(ctx), event); auditErr != nil {
+				err = errors.Join(err, &IntegrationError{Class: IntegrationPartialFailure, Operation: "execution.status.audit", Message: "Project status changed but audit persistence failed", Err: auditErr})
+			}
+		}
 		return result, err
 	}
 	if item.Artifact != fresh.Item.Artifact || !sameExternalLocation(item.Reference, fresh.Item.Reference) || item.Status != fresh.Request.Status {
@@ -246,10 +262,14 @@ func validateExecutionSnapshot(snapshot ExecutionWorkspaceSnapshot, requested Ex
 }
 
 func validateAttachedExecutionItem(item ExecutionWorkItem, request ExecutionAttachRequest) error {
-	if item.Artifact != request.Artifact || !sameExternalLocation(item.PublishedWork, request.PublishedWork) || !validExecutionReference(item.Reference, "project_item") || item.Reference.Revision == "" {
+	if !validPartialAttachedExecutionItem(item, request) || item.Reference.Revision == "" {
 		return errors.New("attached item identity disagrees with reviewed request")
 	}
 	return nil
+}
+
+func validPartialAttachedExecutionItem(item ExecutionWorkItem, request ExecutionAttachRequest) bool {
+	return item.Artifact == request.Artifact && sameExternalLocation(item.PublishedWork, request.PublishedWork) && validExecutionReference(item.Reference, "project_item")
 }
 
 func executionStatusSupported(fields []ExecutionField, status ExecutionStatus) bool {

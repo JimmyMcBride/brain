@@ -327,16 +327,17 @@ func (a *Adapter) attachExecutionWork(ctx context.Context, request application.E
 	if json.Unmarshal(raw, &response) != nil || len(response.Errors) != 0 || response.Data.Add.Item.ID == "" {
 		return empty, providerError(application.IntegrationPartialFailure, executionAttachOperation, "Project attachment returned incomplete evidence; inspect before retrying")
 	}
+	provisional := application.ExecutionWorkItem{Artifact: request.Artifact, PublishedWork: resolvedIssue, Reference: application.ExternalReference{Provider: providerName, Kind: "project_item", OpaqueID: response.Data.Add.Item.ID, DisplayID: "#" + resolvedIssue.DisplayID, URL: resolvedIssue.URL}}
 	fresh, err := a.executionInspection(ctx, request.Workspace)
 	if err != nil {
-		return empty, executionPartial(executionAttachOperation, err)
+		return provisional, executionPartial(executionAttachOperation, err)
 	}
 	for _, item := range fresh.snapshot.Items {
 		if sameExecutionIdentity(item.PublishedWork, resolvedIssue) && item.Artifact == request.Artifact && item.Reference.OpaqueID == response.Data.Add.Item.ID {
 			return item, nil
 		}
 	}
-	return empty, providerError(application.IntegrationPartialFailure, executionAttachOperation, "Project attachment could not be verified; inspect before retrying")
+	return provisional, providerError(application.IntegrationPartialFailure, executionAttachOperation, "Project attachment could not be verified; inspect before retrying")
 }
 
 func (a *Adapter) resolveExecutionIssue(ctx context.Context, repo string, ref application.ExternalReference) (application.ExternalReference, error) {
@@ -405,16 +406,19 @@ func (a *Adapter) applyExecutionStatus(ctx context.Context, request application.
 	if json.Unmarshal(raw, &response) != nil || len(response.Errors) != 0 || response.Data.Update.Item.ID != current.Reference.OpaqueID {
 		return empty, providerError(application.IntegrationPartialFailure, executionStatusOperation, "Project status mutation returned incomplete evidence; inspect before retrying")
 	}
+	provisional := *current
+	provisional.Status = request.Status
+	provisional.Reference.Revision = ""
 	fresh, err := a.executionInspection(ctx, request.Workspace)
 	if err != nil {
-		return empty, executionPartial(executionStatusOperation, err)
+		return provisional, executionPartial(executionStatusOperation, err)
 	}
 	for _, item := range fresh.snapshot.Items {
 		if item.Reference.OpaqueID == current.Reference.OpaqueID && item.Status == request.Status {
 			return item, nil
 		}
 	}
-	return empty, providerError(application.IntegrationPartialFailure, executionStatusOperation, "Project status mutation could not be verified; inspect before retrying")
+	return provisional, providerError(application.IntegrationPartialFailure, executionStatusOperation, "Project status mutation could not be verified; inspect before retrying")
 }
 
 func (a *Adapter) executionRequest(ctx context.Context, operation string, payload any) ([]byte, error) {
