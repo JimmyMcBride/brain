@@ -64,7 +64,7 @@ func TestPublicPlanningApplicationExportSurface(t *testing.T) {
 		"CollaborationAssessment", "CollaborationContribution", "CollaborationRepairEvidence", "CollaborationRepairRequest",
 		"CollaborationSource", "CollaborationSourceSnapshot", "CreateBrainstormInput", "ErrArtifactConflict", "ErrConfirmationRequired",
 		"ErrEventSinkRequired", "ErrWorkspaceNotReadable", "ErrWorkspaceNotWritable", "Event",
-		"EventBrainstormCreated", "EventBrainstormPromoted", "EventBrainstormUpdated", "EventGuidedSessionUpdated", "EventIntegrationAdopted",
+		"EventBrainstormCreated", "EventBrainstormPromoted", "EventBrainstormUpdated", "EventGuidedSessionUpdated", "EventIntegrationAdopted", "EventIntegrationConfigured",
 		"EventRoadmapUpdated", "EventSink", "EventSpecExecutionStarted", "EventSpecUpdated", "GuidePacket", "GuidedSessionMutationInput", "GuidedSessionRecord",
 		"GuidedSessionResult", "GuidedSessionState", "ExecutionAttachRequest", "ExecutionDone", "ExecutionField", "ExecutionFieldRoleStatus",
 		"ExecutionInProgress", "ExecutionInReview", "ExecutionStatus", "ExecutionStatusRequest", "ExecutionTodo", "ExecutionWorkItem",

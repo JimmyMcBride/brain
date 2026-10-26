@@ -5,6 +5,7 @@ import (
 	"context"
 	"os/exec"
 	"path/filepath"
+	"time"
 
 	"github.com/JimmyMcBride/brain/planning/application"
 )
@@ -42,6 +43,7 @@ type Options struct {
 	ProjectRoot string
 	Runner      Runner
 	GitRunner   Runner
+	Now         func() time.Time
 }
 
 // Adapter implements provider-neutral Planning ports through GitHub.
@@ -51,6 +53,7 @@ type Adapter struct {
 	runner      Runner
 	gitRunner   Runner
 	state       stateStore
+	now         func() time.Time
 }
 
 // New constructs an adapter without performing preflight, filesystem, process,
@@ -74,7 +77,15 @@ func New(config Config, options Options) *Adapter {
 		runner:      runner,
 		gitRunner:   gitRunner,
 		state:       newFileStateStore(root),
+		now:         options.Now,
 	}
+}
+
+func (a *Adapter) currentTime() time.Time {
+	if a != nil && a.now != nil {
+		return a.now().UTC()
+	}
+	return time.Now().UTC()
 }
 
 // Enabled reports whether provider operations are allowed.

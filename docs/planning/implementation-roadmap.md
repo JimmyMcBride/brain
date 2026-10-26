@@ -1,5 +1,5 @@
 ---
-updated: "2026-10-26T17:41:23Z"
+updated: "2026-10-26T20:22:45Z"
 ---
 # Planning Module Implementation Roadmap
 
@@ -155,6 +155,14 @@ mutation, requires publish permission and explicit confirmation, revision-guards
 provider and mapping writes, retains partial evidence, audits changed outcomes,
 and makes an identical rerun write-free. Project field, item, and status drift
 remains behind the execution-workspace boundary.
+The native rollout now advances the official Planning module to config v2,
+migrates existing empty config with GitHub disabled, injects the optional
+adapter and independent health, and exposes the reviewed remote collaboration,
+publication/adoption, reconciliation, Project status, guide, and project-check
+families through `brain plan`. Confirmed mutations enforce module permissions,
+audit events, revision-bound previews, and idempotency; disabled mode performs
+no provider or GitHub metadata work and leaves local Planning healthy. The
+remaining Phase 5 gate is coordinated Brain/standalone conformance and release.
 
 Move retained GitHub collaboration/publication/repository/execution behavior
 behind generic Planning ports. Support planning PRs and retained Discussion,
@@ -209,12 +217,9 @@ lifecycle, diagnostics, and distribution direction.
 
 ## Exact Next Slice
 
-Execute the remaining dependency-ordered Phase 5 specs:
-
-1. [Native GitHub Planning Rollout](../../.plan/specs/native-github-planning-rollout.md)
-2. [GitHub Integration Conformance and Release](../../.plan/specs/github-integration-conformance-release.md)
-
-Native GitHub Planning rollout is the exact next implementation slice. The final
-conformance and release spec depends on that host wiring. Preserve structured
-briefs, stable identity, confirmation, idempotency, partial-failure recovery,
-and local Planning independence throughout.
+Execute [GitHub Integration Conformance and Release](../../.plan/specs/github-integration-conformance-release.md).
+Replay every retained native and standalone manifest family against the shared
+implementation, resolve intentional host-policy differences, then publish the
+coordinated Brain-first/Plan-pin release. Preserve structured briefs, stable
+identity, confirmation, idempotency, partial-failure recovery, and local
+Planning independence throughout.

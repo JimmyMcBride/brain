@@ -5,7 +5,7 @@ args:
       required: false
 description: Use this skill when working with a project-local Brain workspace managed by the `brain` CLI, especially for repo memory, retrieval, compiled task context, session hygiene, and safe markdown updates.
 name: brain
-updated: "2026-08-09T07:52:41Z"
+updated: "2026-10-26T20:22:45Z"
 user-invocable: true
 ---
 # Brain
@@ -149,6 +149,11 @@ session commands live under `brain plan brainstorm`, guide packets under
 without an epic intermediate. Canonical spec edit, approval, analysis,
 checklists, initiative metadata, execution, and guided handoff live under
 `brain plan spec`; mutations preview by default and require `--confirm`.
+The optional GitHub adapter lives under `brain plan github`. Enable or disable
+it with a confirmed preview, pass `--discussion` to remote brainstorm and guide
+commands, and use `github adopt`, `github reconcile`, or `github project status`
+for reviewed mapping and execution changes. A disabled adapter must perform no
+provider or GitHub metadata work and must not affect local Planning commands.
 
 ## Operating Rules
 

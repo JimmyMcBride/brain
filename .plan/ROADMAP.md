@@ -50,7 +50,7 @@ Planning outcomes to review-first Brain memory proposals.
   - [x] [Coordination mapping persistence](./specs/github-coordination-mapping-persistence.md)
   - [x] [Repository reconciliation](./specs/github-repository-reconciliation.md)
   - [x] [Execution workspace](./specs/github-execution-workspace.md)
-  - [ ] [Native GitHub Planning rollout](./specs/native-github-planning-rollout.md)
+  - [x] [Native GitHub Planning rollout](./specs/native-github-planning-rollout.md)
   - [ ] [Integration conformance and release](./specs/github-integration-conformance-release.md)
 - [ ] Reject legacy Linear workspaces with standalone Plan migration guidance
 - [ ] Brain context sources and Planning context packets

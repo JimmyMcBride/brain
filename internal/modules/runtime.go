@@ -24,6 +24,12 @@ type Module interface {
 	Health(context.Context, ModuleContext) Health
 }
 
+// ConfigMigrator upgrades an older module configuration without initializing
+// the module or any of its external dependencies.
+type ConfigMigrator interface {
+	MigrateConfig(context.Context, ModuleContext, int, Config) (Config, error)
+}
+
 type ModuleConfig struct {
 	Enabled       bool   `yaml:"enabled" json:"enabled"`
 	ConfigVersion int    `yaml:"config_version" json:"config_version"`
@@ -137,7 +143,7 @@ func (r *Runtime) RequirePermission(ctx context.Context, id, permission string) 
 	if _, declared := stringSet(registration.Descriptor.Permissions)[permission]; !declared {
 		return fmt.Errorf("module %s does not declare permission %q", id, permission)
 	}
-	_, grants, err := r.load()
+	_, grants, err := r.load(ctx)
 	if err != nil {
 		return err
 	}
@@ -183,7 +189,7 @@ func NewRuntime(project ProjectRef, registry *Registry, configStore ConfigStore,
 }
 
 func (r *Runtime) List(ctx context.Context) ([]Report, error) {
-	config, grants, err := r.load()
+	config, grants, err := r.load(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +216,7 @@ func (r *Runtime) List(ctx context.Context) ([]Report, error) {
 }
 
 func (r *Runtime) Show(ctx context.Context, id string) (Report, error) {
-	config, grants, err := r.load()
+	config, grants, err := r.load(ctx)
 	if err != nil {
 		return Report{}, err
 	}
@@ -218,7 +224,7 @@ func (r *Runtime) Show(ctx context.Context, id string) (Report, error) {
 }
 
 func (r *Runtime) Health(ctx context.Context, id string) ([]Report, error) {
-	config, grants, err := r.load()
+	config, grants, err := r.load(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -246,7 +252,7 @@ func (r *Runtime) Health(ctx context.Context, id string) ([]Report, error) {
 }
 
 func (r *Runtime) Enable(ctx context.Context, id string) (Report, error) {
-	config, grants, err := r.load()
+	config, grants, err := r.load(ctx)
 	if err != nil {
 		return Report{}, err
 	}
@@ -291,7 +297,7 @@ func (r *Runtime) Enable(ctx context.Context, id string) (Report, error) {
 }
 
 func (r *Runtime) Disable(ctx context.Context, id string) (Report, error) {
-	config, grants, err := r.load()
+	config, grants, err := r.load(ctx)
 	if err != nil {
 		return Report{}, err
 	}
@@ -312,7 +318,7 @@ func (r *Runtime) Disable(ctx context.Context, id string) (Report, error) {
 }
 
 func (r *Runtime) Grant(ctx context.Context, id string, permissions ...string) (Report, error) {
-	config, grants, err := r.load()
+	config, grants, err := r.load(ctx)
 	if err != nil {
 		return Report{}, err
 	}
@@ -336,7 +342,7 @@ func (r *Runtime) Grant(ctx context.Context, id string, permissions ...string) (
 }
 
 func (r *Runtime) Revoke(ctx context.Context, id string, permissions ...string) (Report, error) {
-	config, grants, err := r.load()
+	config, grants, err := r.load(ctx)
 	if err != nil {
 		return Report{}, err
 	}
@@ -355,7 +361,7 @@ func (r *Runtime) Revoke(ctx context.Context, id string, permissions ...string) 
 	return r.evaluate(ctx, id, config, grants, true)
 }
 
-func (r *Runtime) load() (ProjectConfig, GrantSet, error) {
+func (r *Runtime) load(ctx context.Context) (ProjectConfig, GrantSet, error) {
 	config, err := r.configStore.Load()
 	if err != nil {
 		return ProjectConfig{}, nil, err
@@ -366,6 +372,40 @@ func (r *Runtime) load() (ProjectConfig, GrantSet, error) {
 	if config.Modules == nil {
 		config.Modules = map[string]ModuleConfig{}
 	}
+	changed := false
+	for id, entry := range config.Modules {
+		registration, available := r.registry.Lookup(id)
+		if !available || entry.ConfigVersion >= registration.Descriptor.ConfigVersion {
+			continue
+		}
+		module := registration.Factory()
+		migrator, ok := module.(ConfigMigrator)
+		if !ok {
+			continue
+		}
+		if entry.Config == nil {
+			entry.Config = Config{}
+		}
+		migrated, migrateErr := migrator.MigrateConfig(ctx, ModuleContext{Project: r.project}, entry.ConfigVersion, entry.Config)
+		if migrateErr != nil {
+			return ProjectConfig{}, nil, configFailure(id, migrateErr.Error())
+		}
+		if migrated == nil {
+			migrated = Config{}
+		}
+		if err := module.Validate(ctx, ModuleContext{Project: r.project}, migrated); err != nil {
+			return ProjectConfig{}, nil, configFailure(id, err.Error())
+		}
+		entry.ConfigVersion = registration.Descriptor.ConfigVersion
+		entry.Config = migrated
+		config.Modules[id] = entry
+		changed = true
+	}
+	if changed {
+		if err := r.configStore.Save(config); err != nil {
+			return ProjectConfig{}, nil, err
+		}
+	}
 	grants, err := r.grantStore.Load()
 	if err != nil {
 		return ProjectConfig{}, nil, err
@@ -374,6 +414,41 @@ func (r *Runtime) load() (ProjectConfig, GrantSet, error) {
 		grants = GrantSet{}
 	}
 	return config, grants, nil
+}
+
+// Configure replaces one module's validated configuration while preserving its
+// enabled state and grants. The next command receives a fresh module instance.
+func (r *Runtime) Configure(ctx context.Context, id string, value Config) (Report, error) {
+	config, grants, err := r.load(ctx)
+	if err != nil {
+		return Report{}, err
+	}
+	registration, exists := r.registry.Lookup(id)
+	if !exists {
+		return Report{}, unavailableFailure(id)
+	}
+	if value == nil {
+		value = Config{}
+	}
+	module := registration.Factory()
+	if module == nil {
+		return Report{}, configFailure(id, "factory returned a nil module")
+	}
+	moduleContext := ModuleContext{Project: r.project}
+	if err := module.Validate(ctx, moduleContext, value); err != nil {
+		return Report{}, configFailure(id, err.Error())
+	}
+	entry := config.Modules[id]
+	entry.ConfigVersion = registration.Descriptor.ConfigVersion
+	entry.Config = value
+	config.Modules[id] = entry
+	if err := r.configStore.Save(config); err != nil {
+		return Report{}, err
+	}
+	r.mu.Lock()
+	delete(r.initializations, id)
+	r.mu.Unlock()
+	return r.evaluate(ctx, id, config, grants, false)
 }
 
 func (r *Runtime) evaluate(ctx context.Context, id string, config ProjectConfig, grants GrantSet, includeHealth bool) (Report, error) {
@@ -450,7 +525,7 @@ func (r *Runtime) evaluate(ctx context.Context, id string, config ProjectConfig,
 }
 
 func (r *Runtime) resolveEnabled(ctx context.Context, id string) (Module, error) {
-	config, grants, err := r.load()
+	config, grants, err := r.load(ctx)
 	if err != nil {
 		return nil, err
 	}

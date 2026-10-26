@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -12,7 +13,77 @@ import (
 	"github.com/JimmyMcBride/brain/internal/modules"
 	officialplanning "github.com/JimmyMcBride/brain/internal/official/planning"
 	"github.com/JimmyMcBride/brain/planning/application"
+	planninggithub "github.com/JimmyMcBride/brain/planning/github"
 )
+
+type planningGitHubCLIRunner struct{ calls int }
+
+func (r *planningGitHubCLIRunner) Run(_ context.Context, _ string, args ...string) (planninggithub.RunResult, error) {
+	r.calls++
+	joined := strings.Join(args, " ")
+	if strings.Contains(joined, "repo view") {
+		return planninggithub.RunResult{Stdout: []byte(`{"nameWithOwner":"owner/repo","url":"https://github.com/owner/repo","defaultBranchRef":{"name":"develop"},"hasIssuesEnabled":true}`)}, nil
+	}
+	if strings.Contains(joined, "api graphql") {
+		return planninggithub.RunResult{Stdout: []byte(`{"data":{"repository":{"discussion":{"id":"D_49","number":49,"url":"https://github.com/owner/repo/discussions/49","title":"GitHub rollout","body":"## Problem\nNeed native GitHub planning.\n\n## Goals\nExpose the adapter.\n\n## Non-Goals\nNo source mutation.\n\n## Constraints\nKeep local planning available.\n\n## Proposed Shape\nUse shared services.\n\n## Specs\n- Native rollout","updatedAt":"2026-01-01T00:00:00Z","comments":{"nodes":[],"pageInfo":{"hasNextPage":false,"endCursor":""}}}}}}`)}, nil
+	}
+	return planninggithub.RunResult{}, errors.New("unexpected provider call")
+}
+
+func TestCLIPlanningGitHubConfigurationAndRemoteAssessment(t *testing.T) {
+	env := newCLIEnv(t)
+	fixture := filepath.Join(env.moduleRoot, "planning", "local", "testdata", "compatible")
+	if err := os.CopyFS(env.project, os.DirFS(fixture)); err != nil {
+		t.Fatal(err)
+	}
+	runner := &planningGitHubCLIRunner{}
+	registration := officialplanning.RegistrationWithOptions(officialplanning.Options{GitHubRunner: runner})
+	grant := []string{"--project", env.project, "modules", "grant", officialplanning.ID}
+	grant = append(grant, registration.Descriptor.Permissions...)
+	requireOK(t, runPlanningCLIWithRegistration(t, env, registration, grant...))
+	requireOK(t, runPlanningCLIWithRegistration(t, env, registration, "--project", env.project, "modules", "enable", officialplanning.ID))
+
+	preview := requireOK(t, runPlanningCLIWithRegistration(t, env, registration, "--project", env.project, "plan", "github", "enable"))
+	if runner.calls != 0 || !strings.Contains(preview, "Preview only") {
+		t.Fatalf("preview=%q calls=%d", preview, runner.calls)
+	}
+	enabled := requireOK(t, runPlanningCLIWithRegistration(t, env, registration, "--project", env.project, "plan", "github", "enable", "--confirm"))
+	if !strings.Contains(enabled, "repo: owner/repo") || runner.calls != 2 {
+		t.Fatalf("enabled=%q calls=%d", enabled, runner.calls)
+	}
+	reenabled := requireOK(t, runPlanningCLIWithRegistration(t, env, registration, "--project", env.project, "plan", "github", "enable", "--confirm"))
+	if !strings.Contains(reenabled, "unchanged") || runner.calls != 3 {
+		t.Fatalf("reenabled=%q calls=%d", reenabled, runner.calls)
+	}
+	assessmentJSON := requireOK(t, runPlanningCLIWithRegistration(t, env, registration, "--json", "--project", env.project, "plan", "brainstorm", "assess", "--discussion", "https://github.com/owner/repo/discussions/49"))
+	var assessment application.CollaborationAssessment
+	if err := json.Unmarshal([]byte(assessmentJSON), &assessment); err != nil || assessment.Decision.State != "ready_single_spec" {
+		t.Fatalf("assessment=%+v err=%v", assessment, err)
+	}
+	beforeDisable := runner.calls
+	disabled := requireOK(t, runPlanningCLIWithRegistration(t, env, registration, "--project", env.project, "plan", "github", "disable", "--confirm"))
+	if !strings.Contains(disabled, "github enabled=false") || runner.calls != beforeDisable {
+		t.Fatalf("disabled=%q calls=%d before=%d", disabled, runner.calls, beforeDisable)
+	}
+	result := runPlanningCLIWithRegistration(t, env, registration, "--project", env.project, "plan", "brainstorm", "assess", "--discussion", "49")
+	if result.err != nil && !strings.Contains(result.err.Error(), string(application.IntegrationAdapterDisabled)) {
+		t.Fatalf("disabled assessment=%+v", result)
+	}
+	if result.err == nil || runner.calls != beforeDisable {
+		t.Fatalf("disabled assessment performed work: result=%+v calls=%d", result, runner.calls)
+	}
+	_ = runPlanningCLIWithRegistration(t, env, registration, "--project", env.project, "plan", "check", "project")
+	if runner.calls != beforeDisable {
+		t.Fatalf("disabled project check performed GitHub work: calls=%d before=%d", runner.calls, beforeDisable)
+	}
+}
+
+func TestPlanningGitHubCheckFinding(t *testing.T) {
+	finding := planningGitHubCheckFinding("error", "github.project.missing_item", "missing", "reconcile")
+	if finding.ArtifactType != "integration" || finding.ArtifactPath != ".plan/.meta/github.json" || finding.Section != "GitHub Project" {
+		t.Fatalf("unexpected finding: %#v", finding)
+	}
+}
 
 func TestCLIPlanningLocalWorkflowAndIdempotentAudit(t *testing.T) {
 	env := newCLIEnv(t)
@@ -419,6 +490,14 @@ func TestSplitEditorCommandPreservesQuotedPaths(t *testing.T) {
 }
 
 func runPlanningCLI(t *testing.T, env *cliEnv, stdin string, args ...string) cliResult {
+	return runPlanningCLIWithInput(t, env, officialplanning.Registration(), stdin, args...)
+}
+
+func runPlanningCLIWithRegistration(t *testing.T, env *cliEnv, registration modules.Registration, args ...string) cliResult {
+	return runPlanningCLIWithInput(t, env, registration, "", args...)
+}
+
+func runPlanningCLIWithInput(t *testing.T, env *cliEnv, registration modules.Registration, stdin string, args ...string) cliResult {
 	t.Helper()
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -435,7 +514,7 @@ func runPlanningCLI(t *testing.T, env *cliEnv, stdin string, args ...string) cli
 		in:                  strings.NewReader(stdin),
 		out:                 &stdout,
 		errOut:              &stderr,
-		moduleRegistrations: []modules.Registration{officialplanning.Registration()},
+		moduleRegistrations: []modules.Registration{registration},
 	})
 	command.SetArgs(args)
 	err = command.Execute()
