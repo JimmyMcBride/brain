@@ -3,6 +3,7 @@ package conformance
 import (
 	"encoding/json"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -187,6 +188,47 @@ func TestGitHubManifestFixturePreservesCurrentMetadataShape(t *testing.T) {
 	for field := range state {
 		if strings.Contains(strings.ToLower(field), "linear") {
 			t.Fatalf("GitHub metadata unexpectedly contains Linear field %q", field)
+		}
+	}
+}
+
+func TestGitHubManifestMapsCapturedCasesToNativeCommands(t *testing.T) {
+	manifest, err := LoadGitHub()
+	if err != nil {
+		t.Fatal(err)
+	}
+	covered := map[string]bool{}
+	for _, testCase := range manifest.Cases {
+		var family GitHubFamily
+		for _, candidate := range manifest.Families {
+			if candidate.ID == testCase.Family {
+				family = candidate
+				break
+			}
+		}
+		if family.Retention != "migrate" || testCase.Invocation.Kind != "cli" {
+			continue
+		}
+		args, err := manifest.NativeArgs(testCase, testCase.Safety.TargetConfirmation == "confirmed")
+		if err != nil {
+			t.Fatalf("%s: %v", testCase.ID, err)
+		}
+		if !slices.Contains(args, "plan") {
+			t.Fatalf("%s mapped outside native Planning: %q", testCase.ID, args)
+		}
+		if testCase.Safety.Mutation && testCase.Safety.TargetConfirmation == "confirmed" && !slices.Contains(args, "--confirm") {
+			t.Fatalf("%s lost target confirmation: %q", testCase.ID, args)
+		}
+		for _, arg := range args {
+			if arg == "--format" || arg == "--target" {
+				t.Fatalf("%s retained standalone-only flag in %q", testCase.ID, args)
+			}
+		}
+		covered[testCase.Family] = true
+	}
+	for _, family := range manifest.Families {
+		if family.Retention == "migrate" && len(family.Native) > 0 && !covered[family.ID] {
+			t.Fatalf("native family %s has no mapped captured case", family.ID)
 		}
 	}
 }

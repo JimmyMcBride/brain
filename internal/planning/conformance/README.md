@@ -69,3 +69,17 @@ manual fallback only when the typed result says so.
 
 Required CI only loads embedded fixtures and injected-fake transcripts. It never
 authenticates with GitHub, invokes `gh`, or creates a live repository resource.
+
+Native replay derives `brain plan` arguments from every migrated CLI family in
+the manifest and runs them through the real command tree with an injected
+provider and copied workspaces. GitHub/hybrid workspaces expose their local
+schema-v3 documents as a read-only compatibility mirror: native reconciliation
+and checks can inspect them, while local mutations remain rejected and provider
+mutations stay preview-first. Compatibility-only families have no native
+mapping.
+
+The release contract test also locks the callable tag/SHA workflow, the exact
+Linux, macOS, and Windows amd64/arm64 matrix, archive naming, and checksum
+publication. Publishing a tag remains a protected release-flow action after the
+Brain implementation PR merges; the stable tag is then pinned by standalone
+Plan in its own independently revertible PR.
