@@ -117,7 +117,7 @@ func externalMappingsFromGitHub(state githubState) (application.ExternalMappingS
 		if record.ProjectID == "" && record.ProjectURL == "" && record.ProjectNumber == 0 {
 			continue
 		}
-		reference, err := legacyProjectReference(record)
+		reference, err := legacyProjectReference(state.Repo, record)
 		if err != nil {
 			return result, err
 		}
@@ -129,6 +129,9 @@ func externalMappingsFromGitHub(state githubState) (application.ExternalMappingS
 		}
 		seenProjects[record.ProjectID] = reference
 		result.WorkspaceReferences = append(result.WorkspaceReferences, reference)
+	}
+	if len(seenProjects) > 1 {
+		return result, mappingError(application.IntegrationAmbiguousIdentity, "mapping.load", "mapping metadata contains multiple workspace identities")
 	}
 	slices.SortFunc(result.WorkspaceReferences, externalReferenceLess)
 	if state.LastReconciledAt != "" {
@@ -158,13 +161,15 @@ func legacyDiscussionReference(repo string, number int, discussionURL string) (a
 	return application.ExternalReference{Provider: providerName, Kind: "discussion", OpaqueID: want, DisplayID: strconv.Itoa(number), URL: want}, nil
 }
 
-func legacyProjectReference(record githubProjectDecision) (application.ExternalReference, error) {
+func legacyProjectReference(repo string, record githubProjectDecision) (application.ExternalReference, error) {
 	path := strings.TrimPrefix(record.ProjectURL, "https://github.com/")
 	parts := strings.Split(path, "/")
 	number := strconv.Itoa(record.ProjectNumber)
+	repoOwner := strings.Split(repo, "/")[0]
 	if record.ProjectID == "" || record.ProjectNumber < 1 || len(parts) != 4 ||
 		(parts[0] != "users" && parts[0] != "orgs") || parts[1] == "" ||
 		parts[2] != "projects" || parts[3] != number ||
+		!strings.EqualFold(parts[1], repoOwner) || record.ProjectOwner != "" && record.ProjectOwner != parts[1] ||
 		record.ProjectURL != "https://github.com/"+strings.Join(parts, "/") {
 		return application.ExternalReference{}, mappingError(application.IntegrationAmbiguousIdentity, "mapping.load", "workspace mapping has no canonical stable identity")
 	}
@@ -252,6 +257,10 @@ func (a *Adapter) saveExternalMappings(ctx context.Context, desired application.
 func mergeExternalMappings(current githubState, desired application.ExternalMappingState) (githubState, error) {
 	next := current
 	next.Planning = map[string]githubPlanningRecord{}
+	next.ProjectDecisions = make(map[string]githubProjectDecision, len(current.ProjectDecisions))
+	for key, record := range current.ProjectDecisions {
+		next.ProjectDecisions[key] = record
+	}
 	repo := current.Repo
 	seenArtifacts := map[planning.ArtifactRef]bool{}
 	seenIssues := map[string]bool{}
@@ -341,16 +350,8 @@ func mergeExternalMappings(current githubState, desired application.ExternalMapp
 		}
 		next.Planning[string(artifact.ID)] = record
 	}
-	currentView, err := externalMappingsFromGitHub(current)
-	if err != nil {
+	if err := mergeWorkspaceMappings(&next, current, desired.WorkspaceReferences); err != nil {
 		return next, err
-	}
-	currentWorkspaces := slices.Clone(currentView.WorkspaceReferences)
-	desiredWorkspaces := slices.Clone(desired.WorkspaceReferences)
-	slices.SortFunc(currentWorkspaces, externalReferenceLess)
-	slices.SortFunc(desiredWorkspaces, externalReferenceLess)
-	if !slices.Equal(currentWorkspaces, desiredWorkspaces) {
-		return next, mappingError(application.IntegrationUnsupportedCapability, "mapping.save", "workspace mapping changes require the workspace transition")
 	}
 	if desired.LastReconciliation == nil {
 		next.LastReconciledAt = ""
@@ -363,6 +364,129 @@ func mergeExternalMappings(current githubState, desired application.ExternalMapp
 		next.LastReconciledAt = desired.LastReconciliation.CompletedAt.UTC().Format(time.RFC3339)
 	}
 	return next, nil
+}
+
+func mergeWorkspaceMappings(next *githubState, current githubState, desired []application.ExternalReference) error {
+	if len(desired) > 1 {
+		return mappingError(application.IntegrationAmbiguousIdentity, "mapping.save", "mapping metadata supports one canonical workspace")
+	}
+	if len(desired) == 0 {
+		for key, record := range next.ProjectDecisions {
+			if record.ProjectID == "" && record.ProjectURL == "" && record.ProjectNumber == 0 {
+				continue
+			}
+			record.ProjectOwner, record.ProjectNumber, record.ProjectID, record.ProjectURL = "", 0, "", ""
+			next.ProjectDecisions[key] = record
+		}
+		return nil
+	}
+	owner, number, err := mappingProjectLocation(next.Repo, desired[0])
+	if err != nil {
+		return err
+	}
+	updated := false
+	for key, record := range next.ProjectDecisions {
+		if record.ProjectID == "" && record.ProjectURL == "" && record.ProjectNumber == 0 {
+			continue
+		}
+		record.ProjectOwner, record.ProjectNumber, record.ProjectID, record.ProjectURL = owner, number, desired[0].OpaqueID, desired[0].URL
+		next.ProjectDecisions[key] = record
+		updated = true
+	}
+	if updated {
+		return nil
+	}
+	key, record, err := workspaceDecisionRecord(*next, current)
+	if err != nil {
+		return err
+	}
+	record.ProjectOwner, record.ProjectNumber, record.ProjectID, record.ProjectURL = owner, number, desired[0].OpaqueID, desired[0].URL
+	next.ProjectDecisions[key] = record
+	return nil
+}
+
+func mappingProjectLocation(repo string, ref application.ExternalReference) (string, int, error) {
+	if ref.Provider != providerName || ref.Kind != "project" || ref.OpaqueID == "" {
+		return "", 0, mappingError(application.IntegrationAmbiguousIdentity, "mapping.save", "expected a GitHub Project mapping")
+	}
+	parts := strings.Split(strings.TrimPrefix(ref.URL, "https://github.com/"), "/")
+	number, err := strconv.Atoi(ref.DisplayID)
+	repoOwner := strings.Split(repo, "/")[0]
+	if err != nil || number < 1 || ref.DisplayID != strconv.Itoa(number) || len(parts) != 4 ||
+		(parts[0] != "users" && parts[0] != "orgs") || parts[1] == "" || !strings.EqualFold(parts[1], repoOwner) ||
+		parts[2] != "projects" || parts[3] != ref.DisplayID || ref.URL != "https://github.com/"+strings.Join(parts, "/") {
+		return "", 0, mappingError(application.IntegrationAmbiguousIdentity, "mapping.save", "workspace mapping is not canonical for the repository owner")
+	}
+	return parts[1], number, nil
+}
+
+func workspaceDecisionRecord(state githubState, current githubState) (string, githubProjectDecision, error) {
+	keys := make([]string, 0, len(state.ProjectDecisions))
+	for key, record := range state.ProjectDecisions {
+		if record.ProjectID == "" && record.ProjectURL == "" && record.ProjectNumber == 0 {
+			keys = append(keys, key)
+		}
+	}
+	slices.Sort(keys)
+	if len(keys) == 1 {
+		record := state.ProjectDecisions[keys[0]]
+		decision := strings.ToLower(strings.TrimSpace(record.Decision))
+		if decision == "skip" || decision != "" && decision != "create" && decision != "connect" {
+			return "", githubProjectDecision{}, mappingError(application.IntegrationAmbiguousIdentity, "mapping.save", "workspace identity conflicts with the existing project decision")
+		}
+		if record.Slug == "" {
+			record.Slug = keys[0]
+		}
+		if record.Decision == "" {
+			record.Decision = "connect"
+		}
+		return keys[0], record, nil
+	}
+	initiative := ""
+	first := ""
+	specs := 0
+	for key, record := range state.Planning {
+		if first == "" || key < first {
+			first = key
+		}
+		if record.Kind == string(planning.ArtifactInitiative) {
+			if initiative != "" {
+				return "", githubProjectDecision{}, mappingError(application.IntegrationAmbiguousIdentity, "mapping.save", "workspace mapping has multiple initiative owners")
+			}
+			initiative = key
+		} else if record.Kind == string(planning.ArtifactSpec) {
+			specs++
+		}
+	}
+	key := initiative
+	if key == "" {
+		key = first
+	}
+	if key == "" || len(keys) > 1 {
+		return "", githubProjectDecision{}, mappingError(application.IntegrationAmbiguousIdentity, "mapping.save", "workspace mapping has no unique project-decision owner")
+	}
+	record := current.ProjectDecisions[key]
+	if record.Slug == "" {
+		record.Slug = key
+	}
+	if record.Decision == "" {
+		// A durable selected identity is represented as a connection. Creation is
+		// provider history; the mapping contract records the current relationship.
+		record.Decision = "connect"
+	}
+	if initiative != "" && record.InitiativeSlug == "" {
+		record.InitiativeSlug = initiative
+	}
+	if record.SpecCount == 0 {
+		record.SpecCount = specs
+	}
+	if planningRecord := state.Planning[key]; planningRecord.MilestoneNumber > 0 {
+		record.MilestoneNumber = planningRecord.MilestoneNumber
+		if record.MilestoneTitle == "" {
+			record.MilestoneTitle = planningRecord.MilestoneTitle
+		}
+	}
+	return key, record, nil
 }
 
 func mappingIssueLocation(ref application.ExternalReference) (string, int, error) {

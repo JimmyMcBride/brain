@@ -1,5 +1,5 @@
 ---
-updated: "2026-10-26T14:32:42Z"
+updated: "2026-10-26T15:25:50Z"
 ---
 <!-- brain:begin context-current-state -->
 This file is a deterministic snapshot of the repository state at the last refresh.
@@ -29,6 +29,7 @@ This file is a deterministic snapshot of the repository state at the last refres
 
 ## Local Notes
 
+- 2026-10-26: GitHub coordination mapping persistence is implemented: confirmed adoption persists completed milestone mappings for every reviewed member and one canonical Project identity, preserves legacy-private and unknown metadata, rejects ambiguous or foreign workspaces, and recovers local-save failures and lost responses without duplicate provider or audit work. Repository reconciliation is the next Phase 5 slice.
 - 2026-10-26: Remaining Phase 5 GitHub work is now captured in five dependency-ordered draft specs under the approved `github-adapter-transition` initiative: coordination mapping persistence, repository reconciliation, execution workspace, native Brain rollout, and coordinated Brain/Plan conformance/release. Each spec has explicit non-goals, failure recovery, migration/rollback bounds, acceptance criteria, and verification. Coordination mapping persistence is the exact next implementation slice.
 - 2026-09-26: GitHub Project publication now implements reviewed create/connect/skip workspace decisions. Inspection validates canonical node, number, URL, owner, title, and bounded repository-link evidence; safe create recovery requires one exact-title Project linked to the target repository and rejects ambiguity or incomplete listings. Apply revalidates the full plan, performs a final recovery check before creation, preserves partial identity evidence, and recovers lost responses without duplicate Projects. Identical reruns make no provider writes. Project field schema, item attachment, status, and drift stay behind the execution-workspace port; coordination mapping persistence is the next bounded slice.
 - 2026-09-11: GitHub milestone inspection/apply now implements the reviewed shared publication group. Provider-neutral groups carry canonical full membership; inspection resolves milestone identity from reviewed references, attached issues, retained mappings, or a bounded exact-title match and rejects conflicting, duplicate, malformed, or truncated evidence. Apply creates and revision-guards renames, attaches reuse/unchanged issues, includes milestones in issue create/update payloads, retains partial evidence, and recovers lost responses without duplicate milestones. Identical reruns make no provider writes. GitHub Project inspection/apply, coordination mapping persistence, native command wiring, and final cross-host conformance remain.

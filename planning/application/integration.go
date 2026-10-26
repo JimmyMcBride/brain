@@ -205,8 +205,9 @@ type PublicationResult struct {
 // References. Reuse and unchanged actions perform no remote writes. References
 // on completed artifact, group, and non-skipped workspace actions must include
 // the resulting stable identity. Known identities must be retained rather than
-// replaced. References on a failed action identify writes already made, not
-// merely inspected objects.
+// replaced. For newly created groups and workspaces, the resulting subject
+// identity is the first reference. References on a failed action identify
+// writes already made, not merely inspected objects.
 type PublicationTarget interface {
 	Inspect(context.Context, PublicationInspectRequest) (PublicationSnapshot, error)
 	Apply(context.Context, PublicationPlan) (PublicationResult, error)

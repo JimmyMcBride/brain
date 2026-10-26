@@ -17,10 +17,12 @@ const EventIntegrationAdopted = "planning.integration.adopted"
 // provider objects. Candidates are selectors; the provider returns fresh stable
 // identities and revisions in the resulting publication plan.
 type AdoptionPreviewInput struct {
-	Target     ExternalReference           `json:"target"`
-	Source     *ExternalReference          `json:"source,omitempty"`
-	Artifacts  []PublicationArtifact       `json:"artifacts"`
-	Candidates []ArtifactExternalReference `json:"candidates"`
+	Target     ExternalReference             `json:"target"`
+	Source     *ExternalReference            `json:"source,omitempty"`
+	Group      *PublicationGroup             `json:"group,omitempty"`
+	Workspace  *PublicationWorkspaceDecision `json:"workspace,omitempty"`
+	Artifacts  []PublicationArtifact         `json:"artifacts"`
+	Candidates []ArtifactExternalReference   `json:"candidates"`
 }
 
 // AdoptionPlan contains the reviewed provider actions and complete desired
@@ -74,11 +76,11 @@ func (s *Service) PreviewAdoption(ctx context.Context, target PublicationTarget,
 	for i, artifact := range artifacts {
 		refs[i] = artifact.Artifact
 	}
-	snapshot, err := target.Inspect(ctx, PublicationInspectRequest{Target: input.Target, Source: input.Source, Artifacts: refs, Candidates: candidates})
+	snapshot, err := target.Inspect(ctx, PublicationInspectRequest{Target: input.Target, Source: input.Source, Artifacts: refs, Candidates: candidates, Group: input.Group, Workspace: input.Workspace})
 	if err != nil {
 		return empty, err
 	}
-	publicationInput := PublicationPreviewInput{Target: input.Target, Source: input.Source, Artifacts: artifacts}
+	publicationInput := PublicationPreviewInput{Target: input.Target, Source: input.Source, Group: input.Group, Workspace: input.Workspace, Artifacts: artifacts}
 	publication, err := publicationPlanFromSnapshot(publicationInput, snapshot)
 	if err != nil {
 		return empty, err
@@ -151,8 +153,8 @@ func (s *Service) ApplyAdoption(ctx context.Context, target PublicationTarget, m
 	} else {
 		for _, action := range fresh.Publication.Actions {
 			item := PublicationActionEvidence{Action: action}
-			if action.Artifact != nil && action.Artifact.Reference != nil {
-				item.References = []ExternalReference{*action.Artifact.Reference}
+			if ref := publicationActionReference(action); ref != nil {
+				item.References = []ExternalReference{*ref}
 			}
 			evidence.Completed = append(evidence.Completed, item)
 		}
@@ -163,13 +165,23 @@ func (s *Service) ApplyAdoption(ctx context.Context, target PublicationTarget, m
 	result.ManualFallbackReason = evidence.ManualFallbackReason
 	providerChanged := publicationEvidenceChanged(fresh.Publication, evidence)
 	if err == nil {
-		saved, saveErr := mappings.Save(ctx, fresh.Mappings, fresh.Mappings.Revision)
+		desired, mergeErr := mergeCompletedAdoptionMappings(fresh.Mappings, fresh.Publication, evidence.Completed)
+		if mergeErr != nil {
+			err = mergeErr
+		} else {
+			result.Mappings = desired
+		}
+		var saved ExternalMappingState
+		var saveErr error
+		if err == nil {
+			saved, saveErr = mappings.Save(ctx, desired, fresh.Mappings.Revision)
+		}
 		if saveErr != nil {
 			err = saveErr
 			if providerChanged {
 				err = &IntegrationError{Class: IntegrationPartialFailure, Operation: "adoption.mapping", Message: "provider changed before adoption mappings could be saved; inspect before retrying", Err: err}
 			}
-		} else {
+		} else if err == nil {
 			mappingChanged := saved.Revision != fresh.Mappings.Revision
 			result.Mappings = saved
 			providerChanged = providerChanged || mappingChanged
@@ -226,6 +238,8 @@ func mergeAdoptionMappings(base ExternalMappingState, publication PublicationPla
 	desired := base
 	desired.ArtifactReferences = slices.Clone(base.ArtifactReferences)
 	desired.SourceReferences = slices.Clone(base.SourceReferences)
+	desired.GroupReferences = slices.Clone(base.GroupReferences)
+	desired.WorkspaceReferences = slices.Clone(base.WorkspaceReferences)
 	owners := map[[4]string]planning.ArtifactRef{}
 	indices := map[planning.ArtifactRef]int{}
 	for i, mapping := range desired.ArtifactReferences {
@@ -276,7 +290,83 @@ func mergeAdoptionMappings(base ExternalMappingState, publication PublicationPla
 			return desired, &IntegrationError{Class: IntegrationUnsupportedCapability, Operation: "adoption.preview", Message: "mapping metadata cannot retain multiple collaboration sources"}
 		}
 	}
+	for _, action := range publication.Actions {
+		switch {
+		case action.Group != nil && action.Group.Reference != nil:
+			if err := replaceGroupMappings(&desired, action.Group.Members, *action.Group.Reference); err != nil {
+				return desired, err
+			}
+		case action.Workspace != nil && action.Workspace.Choice != PublicationWorkspaceSkip && action.Workspace.Reference != nil:
+			desired.WorkspaceReferences = []ExternalReference{*action.Workspace.Reference}
+		}
+	}
 	return desired, nil
+}
+
+func mergeCompletedAdoptionMappings(base ExternalMappingState, publication PublicationPlan, completed []PublicationActionEvidence) (ExternalMappingState, error) {
+	desired, err := mergeAdoptionMappings(base, publication)
+	if err != nil {
+		return desired, err
+	}
+	for i, evidence := range completed {
+		if i >= len(publication.Actions) || !samePublicationJSON(evidence.Action, publication.Actions[i]) {
+			return desired, adoptionConflict("publication evidence changed before mapping persistence")
+		}
+		action := publication.Actions[i]
+		ref := completedActionReference(action, evidence.References)
+		switch {
+		case action.Group != nil:
+			if ref == nil {
+				return desired, adoptionConflict("completed group action has no stable provider identity")
+			}
+			if err := replaceGroupMappings(&desired, action.Group.Members, *ref); err != nil {
+				return desired, err
+			}
+		case action.Workspace != nil && action.Workspace.Choice != PublicationWorkspaceSkip:
+			if ref == nil {
+				return desired, adoptionConflict("completed workspace action has no stable provider identity")
+			}
+			desired.WorkspaceReferences = []ExternalReference{*ref}
+		}
+	}
+	return desired, nil
+}
+
+func completedActionReference(action PublicationApplyAction, references []ExternalReference) *ExternalReference {
+	if expected := publicationActionReference(action); expected != nil {
+		for i := range references {
+			if sameExternalIdentity(references[i], *expected) {
+				return &references[i]
+			}
+		}
+		return nil
+	}
+	if len(references) == 0 {
+		return nil
+	}
+	return &references[0]
+}
+
+func replaceGroupMappings(state *ExternalMappingState, members []planning.ArtifactRef, reference ExternalReference) error {
+	wanted := map[planning.ArtifactRef]bool{}
+	for _, member := range members {
+		if member.Validate() != nil || wanted[member] {
+			return adoptionConflict("publication group has invalid member identities")
+		}
+		wanted[member] = true
+	}
+	retained := state.GroupReferences[:0]
+	for _, mapping := range state.GroupReferences {
+		if !wanted[mapping.Artifact] {
+			retained = append(retained, mapping)
+		}
+	}
+	for _, member := range members {
+		retained = append(retained, ArtifactExternalReference{Artifact: member, Reference: reference})
+	}
+	slices.SortFunc(retained, func(a, b ArtifactExternalReference) int { return artifactLess(a.Artifact, b.Artifact) })
+	state.GroupReferences = retained
+	return nil
 }
 
 func publicationEvidenceChanged(plan PublicationPlan, evidence PublicationResult) bool {

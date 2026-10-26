@@ -14,9 +14,10 @@ import (
 )
 
 type adoptionMappingMemory struct {
-	state        ExternalMappingState
-	loads, saves int
-	saveErr      error
+	state         ExternalMappingState
+	loads, saves  int
+	saveErr       error
+	saveBeforeErr bool
 }
 
 func (m *adoptionMappingMemory) Load(context.Context) (ExternalMappingState, error) {
@@ -27,6 +28,10 @@ func (m *adoptionMappingMemory) Load(context.Context) (ExternalMappingState, err
 func (m *adoptionMappingMemory) Save(_ context.Context, state ExternalMappingState, expectedRevision string) (ExternalMappingState, error) {
 	m.saves++
 	if m.saveErr != nil {
+		if m.saveBeforeErr {
+			state.Revision = "next"
+			m.state = state
+		}
 		return ExternalMappingState{}, m.saveErr
 	}
 	if expectedRevision != m.state.Revision {
@@ -41,6 +46,7 @@ type adoptionTargetMemory struct {
 	snapshot      PublicationSnapshot
 	reads, writes int
 	applyErr      error
+	created       map[PublicationActionKind]ExternalReference
 }
 
 func (m *adoptionTargetMemory) Inspect(_ context.Context, request PublicationInspectRequest) (PublicationSnapshot, error) {
@@ -56,8 +62,10 @@ func (m *adoptionTargetMemory) Apply(_ context.Context, plan PublicationPlan) (P
 	result := PublicationResult{SchemaVersion: IntegrationContractVersion}
 	for _, action := range plan.Actions {
 		evidence := PublicationActionEvidence{Action: action}
-		if action.Artifact != nil {
-			evidence.References = []ExternalReference{*action.Artifact.Reference}
+		if ref := publicationActionReference(action); ref != nil {
+			evidence.References = []ExternalReference{*ref}
+		} else if ref, ok := m.created[action.Kind]; ok {
+			evidence.References = []ExternalReference{ref}
 		}
 		result.Completed = append(result.Completed, evidence)
 	}
@@ -73,11 +81,34 @@ func (m *adoptionTargetMemory) Apply(_ context.Context, plan PublicationPlan) (P
 			artifacts = append(artifacts, *action.Artifact)
 		} else if action.Relationship != nil {
 			relationships = append(relationships, *action.Relationship)
+		} else if action.Group != nil {
+			group := *action.Group
+			if len(evidenceReference(result.Completed, action)) > 0 {
+				ref := evidenceReference(result.Completed, action)[0]
+				group.Reference = &ref
+			}
+			m.snapshot.Group = &group
+		} else if action.Workspace != nil && action.Workspace.Choice != PublicationWorkspaceSkip {
+			workspace := *action.Workspace
+			if len(evidenceReference(result.Completed, action)) > 0 {
+				ref := evidenceReference(result.Completed, action)[0]
+				workspace.Reference = &ref
+			}
+			m.snapshot.Workspace = &workspace
 		}
 	}
 	m.snapshot.Artifacts = artifacts
 	m.snapshot.Relationships = relationships
 	return result, nil
+}
+
+func evidenceReference(completed []PublicationActionEvidence, action PublicationApplyAction) []ExternalReference {
+	for _, evidence := range completed {
+		if samePublicationJSON(evidence.Action, action) {
+			return evidence.References
+		}
+	}
+	return nil
 }
 
 func adoptionFixture(t *testing.T) (*Service, *adoptionTargetMemory, *adoptionMappingMemory, AdoptionPreviewInput, AdoptionPlan) {
@@ -153,6 +184,78 @@ func TestAdoptionPreviewDoesNotRequirePublicationWorkspaceDecision(t *testing.T)
 	plan, err := New(nil, Options{}).PreviewAdoption(context.Background(), target, mappings, input, &collaborationPolicy{})
 	if err != nil || len(plan.Publication.Actions) != 5 || target.reads != 1 {
 		t.Fatalf("plan=%+v reads=%d err=%v", plan, target.reads, err)
+	}
+}
+
+func TestAdoptionPersistsCompletedCoordinationAndRecoversAfterSaveFailure(t *testing.T) {
+	service, target, mappings, input, _ := adoptionFixture(t)
+	groupRef := ExternalReference{Provider: "test", Kind: "group", OpaqueID: "group-1", DisplayID: "1", URL: "https://example.test/groups/1"}
+	workspaceRef := ExternalReference{Provider: "test", Kind: "workspace", OpaqueID: "workspace-1", DisplayID: "1", URL: "https://example.test/workspaces/1"}
+	target.created = map[PublicationActionKind]ExternalReference{PublicationGroupAction: groupRef, PublicationWorkspaceAction: workspaceRef}
+	input.Group = &PublicationGroup{Title: "Release"}
+	input.Workspace = &PublicationWorkspaceDecision{Choice: PublicationWorkspaceCreate, Title: "Delivery"}
+	plan, err := service.PreviewAdoption(context.Background(), target, mappings, input, &collaborationPolicy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mappings.saveErr = errors.New("disk unavailable")
+	result, err := service.ApplyAdoption(context.Background(), target, mappings, AdoptionApplyInput{Intent: input, ExpectedPlan: plan, Confirmed: true}, &collaborationPolicy{}, &collaborationEvents{})
+	if err == nil || target.writes != 1 || len(result.Mappings.GroupReferences) != 2 || len(result.Mappings.WorkspaceReferences) != 1 || result.Mappings.WorkspaceReferences[0] != workspaceRef {
+		t.Fatalf("result=%+v writes=%d err=%v", result, target.writes, err)
+	}
+	for _, mapping := range result.Mappings.GroupReferences {
+		if mapping.Reference != groupRef {
+			t.Fatalf("group mapping=%+v", mapping)
+		}
+	}
+
+	mappings.saveErr = nil
+	plan, err = service.PreviewAdoption(context.Background(), target, mappings, input, &collaborationPolicy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	events := &collaborationEvents{}
+	result, err = service.ApplyAdoption(context.Background(), target, mappings, AdoptionApplyInput{Intent: input, ExpectedPlan: plan, Confirmed: true}, &collaborationPolicy{}, events)
+	if err != nil || target.writes != 1 || len(mappings.state.GroupReferences) != 2 || len(mappings.state.WorkspaceReferences) != 1 || events.calls != 1 {
+		t.Fatalf("recovery=%+v writes=%d mappings=%+v events=%d err=%v", result, target.writes, mappings.state, events.calls, err)
+	}
+
+	plan, err = service.PreviewAdoption(context.Background(), target, mappings, input, &collaborationPolicy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err = service.ApplyAdoption(context.Background(), target, mappings, AdoptionApplyInput{Intent: input, ExpectedPlan: plan, Confirmed: true}, &collaborationPolicy{}, events)
+	if err != nil || target.writes != 1 || events.calls != 1 || result.Event != nil {
+		t.Fatalf("rerun=%+v writes=%d events=%d err=%v", result, target.writes, events.calls, err)
+	}
+}
+
+func TestAdoptionLostMappingSaveResponseRerunsWithoutWritesOrAudit(t *testing.T) {
+	service, target, mappings, input, _ := adoptionFixture(t)
+	groupRef := ExternalReference{Provider: "test", Kind: "group", OpaqueID: "group-1", DisplayID: "1", URL: "https://example.test/groups/1"}
+	workspaceRef := ExternalReference{Provider: "test", Kind: "workspace", OpaqueID: "workspace-1", DisplayID: "1", URL: "https://example.test/workspaces/1"}
+	target.created = map[PublicationActionKind]ExternalReference{PublicationGroupAction: groupRef, PublicationWorkspaceAction: workspaceRef}
+	input.Group = &PublicationGroup{Title: "Release"}
+	input.Workspace = &PublicationWorkspaceDecision{Choice: PublicationWorkspaceCreate, Title: "Delivery"}
+	plan, err := service.PreviewAdoption(context.Background(), target, mappings, input, &collaborationPolicy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mappings.saveErr = errors.New("response lost")
+	mappings.saveBeforeErr = true
+	if _, err := service.ApplyAdoption(context.Background(), target, mappings, AdoptionApplyInput{Intent: input, ExpectedPlan: plan, Confirmed: true}, &collaborationPolicy{}, &collaborationEvents{}); err == nil || target.writes != 1 {
+		t.Fatalf("writes=%d err=%v", target.writes, err)
+	}
+
+	mappings.saveErr = nil
+	plan, err = service.PreviewAdoption(context.Background(), target, mappings, input, &collaborationPolicy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	events := &collaborationEvents{}
+	result, err := service.ApplyAdoption(context.Background(), target, mappings, AdoptionApplyInput{Intent: input, ExpectedPlan: plan, Confirmed: true}, &collaborationPolicy{}, events)
+	if err != nil || target.writes != 1 || events.calls != 0 || result.Event != nil {
+		t.Fatalf("result=%+v writes=%d events=%d err=%v", result, target.writes, events.calls, err)
 	}
 }
 
