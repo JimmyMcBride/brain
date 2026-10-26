@@ -112,7 +112,7 @@ func (a *Adapter) executionInspection(ctx context.Context, ref application.Exter
 	}
 	query := `query($id:ID!) { node(id:$id) { ... on ProjectV2 {` + publicationProjectFields + `
     fields(first:100) { nodes { __typename ... on ProjectV2SingleSelectField { id name dataType options { id name } } } pageInfo { hasNextPage } }
-    items(first:100) { nodes { id content { __typename ... on Issue { id number url repository { nameWithOwner } } } fieldValueByName(name:"Status") { __typename ... on ProjectV2ItemFieldSingleSelectValue { optionId name field { ... on ProjectV2SingleSelectField { id name } } } } } pageInfo { hasNextPage } }
+    items(first:100) { nodes { id content { __typename ... on Issue { id number url repository { nameWithOwner } } } status: fieldValueByName(name:"Status") { __typename ... on ProjectV2ItemFieldSingleSelectValue { optionId name field { ... on ProjectV2SingleSelectField { id name } } } } } pageInfo { hasNextPage } }
   } } }`
 	var response struct {
 		Data struct {

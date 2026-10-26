@@ -168,6 +168,17 @@ func TestReconciliationRepairsExecutionWorkspaceInReviewedSteps(t *testing.T) {
 	}
 }
 
+func TestReconciliationExecutionRejectsConcurrentItemRevision(t *testing.T) {
+	_, workspace, artifact, issue := executionFixture()
+	item, _ := workspace.Attach(context.Background(), ExecutionAttachRequest{Workspace: workspace.snapshot.Workspace, Artifact: artifact, PublishedWork: issue})
+	planned := ExecutionStatusRequest{Workspace: workspace.snapshot.Workspace, WorkItem: item.Reference, Status: ExecutionDone}
+	workspace.snapshot.Items[0].Reference.Revision = "concurrent"
+	_, changed, err := applyReconciliationExecution(context.Background(), workspace, ReconciliationPlan{Execution: []ExecutionStatusRequest{planned}})
+	if changed || workspace.statuses != 0 || !isIntegrationClass(err, IntegrationRevisionConflict) {
+		t.Fatalf("changed=%t writes=%d err=%v", changed, workspace.statuses, err)
+	}
+}
+
 func TestReconciliationGatesAndStaleEvidence(t *testing.T) {
 	for _, test := range []string{"confirmation", "publish", "read", "events", "plan", "repository", "mapping"} {
 		t.Run(test, func(t *testing.T) {

@@ -121,6 +121,17 @@ func TestExecutionStatusRequiresSupportedUnambiguousField(t *testing.T) {
 	}
 }
 
+func TestExecutionStatusCanInitializeUnsetField(t *testing.T) {
+	service, workspace, artifact, issue := executionFixture()
+	item, _ := workspace.Attach(context.Background(), ExecutionAttachRequest{Workspace: workspace.snapshot.Workspace, Artifact: artifact, PublishedWork: issue})
+	workspace.snapshot.Items[0].Status = ""
+	request := ExecutionStatusRequest{Workspace: workspace.snapshot.Workspace, WorkItem: item.Reference, Status: ExecutionInProgress}
+	plan, err := service.PreviewExecutionStatus(context.Background(), workspace, request, &collaborationPolicy{})
+	if err != nil || plan.Action != MutationUpdate {
+		t.Fatalf("plan=%+v err=%v", plan, err)
+	}
+}
+
 func isIntegrationClass(err error, class IntegrationErrorClass) bool {
 	var integration *IntegrationError
 	return errors.As(err, &integration) && integration.Class == class

@@ -21,7 +21,8 @@ type executionRunner struct {
 
 func (r *executionRunner) Run(_ context.Context, _ string, args ...string) (RunResult, error) {
 	r.reads++
-	if len(args) < 2 || args[0] != "api" || args[1] != "graphql" || !strings.Contains(publicationTestArgument(args, "query"), "items(first:100)") {
+	query := publicationTestArgument(args, "query")
+	if len(args) < 2 || args[0] != "api" || args[1] != "graphql" || !strings.Contains(query, "items(first:100)") || !strings.Contains(query, `status: fieldValueByName(name:"Status")`) {
 		r.t.Fatalf("unexpected execution read: %q", args)
 	}
 	raw, _ := json.Marshal(map[string]any{"data": map[string]any{"node": r.project}})

@@ -289,6 +289,9 @@ func applyReconciliationExecution(ctx context.Context, workspace ExecutionWorksp
 		if current == nil {
 			return result, changed, reconciliationExecutionFailure(changed, reconciliationManual("tracked Project item is missing"))
 		}
+		if current.Reference.Revision != planned.WorkItem.Revision {
+			return result, changed, reconciliationExecutionFailure(changed, reconciliationApplyConflict())
+		}
 		request.WorkItem = current.Reference
 		if current.Status == planned.Status {
 			result = append(result, *current)

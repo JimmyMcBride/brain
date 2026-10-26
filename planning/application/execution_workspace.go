@@ -124,9 +124,6 @@ func (s *Service) PreviewExecutionStatus(ctx context.Context, workspace Executio
 	if found == nil {
 		return empty, executionManual("execution.status", "published work is not attached to the Project")
 	}
-	if found.Status == "" {
-		return empty, executionManual("execution.status", "Project item has no recognized status")
-	}
 	action := MutationUpdate
 	if found.Status == request.Status {
 		action = MutationUnchanged
