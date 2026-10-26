@@ -149,6 +149,22 @@ func TestExecutionWorkspaceInspectsAndUpdatesStatusIdempotently(t *testing.T) {
 	}
 }
 
+func TestExecutionWorkspaceAcceptsConsistentRepeatedProjectDecisions(t *testing.T) {
+	adapter, runner := executionTestAdapter(t)
+	store := adapter.state.(*fileStateStore)
+	state, err := store.read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.ProjectDecisions["delivery-copy"] = githubProjectDecision{Slug: "delivery-copy", ProjectOwner: "owner", ProjectNumber: 12, ProjectID: "PVT_12", ProjectURL: "https://github.com/users/owner/projects/12", FieldIDs: map[string]string{"Status": "PVTF_status"}}
+	if err := store.write(state); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := adapter.ExecutionWorkspace().Inspect(context.Background(), publicationProjectReference(runner.project.publicationProject)); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestExecutionWorkspaceAttachesAndRejectsStaleRevision(t *testing.T) {
 	adapter, runner := executionTestAdapter(t)
 	ref := publicationProjectReference(runner.project.publicationProject)
@@ -161,6 +177,11 @@ func TestExecutionWorkspaceAttachesAndRejectsStaleRevision(t *testing.T) {
 	stale.Workspace.Revision = "stale"
 	if _, err = adapter.ExecutionWorkspace().Attach(context.Background(), stale); !isProviderClass(err, application.IntegrationRevisionConflict) {
 		t.Fatalf("stale error=%v", err)
+	}
+	mismatch := request
+	mismatch.Artifact = planningRef("one")
+	if _, err = adapter.ExecutionWorkspace().Attach(context.Background(), mismatch); !isProviderClass(err, application.IntegrationManualRemediationRequired) || runner.writes != 0 {
+		t.Fatalf("mapping error=%v writes=%d", err, runner.writes)
 	}
 	item, err := adapter.ExecutionWorkspace().Attach(context.Background(), request)
 	if err != nil || item.Artifact.ID != "two" || runner.writes != 1 {

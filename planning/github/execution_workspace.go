@@ -79,11 +79,12 @@ type executionProject struct {
 }
 
 type executionInspection struct {
-	snapshot application.ExecutionWorkspaceSnapshot
-	project  executionProject
-	field    executionFieldNode
-	options  map[application.ExecutionStatus]executionOption
-	repo     string
+	snapshot  application.ExecutionWorkspaceSnapshot
+	project   executionProject
+	field     executionFieldNode
+	options   map[application.ExecutionStatus]executionOption
+	repo      string
+	artifacts map[string]planning.ArtifactRef
 }
 
 func (a *Adapter) inspectExecutionWorkspace(ctx context.Context, ref application.ExternalReference) (application.ExecutionWorkspaceSnapshot, error) {
@@ -171,7 +172,10 @@ func (a *Adapter) executionInspection(ctx context.Context, ref application.Exter
 		}
 	}
 	snapshot := application.ExecutionWorkspaceSnapshot{SchemaVersion: application.IntegrationContractVersion, Fields: []application.ExecutionField{{Role: application.ExecutionFieldRoleStatus, SupportedStatuses: statuses}}}
-	mappings := executionArtifactMappings(state)
+	mappings, err := executionArtifactMappings(state)
+	if err != nil {
+		return result, err
+	}
 	seenArtifacts := map[planning.ArtifactRef]bool{}
 	for _, item := range project.Items.Nodes {
 		if item.Content == nil || item.Content.Typename != "Issue" {
@@ -211,7 +215,7 @@ func (a *Adapter) executionInspection(ctx context.Context, ref application.Exter
 	}{base.Revision, statusField.ID, options, snapshot.Items})
 	base.Revision = fmt.Sprintf("%x", sha256.Sum256(revisionRaw))
 	snapshot.Workspace = base
-	result = executionInspection{snapshot: snapshot, project: project, field: *statusField, options: options, repo: state.Repo}
+	result = executionInspection{snapshot: snapshot, project: project, field: *statusField, options: options, repo: state.Repo, artifacts: mappings}
 	return result, nil
 }
 
@@ -221,11 +225,24 @@ func executionProjectDecision(state githubState, ref application.ExternalReferen
 		if decision.ProjectID != ref.OpaqueID {
 			continue
 		}
-		if found != nil || decision.ProjectNumber != mustProjectNumber(ref.DisplayID) || decision.ProjectURL != ref.URL {
+		if decision.ProjectNumber != mustProjectNumber(ref.DisplayID) || decision.ProjectURL != ref.URL {
 			return githubProjectDecision{}, providerError(application.IntegrationManualRemediationRequired, executionInspectOperation, "workspace mapping is missing or ambiguous")
 		}
-		copy := decision
-		found = &copy
+		if found == nil {
+			copy := decision
+			found = &copy
+			continue
+		}
+		currentStatus, nextStatus := found.FieldIDs["Status"], decision.FieldIDs["Status"]
+		if currentStatus != "" && nextStatus != "" && currentStatus != nextStatus {
+			return githubProjectDecision{}, providerError(application.IntegrationManualRemediationRequired, executionInspectOperation, "workspace decisions disagree about the Status field")
+		}
+		if currentStatus == "" && nextStatus != "" {
+			if found.FieldIDs == nil {
+				found.FieldIDs = map[string]string{}
+			}
+			found.FieldIDs["Status"] = nextStatus
+		}
 	}
 	if found == nil {
 		return githubProjectDecision{}, providerError(application.IntegrationManualRemediationRequired, executionInspectOperation, "workspace has no durable Project mapping")
@@ -235,15 +252,23 @@ func executionProjectDecision(state githubState, ref application.ExternalReferen
 
 func mustProjectNumber(value string) int { number, _ := strconv.Atoi(value); return number }
 
-func executionArtifactMappings(state githubState) map[string]planning.ArtifactRef {
+func executionArtifactMappings(state githubState) (map[string]planning.ArtifactRef, error) {
 	result := map[string]planning.ArtifactRef{}
-	for _, record := range state.Planning {
+	for key, record := range state.Planning {
 		ref := planning.ArtifactRef{Kind: planning.ArtifactKind(record.Kind), ID: planning.ArtifactID(record.Slug)}
-		if ref.Validate() == nil && record.IssueURL != "" {
-			result[record.IssueURL] = ref
+		if record.IssueURL == "" {
+			continue
 		}
+		wantURL := fmt.Sprintf("https://github.com/%s/issues/%d", state.Repo, record.IssueNumber)
+		if record.Slug != key || ref.Validate() != nil || record.IssueNumber < 1 || record.IssueURL != wantURL {
+			return nil, providerError(application.IntegrationManualRemediationRequired, executionInspectOperation, "artifact mapping is invalid")
+		}
+		if existing, duplicate := result[record.IssueURL]; duplicate && existing != ref {
+			return nil, providerError(application.IntegrationManualRemediationRequired, executionInspectOperation, "issue maps to multiple Planning artifacts")
+		}
+		result[record.IssueURL] = ref
 	}
-	return result
+	return result, nil
 }
 
 func sameExecutionIdentity(a, b application.ExternalReference) bool {
@@ -265,6 +290,9 @@ func (a *Adapter) attachExecutionWork(ctx context.Context, request application.E
 	resolvedIssue, err := a.resolveExecutionIssue(ctx, inspection.repo, request.PublishedWork)
 	if err != nil {
 		return empty, err
+	}
+	if mapped, ok := inspection.artifacts[resolvedIssue.URL]; !ok || mapped != request.Artifact {
+		return empty, providerError(application.IntegrationManualRemediationRequired, executionAttachOperation, "published issue is not durably mapped to the requested artifact")
 	}
 	for _, item := range inspection.snapshot.Items {
 		if sameExecutionIdentity(item.PublishedWork, resolvedIssue) {
