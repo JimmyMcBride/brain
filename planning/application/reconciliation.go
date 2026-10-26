@@ -93,7 +93,7 @@ func (s *Service) previewReconciliation(ctx context.Context, target PublicationT
 	}
 	seen := map[planning.ArtifactRef]bool{}
 	for _, intent := range input.Execution {
-		if intent.Artifact.Validate() != nil || validateExecutionStatus(intent.Status) != nil || seen[intent.Artifact] {
+		if intent.Artifact.Validate() != nil || (intent.Status != "" && validateExecutionStatus(intent.Status) != nil) || seen[intent.Artifact] {
 			return empty, base, reconciliationManual("execution intent contains invalid or duplicate artifacts")
 		}
 		seen[intent.Artifact] = true
@@ -115,7 +115,7 @@ func (s *Service) previewReconciliation(ctx context.Context, target PublicationT
 			plan.Attachments = append(plan.Attachments, ExecutionAttachRequest{Workspace: snapshot.Workspace, Artifact: intent.Artifact, PublishedWork: issue})
 			continue
 		}
-		if item.Status != intent.Status {
+		if intent.Status != "" && item.Status != intent.Status {
 			if !executionStatusSupported(snapshot.Fields, intent.Status) {
 				return empty, base, reconciliationManual("required semantic Status option is unavailable")
 			}

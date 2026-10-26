@@ -77,16 +77,17 @@ func addPlanningGitHubCommands(planCmd *cobra.Command, loadApp appLoader) {
 	}
 	disableCmd.Flags().BoolVar(&confirmDisable, "confirm", false, "confirm GitHub adapter disablement")
 
-	var adoptDiscussion, adoptIssues string
+	var adoptDiscussion, adoptIssues, adoptWorkspace string
 	var confirmAdopt bool
 	adoptCmd := &cobra.Command{
 		Use: "adopt", Short: "Preview or adopt existing GitHub planning issues", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runPlanningGitHubAdopt(cmd, loadApp, adoptDiscussion, adoptIssues, confirmAdopt)
+			return runPlanningGitHubAdopt(cmd, loadApp, adoptDiscussion, adoptIssues, adoptWorkspace, confirmAdopt)
 		},
 	}
 	adoptCmd.Flags().StringVar(&adoptDiscussion, "discussion", "", "GitHub Discussion number or URL")
 	adoptCmd.Flags().StringVar(&adoptIssues, "issues", "", "comma-separated issue numbers in canonical artifact order")
+	adoptCmd.Flags().StringVar(&adoptWorkspace, "workspace", "", "GitHub workspace decision: create, connect, or skip")
 	adoptCmd.Flags().BoolVar(&confirmAdopt, "confirm", false, "confirm adoption and mapping writes")
 
 	var confirmReconcile, updateVisible bool
@@ -243,7 +244,7 @@ type planningGitHubPromotionOutput struct {
 	Adoption    *application.AdoptionResult         `json:"adoption,omitempty"`
 }
 
-func runPlanningDiscussionPromote(cmd *cobra.Command, loadApp appLoader, selector string, apply, confirmed bool) error {
+func runPlanningDiscussionPromote(cmd *cobra.Command, loadApp appLoader, selector, workspaceChoice string, apply, confirmed bool) error {
 	if confirmed && !apply {
 		return fmt.Errorf("--confirm requires --apply for GitHub promotion")
 	}
@@ -251,7 +252,7 @@ func runPlanningDiscussionPromote(cmd *cobra.Command, loadApp appLoader, selecto
 		return fmt.Errorf("promotion apply requires explicit confirmation; rerun with --confirm")
 	}
 	return withPlanningIntegration(cmd, loadApp, application.PermissionRead, true, func(appCtx *app.App, service *application.Service, _ planningIntegrationProvider, adapter *planninggithub.Adapter, authorizer planningAuthorizer, _ string) error {
-		intent, assessment, err := planningDiscussionPublicationIntent(cmd.Context(), service, adapter, selector, authorizer)
+		intent, assessment, err := planningDiscussionPublicationIntent(cmd.Context(), service, adapter, selector, workspaceChoice, authorizer)
 		if err != nil {
 			return err
 		}
@@ -292,7 +293,7 @@ func runPlanningDiscussionPromote(cmd *cobra.Command, loadApp appLoader, selecto
 	})
 }
 
-func planningDiscussionPublicationIntent(ctx context.Context, service *application.Service, adapter *planninggithub.Adapter, selector string, authorizer planningAuthorizer) (application.PublicationPreviewInput, application.CollaborationAssessment, error) {
+func planningDiscussionPublicationIntent(ctx context.Context, service *application.Service, adapter *planninggithub.Adapter, selector, workspaceChoice string, authorizer planningAuthorizer) (application.PublicationPreviewInput, application.CollaborationAssessment, error) {
 	ref := githubDiscussionReference(selector)
 	assessment, err := service.AssessCollaboration(ctx, adapter.CollaborationSource(), ref, authorizer)
 	if err != nil {
@@ -342,15 +343,42 @@ func planningDiscussionPublicationIntent(ctx context.Context, service *applicati
 			group.Members = append(group.Members, artifact.Artifact)
 		}
 	}
-	return application.PublicationPreviewInput{Target: status.Repository, Source: &snapshot.Source, Artifacts: artifacts, Group: group}, assessment, nil
+	workspace, err := planningPublicationWorkspaceDecision(ctx, adapter.ExternalMappingRepository(), workspaceChoice, snapshot.Title)
+	if err != nil {
+		return application.PublicationPreviewInput{}, assessment, err
+	}
+	return application.PublicationPreviewInput{Target: status.Repository, Source: &snapshot.Source, Artifacts: artifacts, Group: group, Workspace: workspace}, assessment, nil
 }
 
-func runPlanningGitHubAdopt(cmd *cobra.Command, loadApp appLoader, discussion, issues string, confirmed bool) error {
+func planningPublicationWorkspaceDecision(ctx context.Context, mappings application.ExternalMappingRepository, choice, title string) (*application.PublicationWorkspaceDecision, error) {
+	switch strings.ToLower(strings.TrimSpace(choice)) {
+	case "":
+		return nil, nil
+	case string(application.PublicationWorkspaceCreate):
+		return &application.PublicationWorkspaceDecision{Choice: application.PublicationWorkspaceCreate, Title: strings.TrimSpace(title), Reason: "Coordinate execution for this publication."}, nil
+	case string(application.PublicationWorkspaceSkip):
+		return &application.PublicationWorkspaceDecision{Choice: application.PublicationWorkspaceSkip, Reason: "Explicitly publish without an execution workspace."}, nil
+	case string(application.PublicationWorkspaceConnect):
+		state, err := mappings.Load(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if len(state.WorkspaceReferences) != 1 {
+			return nil, fmt.Errorf("--workspace connect requires exactly one durable GitHub Project mapping")
+		}
+		ref := state.WorkspaceReferences[0]
+		return &application.PublicationWorkspaceDecision{Choice: application.PublicationWorkspaceConnect, Reason: "Use the configured GitHub Project.", Reference: &ref}, nil
+	default:
+		return nil, fmt.Errorf("--workspace must be create, connect, or skip")
+	}
+}
+
+func runPlanningGitHubAdopt(cmd *cobra.Command, loadApp appLoader, discussion, issues, workspaceChoice string, confirmed bool) error {
 	if strings.TrimSpace(discussion) == "" || strings.TrimSpace(issues) == "" {
 		return fmt.Errorf("github adopt requires --discussion and --issues")
 	}
 	return withPlanningIntegration(cmd, loadApp, application.PermissionRead, true, func(appCtx *app.App, service *application.Service, _ planningIntegrationProvider, adapter *planninggithub.Adapter, authorizer planningAuthorizer, _ string) error {
-		publication, _, err := planningDiscussionPublicationIntent(cmd.Context(), service, adapter, discussion, authorizer)
+		publication, _, err := planningDiscussionPublicationIntent(cmd.Context(), service, adapter, discussion, workspaceChoice, authorizer)
 		if err != nil {
 			return err
 		}
@@ -449,13 +477,28 @@ func localReconciliationIntent(ctx context.Context, service *application.Service
 		for _, mapping := range mappings.ArtifactReferences {
 			byArtifact[mapping.Artifact] = mapping.Reference
 		}
+		byStatus := map[planning.ArtifactRef]planning.SpecStatus{}
+		for _, document := range documents {
+			byStatus[planning.ArtifactRef{Kind: planning.ArtifactSpec, ID: document.Artifact.ID}] = document.Artifact.Status
+		}
 		for _, artifact := range input.Publication.Artifacts {
 			if ref, ok := byArtifact[artifact.Artifact]; ok {
-				input.Execution = append(input.Execution, application.ExecutionIntent{Artifact: artifact.Artifact, PublishedWork: ref, Status: application.ExecutionTodo})
+				input.Execution = append(input.Execution, application.ExecutionIntent{Artifact: artifact.Artifact, PublishedWork: ref, Status: reconciliationExecutionStatus(byStatus[artifact.Artifact])})
 			}
 		}
 	}
 	return input, nil
+}
+
+func reconciliationExecutionStatus(status planning.SpecStatus) application.ExecutionStatus {
+	switch status {
+	case planning.SpecImplementing:
+		return application.ExecutionInProgress
+	case planning.SpecDone:
+		return application.ExecutionDone
+	default:
+		return ""
+	}
 }
 
 func runPlanningGitHubProjectStatus(cmd *cobra.Command, loadApp appLoader, issue, value string, confirmed bool) error {
@@ -670,10 +713,23 @@ func collaborationDependencies(guesses []map[string]any) map[string][]string {
 func publicationCandidates(plan application.PublicationPlan, result application.PublicationApplyResult) ([]application.ArtifactExternalReference, error) {
 	candidates := []application.ArtifactExternalReference{}
 	for _, completed := range result.Evidence.Completed {
-		if completed.Action.Kind != application.PublicationArtifactAction || completed.Action.Artifact == nil || len(completed.References) != 1 {
+		if completed.Action.Kind != application.PublicationArtifactAction || completed.Action.Artifact == nil {
 			continue
 		}
-		candidates = append(candidates, application.ArtifactExternalReference{Artifact: completed.Action.Artifact.Artifact, Reference: completed.References[0]})
+		var issue *application.ExternalReference
+		for i := range completed.References {
+			if completed.References[i].Kind != "issue" {
+				continue
+			}
+			if issue != nil {
+				return nil, fmt.Errorf("publication returned multiple issue identities for one artifact")
+			}
+			ref := completed.References[i]
+			issue = &ref
+		}
+		if issue != nil {
+			candidates = append(candidates, application.ArtifactExternalReference{Artifact: completed.Action.Artifact.Artifact, Reference: *issue})
+		}
 	}
 	artifacts := 0
 	for _, action := range plan.Actions {

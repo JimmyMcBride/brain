@@ -12,6 +12,7 @@ import (
 
 	"github.com/JimmyMcBride/brain/internal/modules"
 	officialplanning "github.com/JimmyMcBride/brain/internal/official/planning"
+	"github.com/JimmyMcBride/brain/planning"
 	"github.com/JimmyMcBride/brain/planning/application"
 	planninggithub "github.com/JimmyMcBride/brain/planning/github"
 )
@@ -82,6 +83,82 @@ func TestPlanningGitHubCheckFinding(t *testing.T) {
 	finding := planningGitHubCheckFinding("error", "github.project.missing_item", "missing", "reconcile")
 	if finding.ArtifactType != "integration" || finding.ArtifactPath != ".plan/.meta/github.json" || finding.Section != "GitHub Project" {
 		t.Fatalf("unexpected finding: %#v", finding)
+	}
+}
+
+func TestPublicationCandidatesSelectIssueReference(t *testing.T) {
+	artifact := application.PublicationArtifact{Artifact: planning.ArtifactRef{Kind: planning.ArtifactSpec, ID: "native-github"}}
+	action := application.PublicationApplyAction{Kind: application.PublicationArtifactAction, Artifact: &artifact}
+	plan := application.PublicationPlan{Actions: []application.PublicationApplyAction{action}}
+	issue := application.ExternalReference{Provider: "github", Kind: "issue", OpaqueID: "issue-42", DisplayID: "42", URL: "https://github.com/owner/repo/issues/42"}
+	result := application.PublicationApplyResult{Evidence: application.PublicationResult{Completed: []application.PublicationActionEvidence{{
+		Action: action,
+		References: []application.ExternalReference{
+			{Provider: "github", Kind: "label", OpaqueID: "label-spec", DisplayID: "plan:spec", URL: "https://github.com/owner/repo/labels/plan%3Aspec"},
+			{Provider: "github", Kind: "label", OpaqueID: "label-ready", DisplayID: "plan:ready", URL: "https://github.com/owner/repo/labels/plan%3Aready"},
+			issue,
+		},
+	}}}}
+
+	candidates, err := publicationCandidates(plan, result)
+	if err != nil || len(candidates) != 1 || candidates[0].Reference != issue {
+		t.Fatalf("candidates=%+v err=%v", candidates, err)
+	}
+
+	result.Evidence.Completed[0].References = append(result.Evidence.Completed[0].References, application.ExternalReference{Provider: "github", Kind: "issue", OpaqueID: "issue-43", DisplayID: "43", URL: "https://github.com/owner/repo/issues/43"})
+	if _, err := publicationCandidates(plan, result); err == nil || !strings.Contains(err.Error(), "multiple issue identities") {
+		t.Fatalf("expected ambiguous issue identities, got %v", err)
+	}
+}
+
+func TestReconciliationExecutionStatusOnlyDerivesCanonicalTransitions(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		status planning.SpecStatus
+		want   application.ExecutionStatus
+	}{
+		{name: "implementing", status: planning.SpecImplementing, want: application.ExecutionInProgress},
+		{name: "done", status: planning.SpecDone, want: application.ExecutionDone},
+		{name: "approved preserves provider status", status: planning.SpecApproved},
+		{name: "draft preserves provider status", status: planning.SpecDraft},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := reconciliationExecutionStatus(test.status); got != test.want {
+				t.Fatalf("got %q want %q", got, test.want)
+			}
+		})
+	}
+}
+
+type planningWorkspaceMappings struct {
+	state application.ExternalMappingState
+}
+
+func (m planningWorkspaceMappings) Load(context.Context) (application.ExternalMappingState, error) {
+	return m.state, nil
+}
+
+func (planningWorkspaceMappings) Save(context.Context, application.ExternalMappingState, string) (application.ExternalMappingState, error) {
+	return application.ExternalMappingState{}, errors.New("unexpected save")
+}
+
+func TestPlanningPublicationWorkspaceDecision(t *testing.T) {
+	ref := application.ExternalReference{Provider: "github", Kind: "project", OpaqueID: "project-7", DisplayID: "7", URL: "https://github.com/users/owner/projects/7"}
+	mappings := planningWorkspaceMappings{state: application.ExternalMappingState{WorkspaceReferences: []application.ExternalReference{ref}}}
+	connected, err := planningPublicationWorkspaceDecision(context.Background(), mappings, "connect", "Delivery")
+	if err != nil || connected.Choice != application.PublicationWorkspaceConnect || connected.Reference == nil || *connected.Reference != ref {
+		t.Fatalf("connected=%+v err=%v", connected, err)
+	}
+	created, err := planningPublicationWorkspaceDecision(context.Background(), mappings, "create", " Delivery ")
+	if err != nil || created.Choice != application.PublicationWorkspaceCreate || created.Title != "Delivery" {
+		t.Fatalf("created=%+v err=%v", created, err)
+	}
+	skipped, err := planningPublicationWorkspaceDecision(context.Background(), mappings, "skip", "Delivery")
+	if err != nil || skipped.Choice != application.PublicationWorkspaceSkip {
+		t.Fatalf("skipped=%+v err=%v", skipped, err)
+	}
+	if _, err := planningPublicationWorkspaceDecision(context.Background(), mappings, "other", "Delivery"); err == nil || !strings.Contains(err.Error(), "create, connect, or skip") {
+		t.Fatalf("expected invalid choice, got %v", err)
 	}
 }
 
