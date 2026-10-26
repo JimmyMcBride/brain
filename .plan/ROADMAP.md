@@ -47,6 +47,11 @@ Goal: Move GitHub behind adapters, keep Linear outside Brain Planning, and conne
 Planning outcomes to review-first Brain memory proposals.
 
 - [ ] [GitHub adapter transition](./specs/github-adapter-transition.md)
+  - [ ] [Coordination mapping persistence](./specs/github-coordination-mapping-persistence.md)
+  - [ ] [Repository reconciliation](./specs/github-repository-reconciliation.md)
+  - [ ] [Execution workspace](./specs/github-execution-workspace.md)
+  - [ ] [Native GitHub Planning rollout](./specs/native-github-planning-rollout.md)
+  - [ ] [Integration conformance and release](./specs/github-integration-conformance-release.md)
 - [ ] Reject legacy Linear workspaces with standalone Plan migration guidance
 - [ ] Brain context sources and Planning context packets
 - [ ] Completion-to-memory proposals

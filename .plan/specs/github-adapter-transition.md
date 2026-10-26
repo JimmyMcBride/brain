@@ -6,7 +6,7 @@ source_brainstorm: .plan/brainstorms/github-adapter-transition.md
 status: implementing
 title: GitHub Adapter Transition
 type: spec
-updated_at: "2026-09-06T12:19:00Z"
+updated_at: "2026-10-26T14:28:47Z"
 ---
 
 # GitHub Adapter Transition
@@ -324,6 +324,14 @@ conformance baseline; provider-neutral contract; disabled adapter skeleton;
 collaboration/publication; repository/Project reconciliation; Plan wrapper and
 coordinated release.
 
+Remaining reviewed work is split into these dependency-ordered child specs:
+
+1. [GitHub Coordination Mapping Persistence](./github-coordination-mapping-persistence.md)
+2. [GitHub Repository Reconciliation](./github-repository-reconciliation.md)
+3. [GitHub Execution Workspace](./github-execution-workspace.md)
+4. [Native GitHub Planning Rollout](./native-github-planning-rollout.md)
+5. [GitHub Integration Conformance and Release](./github-integration-conformance-release.md)
+
 ## Analysis
 
 ### Missing Constraints
@@ -362,6 +370,11 @@ guidance_findings: 0
 ## Resources
 
 - [Source Brainstorm](../brainstorms/github-adapter-transition.md)
+- [GitHub Coordination Mapping Persistence](./github-coordination-mapping-persistence.md)
+- [GitHub Repository Reconciliation](./github-repository-reconciliation.md)
+- [GitHub Execution Workspace](./github-execution-workspace.md)
+- [Native GitHub Planning Rollout](./native-github-planning-rollout.md)
+- [GitHub Integration Conformance and Release](./github-integration-conformance-release.md)
 - [GitHub Planning Transition](../../docs/planning/github-transition.md)
 - [ADR 0007](../../docs/adr/0007-github-planning-is-transitional.md)
 - [Planning Storage and Modes](../../docs/planning/storage-and-modes.md)
