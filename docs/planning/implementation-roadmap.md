@@ -1,5 +1,5 @@
 ---
-updated: "2026-09-26T22:30:48Z"
+updated: "2026-10-26T14:32:42Z"
 ---
 # Planning Module Implementation Roadmap
 
@@ -197,8 +197,15 @@ lifecycle, diagnostics, and distribution direction.
 
 ## Exact Next Slice
 
-> Persist resulting milestone and workspace identities through
-> adoption/reconciliation, then implement reviewed execution-workspace field,
-> item, status, and drift behavior. Preserve structured spec briefs, stable
-> identity, confirmation, idempotency, and partial-failure recovery. Native
-> module wiring remains in rollout slice 5.
+Execute the remaining dependency-ordered Phase 5 specs:
+
+1. [GitHub Coordination Mapping Persistence](../../.plan/specs/github-coordination-mapping-persistence.md)
+2. [GitHub Repository Reconciliation](../../.plan/specs/github-repository-reconciliation.md)
+3. [GitHub Execution Workspace](../../.plan/specs/github-execution-workspace.md)
+4. [Native GitHub Planning Rollout](../../.plan/specs/native-github-planning-rollout.md)
+5. [GitHub Integration Conformance and Release](../../.plan/specs/github-integration-conformance-release.md)
+
+The first spec is the exact next implementation slice. Each later spec depends
+on the preceding provider/application boundary. Preserve structured briefs,
+stable identity, confirmation, idempotency, partial-failure recovery, and local
+Planning independence throughout.

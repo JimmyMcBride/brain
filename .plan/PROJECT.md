@@ -56,4 +56,6 @@ controlled migration.
 - Phase 4's [Plan CLI Compatibility](./specs/plan-cli-compatibility.md) is
   complete. Phase 5's approved
   [GitHub Adapter Transition](./specs/github-adapter-transition.md) is the
-  current execution contract.
+  current execution contract. Its remaining work is split into five child
+  specs covering coordination mappings, repository reconciliation, execution
+  workspaces, native rollout, and coordinated conformance/release.
