@@ -397,11 +397,12 @@ type ExecutionMutationResult struct {
 }
 
 // ExecutionIntent is canonical Planning intent used to classify Project drift
-// during repository reconciliation.
+// during repository reconciliation. An empty Status attaches missing work but
+// preserves the status of an existing item.
 type ExecutionIntent struct {
 	Artifact      planning.ArtifactRef `json:"artifact"`
 	PublishedWork ExternalReference    `json:"published_work"`
-	Status        ExecutionStatus      `json:"status"`
+	Status        ExecutionStatus      `json:"status,omitempty"`
 }
 
 // ReconciliationPlan is the ordered application decision for bringing

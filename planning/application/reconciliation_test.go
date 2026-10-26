@@ -169,6 +169,13 @@ func TestReconciliationRepairsExecutionWorkspaceInReviewedSteps(t *testing.T) {
 	if err != nil || len(plan.Attachments) != 0 || len(plan.Execution) != 0 {
 		t.Fatalf("rerun plan=%+v err=%v", plan, err)
 	}
+
+	execution.snapshot.Items[0].Status = ExecutionInReview
+	input.Execution[0].Status = ""
+	plan, err = service.PreviewReconciliation(context.Background(), target, repository, mappings, execution, input, &collaborationPolicy{})
+	if err != nil || len(plan.Attachments) != 0 || len(plan.Execution) != 0 {
+		t.Fatalf("preserve-status plan=%+v err=%v", plan, err)
+	}
 }
 
 func TestReconciliationExecutionRejectsConcurrentItemRevision(t *testing.T) {
