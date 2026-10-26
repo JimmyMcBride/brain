@@ -98,7 +98,7 @@ func (s *Service) previewReconciliation(ctx context.Context, target PublicationT
 		}
 		seen[intent.Artifact] = true
 		issue, ok := published[intent.Artifact]
-		if !ok || intent.PublishedWork.OpaqueID != "" && !sameExternalIdentity(intent.PublishedWork, issue) {
+		if !ok || intent.PublishedWork.OpaqueID != "" && !reconcilesExternalIdentity(intent.PublishedWork, issue) {
 			return empty, base, reconciliationManual("execution intent disagrees with durable publication identity")
 		}
 		var item *ExecutionWorkItem
