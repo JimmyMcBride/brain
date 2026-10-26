@@ -1,5 +1,5 @@
 ---
-updated: "2026-10-26T17:41:23Z"
+updated: "2026-10-26T18:01:16Z"
 ---
 <!-- brain:begin context-current-state -->
 This file is a deterministic snapshot of the repository state at the last refresh.
@@ -29,6 +29,7 @@ This file is a deterministic snapshot of the repository state at the last refres
 
 ## Local Notes
 
+- 2026-10-26: Durable GitHub issue mappings may intentionally use the canonical issue URL as an opaque selector while live inspection returns the provider node ID. Publication reconciliation accepts that normalization only when provider, kind, display ID, and canonical URL all agree; it must still reject every other opaque-identity mismatch. Keep the reconciliation lifecycle fixture shaped this way so legacy mappings cannot regress into `known artifact reference could not be reconciled` failures.
 - 2026-10-26: GitHub repository reconciliation is implemented behind provider-neutral application and adapter ports. Repository evidence resolves the canonical repository, default/current refs, exact commit, and optional planning pull request while detached, forked, stale, cross-repository, incomplete, and ambiguous evidence fails closed. Preview hydrates stable identities from durable mappings and reuses publication classification without mutation. Confirmed apply rechecks the complete plan, permissions, repository/provider/mapping revisions, persists reconciliation evidence only after provider completion, retains partial evidence, audits changed outcomes, and makes identical reruns write-free. Project field/item/status drift remains deferred to the execution-workspace port, which is the next Phase 5 slice.
 - 2026-10-26: GitHub coordination mapping persistence is implemented: confirmed adoption persists completed milestone mappings for every reviewed member and one canonical Project identity, preserves legacy-private and unknown metadata, rejects ambiguous or foreign workspaces, and recovers local-save failures and lost responses without duplicate provider or audit work. Repository reconciliation is the next Phase 5 slice.
 - 2026-10-26: Remaining Phase 5 GitHub work is now captured in five dependency-ordered draft specs under the approved `github-adapter-transition` initiative: coordination mapping persistence, repository reconciliation, execution workspace, native Brain rollout, and coordinated Brain/Plan conformance/release. Each spec has explicit non-goals, failure recovery, migration/rollback bounds, acceptance criteria, and verification. Coordination mapping persistence is the exact next implementation slice.
