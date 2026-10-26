@@ -160,16 +160,16 @@ func (p externalMappingRepository) Save(ctx context.Context, state application.E
 
 type executionWorkspace struct{ adapter *Adapter }
 
-func (p executionWorkspace) Inspect(context.Context, application.ExternalReference) (application.ExecutionWorkspaceSnapshot, error) {
-	return application.ExecutionWorkspaceSnapshot{}, p.adapter.unavailable("execution.inspect")
+func (p executionWorkspace) Inspect(ctx context.Context, ref application.ExternalReference) (application.ExecutionWorkspaceSnapshot, error) {
+	return p.adapter.inspectExecutionWorkspace(ctx, ref)
 }
 
-func (p executionWorkspace) Attach(context.Context, application.ExecutionAttachRequest) (application.ExecutionWorkItem, error) {
-	return application.ExecutionWorkItem{}, p.adapter.unavailable("execution.attach")
+func (p executionWorkspace) Attach(ctx context.Context, request application.ExecutionAttachRequest) (application.ExecutionWorkItem, error) {
+	return p.adapter.attachExecutionWork(ctx, request)
 }
 
-func (p executionWorkspace) ApplyStatus(context.Context, application.ExecutionStatusRequest) (application.ExecutionWorkItem, error) {
-	return application.ExecutionWorkItem{}, p.adapter.unavailable("execution.status")
+func (p executionWorkspace) ApplyStatus(ctx context.Context, request application.ExecutionStatusRequest) (application.ExecutionWorkItem, error) {
+	return p.adapter.applyExecutionStatus(ctx, request)
 }
 
 type commandRunner struct{}

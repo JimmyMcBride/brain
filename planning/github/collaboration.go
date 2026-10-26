@@ -34,7 +34,7 @@ type discussion struct {
 }
 
 func providerError(class application.IntegrationErrorClass, operation, message string) error {
-	return &application.IntegrationError{Class: class, Provider: providerName, Operation: operation, Message: message}
+	return &application.IntegrationError{Class: class, Provider: providerName, Operation: operation, Message: message, ManualFallbackAllowed: class == application.IntegrationManualRemediationRequired}
 }
 
 // Provider stderr can contain credentials or source content. Only stable error

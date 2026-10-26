@@ -16,12 +16,12 @@ const EventIntegrationReconciled = "planning.integration.reconciled"
 
 // PreviewReconciliation loads revisioned mappings, resolves the checked-out
 // repository change, and classifies publication drift without mutation.
-func (s *Service) PreviewReconciliation(ctx context.Context, target PublicationTarget, repository RepositoryEvidenceSource, mappings ExternalMappingRepository, input ReconciliationPreviewInput, authorizer Authorizer) (ReconciliationPlan, error) {
-	plan, _, err := s.previewReconciliation(ctx, target, repository, mappings, input, authorizer)
+func (s *Service) PreviewReconciliation(ctx context.Context, target PublicationTarget, repository RepositoryEvidenceSource, mappings ExternalMappingRepository, execution ExecutionWorkspace, input ReconciliationPreviewInput, authorizer Authorizer) (ReconciliationPlan, error) {
+	plan, _, err := s.previewReconciliation(ctx, target, repository, mappings, execution, input, authorizer)
 	return plan, err
 }
 
-func (s *Service) previewReconciliation(ctx context.Context, target PublicationTarget, repository RepositoryEvidenceSource, mappings ExternalMappingRepository, input ReconciliationPreviewInput, authorizer Authorizer) (ReconciliationPlan, ExternalMappingState, error) {
+func (s *Service) previewReconciliation(ctx context.Context, target PublicationTarget, repository RepositoryEvidenceSource, mappings ExternalMappingRepository, execution ExecutionWorkspace, input ReconciliationPreviewInput, authorizer Authorizer) (ReconciliationPlan, ExternalMappingState, error) {
 	var empty ReconciliationPlan
 	if authorizer == nil {
 		return empty, ExternalMappingState{}, fmt.Errorf("reconciliation preview requires an authorizer")
@@ -68,16 +68,71 @@ func (s *Service) previewReconciliation(ctx context.Context, target PublicationT
 			return empty, base, reconciliationManual("execution workspace drift is deferred to execution-workspace reconciliation")
 		}
 	}
-	return ReconciliationPlan{
+	plan := ReconciliationPlan{
 		SchemaVersion: IntegrationContractVersion, Repository: evidence, Publication: publication,
 		ExpectedMappingRevision: base.Revision,
-	}, base, nil
+	}
+	if len(input.Execution) == 0 {
+		return plan, base, nil
+	}
+	if execution == nil || len(base.WorkspaceReferences) != 1 {
+		return empty, base, reconciliationManual("execution reconciliation requires one durable workspace mapping")
+	}
+	snapshot, err := execution.Inspect(ctx, base.WorkspaceReferences[0])
+	if err != nil {
+		return empty, base, err
+	}
+	if err := validateExecutionSnapshot(snapshot, base.WorkspaceReferences[0]); err != nil {
+		return empty, base, err
+	}
+	published := map[planning.ArtifactRef]ExternalReference{}
+	for _, action := range publication.Actions {
+		if action.Artifact != nil && action.Artifact.Reference != nil {
+			published[action.Artifact.Artifact] = *action.Artifact.Reference
+		}
+	}
+	seen := map[planning.ArtifactRef]bool{}
+	for _, intent := range input.Execution {
+		if intent.Artifact.Validate() != nil || validateExecutionStatus(intent.Status) != nil || seen[intent.Artifact] {
+			return empty, base, reconciliationManual("execution intent contains invalid or duplicate artifacts")
+		}
+		seen[intent.Artifact] = true
+		issue, ok := published[intent.Artifact]
+		if !ok || intent.PublishedWork.OpaqueID != "" && !reconcilesExternalIdentity(intent.PublishedWork, issue) {
+			return empty, base, reconciliationManual("execution intent disagrees with durable publication identity")
+		}
+		var item *ExecutionWorkItem
+		for i := range snapshot.Items {
+			if snapshot.Items[i].Artifact == intent.Artifact {
+				if item != nil || !sameExternalLocation(snapshot.Items[i].PublishedWork, issue) {
+					return empty, base, reconciliationManual("execution workspace has ambiguous artifact membership")
+				}
+				copy := snapshot.Items[i]
+				item = &copy
+			}
+		}
+		if item == nil {
+			plan.Attachments = append(plan.Attachments, ExecutionAttachRequest{Workspace: snapshot.Workspace, Artifact: intent.Artifact, PublishedWork: issue})
+			continue
+		}
+		if item.Status != intent.Status {
+			if !executionStatusSupported(snapshot.Fields, intent.Status) {
+				return empty, base, reconciliationManual("required semantic Status option is unavailable")
+			}
+			plan.Execution = append(plan.Execution, ExecutionStatusRequest{Workspace: snapshot.Workspace, WorkItem: item.Reference, ConfigurationRevision: snapshot.ConfigurationRevision, Status: intent.Status})
+		}
+	}
+	slices.SortFunc(plan.Attachments, func(a, b ExecutionAttachRequest) int {
+		return strings.Compare(string(a.Artifact.ID), string(b.Artifact.ID))
+	})
+	slices.SortFunc(plan.Execution, func(a, b ExecutionStatusRequest) int { return strings.Compare(a.WorkItem.URL, b.WorkItem.URL) })
+	return plan, base, nil
 }
 
 // ApplyReconciliation rechecks the complete reviewed plan, applies ordered safe
 // publication repairs, and records repository evidence only after provider and
 // mapping completion. Remote writes are never rolled back.
-func (s *Service) ApplyReconciliation(ctx context.Context, target PublicationTarget, repository RepositoryEvidenceSource, mappings ExternalMappingRepository, input ReconciliationApplyInput, authorizer Authorizer, events EventSink) (ReconciliationResult, error) {
+func (s *Service) ApplyReconciliation(ctx context.Context, target PublicationTarget, repository RepositoryEvidenceSource, mappings ExternalMappingRepository, execution ExecutionWorkspace, input ReconciliationApplyInput, authorizer Authorizer, events EventSink) (ReconciliationResult, error) {
 	result := ReconciliationResult{SchemaVersion: IntegrationContractVersion, Publication: PublicationResult{SchemaVersion: IntegrationContractVersion}}
 	if !input.Confirmed {
 		return result, ErrConfirmationRequired
@@ -88,13 +143,18 @@ func (s *Service) ApplyReconciliation(ctx context.Context, target PublicationTar
 	if err := authorizer.Require(ctx, PermissionPublish); err != nil {
 		return result, err
 	}
+	if len(input.Intent.Execution) > 0 {
+		if err := authorizer.Require(ctx, PermissionExecute); err != nil {
+			return result, err
+		}
+	}
 	if events == nil {
 		return result, ErrEventSinkRequired
 	}
-	if input.ExpectedPlan.SchemaVersion != IntegrationContractVersion || input.ExpectedPlan.Publication.SchemaVersion != IntegrationContractVersion || len(input.ExpectedPlan.Publication.Actions) == 0 || input.ExpectedPlan.ExpectedMappingRevision == "" || len(input.ExpectedPlan.Execution) != 0 {
+	if input.ExpectedPlan.SchemaVersion != IntegrationContractVersion || input.ExpectedPlan.Publication.SchemaVersion != IntegrationContractVersion || len(input.ExpectedPlan.Publication.Actions) == 0 || input.ExpectedPlan.ExpectedMappingRevision == "" {
 		return result, reconciliationApplyConflict()
 	}
-	fresh, base, err := s.previewReconciliation(ctx, target, repository, mappings, input.Intent, authorizer)
+	fresh, base, err := s.previewReconciliation(ctx, target, repository, mappings, execution, input.Intent, authorizer)
 	if err != nil {
 		return result, err
 	}
@@ -124,6 +184,12 @@ func (s *Service) ApplyReconciliation(ctx context.Context, target PublicationTar
 		}
 	}
 	providerChanged := publicationEvidenceChanged(fresh.Publication, result.Publication)
+	executionChanged := false
+	if err == nil && (len(fresh.Attachments) > 0 || len(fresh.Execution) > 0) {
+		var applied []ExecutionWorkItem
+		applied, executionChanged, err = applyReconciliationExecution(ctx, execution, fresh)
+		result.Execution = applied
+	}
 	if err == nil {
 		desired, mergeErr := mergeCompletedAdoptionMappings(base, fresh.Publication, result.Publication.Completed)
 		if mergeErr != nil {
@@ -155,8 +221,8 @@ func (s *Service) ApplyReconciliation(ctx context.Context, target PublicationTar
 			}
 		}
 	}
-	changed := providerChanged || result.Mappings.Revision != base.Revision
-	if providerChanged && err != nil {
+	changed := providerChanged || executionChanged || result.Mappings.Revision != base.Revision
+	if (providerChanged || executionChanged) && err != nil {
 		var integration *IntegrationError
 		if !errors.As(err, &integration) || integration.Class != IntegrationPartialFailure {
 			err = &IntegrationError{Class: IntegrationPartialFailure, Operation: "reconciliation.apply", Message: "reconciliation changed provider state before failure", Err: err}
@@ -171,6 +237,89 @@ func (s *Service) ApplyReconciliation(ctx context.Context, target PublicationTar
 		}
 	}
 	return result, err
+}
+
+func applyReconciliationExecution(ctx context.Context, workspace ExecutionWorkspace, plan ReconciliationPlan) ([]ExecutionWorkItem, bool, error) {
+	if workspace == nil {
+		return nil, false, reconciliationManual("execution workspace is unavailable")
+	}
+	result := make([]ExecutionWorkItem, 0, len(plan.Attachments)+len(plan.Execution))
+	changed := false
+	for _, planned := range plan.Attachments {
+		snapshot, err := workspace.Inspect(ctx, planned.Workspace)
+		if err != nil {
+			return result, changed, err
+		}
+		request := planned
+		request.Workspace = snapshot.Workspace
+		already := false
+		for _, item := range snapshot.Items {
+			if sameExternalLocation(item.PublishedWork, planned.PublishedWork) {
+				if item.Artifact != planned.Artifact {
+					return result, changed, reconciliationManual("published work maps to a different artifact")
+				}
+				result = append(result, item)
+				already = true
+			}
+		}
+		if already {
+			continue
+		}
+		item, err := workspace.Attach(ctx, request)
+		if err != nil {
+			if validPartialAttachedExecutionItem(item, request) {
+				result = append(result, item)
+				changed = true
+			}
+			return result, changed, reconciliationExecutionFailure(changed, err)
+		}
+		result = append(result, item)
+		changed = true
+	}
+	for _, planned := range plan.Execution {
+		snapshot, err := workspace.Inspect(ctx, planned.Workspace)
+		if err != nil {
+			return result, changed, reconciliationExecutionFailure(changed, err)
+		}
+		request := planned
+		request.Workspace = snapshot.Workspace
+		var current *ExecutionWorkItem
+		for i := range snapshot.Items {
+			if snapshot.Items[i].Reference.OpaqueID == planned.WorkItem.OpaqueID {
+				copy := snapshot.Items[i]
+				current = &copy
+			}
+		}
+		if current == nil {
+			return result, changed, reconciliationExecutionFailure(changed, reconciliationManual("tracked Project item is missing"))
+		}
+		if current.Reference.Revision != planned.WorkItem.Revision {
+			return result, changed, reconciliationExecutionFailure(changed, reconciliationApplyConflict())
+		}
+		request.WorkItem = current.Reference
+		if current.Status == planned.Status {
+			result = append(result, *current)
+			continue
+		}
+		item, err := workspace.ApplyStatus(ctx, request)
+		if err != nil {
+			if validPartialExecutionStatusItem(item, *current, request) {
+				result = append(result, item)
+				changed = true
+			}
+			return result, changed, reconciliationExecutionFailure(changed, err)
+		}
+		result = append(result, item)
+		changed = true
+	}
+	return result, changed, nil
+}
+
+func reconciliationExecutionFailure(changed bool, err error) error {
+	if !changed {
+		return err
+	}
+	return &IntegrationError{Class: IntegrationPartialFailure, Operation: "reconciliation.execution", Message: "execution workspace changed before reconciliation stopped; inspect before retrying", Err: err}
 }
 
 func mappedReconciliationInput(input PublicationPreviewInput, state ExternalMappingState) (PublicationPreviewInput, error) {

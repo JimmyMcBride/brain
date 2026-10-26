@@ -333,10 +333,11 @@ type ExecutionWorkItem struct {
 // ExecutionWorkspaceSnapshot is the supported field and tracked-item state of
 // one execution workspace.
 type ExecutionWorkspaceSnapshot struct {
-	SchemaVersion int                 `json:"schema_version"`
-	Workspace     ExternalReference   `json:"workspace"`
-	Fields        []ExecutionField    `json:"fields,omitempty"`
-	Items         []ExecutionWorkItem `json:"items,omitempty"`
+	SchemaVersion         int                 `json:"schema_version"`
+	Workspace             ExternalReference   `json:"workspace"`
+	ConfigurationRevision string              `json:"configuration_revision"`
+	Fields                []ExecutionField    `json:"fields,omitempty"`
+	Items                 []ExecutionWorkItem `json:"items,omitempty"`
 }
 
 // ExecutionAttachRequest attaches published Planning work to an execution
@@ -350,9 +351,57 @@ type ExecutionAttachRequest struct {
 // ExecutionStatusRequest applies one Planning execution status to a tracked
 // work item.
 type ExecutionStatusRequest struct {
-	Workspace ExternalReference `json:"workspace"`
-	WorkItem  ExternalReference `json:"work_item"`
-	Status    ExecutionStatus   `json:"status"`
+	Workspace             ExternalReference `json:"workspace"`
+	WorkItem              ExternalReference `json:"work_item"`
+	ConfigurationRevision string            `json:"configuration_revision"`
+	Status                ExecutionStatus   `json:"status"`
+}
+
+// ExecutionAttachPlan is the reviewed decision to reuse or create one tracked
+// Project item. Request carries the fresh workspace revision used for apply.
+type ExecutionAttachPlan struct {
+	SchemaVersion int                    `json:"schema_version"`
+	Action        MutationAction         `json:"action"`
+	Request       ExecutionAttachRequest `json:"request"`
+	Item          *ExecutionWorkItem     `json:"item,omitempty"`
+}
+
+// ExecutionStatusPlan is the reviewed semantic status transition for one
+// tracked item. Request carries fresh workspace and item revisions.
+type ExecutionStatusPlan struct {
+	SchemaVersion int                    `json:"schema_version"`
+	Action        MutationAction         `json:"action"`
+	Request       ExecutionStatusRequest `json:"request"`
+	Item          ExecutionWorkItem      `json:"item"`
+}
+
+// ExecutionAttachApplyInput confirms one fresh attachment plan.
+type ExecutionAttachApplyInput struct {
+	ExpectedPlan ExecutionAttachPlan `json:"expected_plan"`
+	Confirmed    bool                `json:"confirmed"`
+}
+
+// ExecutionStatusApplyInput confirms one fresh status-transition plan.
+type ExecutionStatusApplyInput struct {
+	ExpectedPlan ExecutionStatusPlan `json:"expected_plan"`
+	Confirmed    bool                `json:"confirmed"`
+}
+
+// ExecutionMutationResult retains the reviewed action, final item evidence,
+// and audit event for a changed execution mutation.
+type ExecutionMutationResult struct {
+	SchemaVersion int               `json:"schema_version"`
+	Action        MutationAction    `json:"action"`
+	Item          ExecutionWorkItem `json:"item"`
+	Event         *Event            `json:"event,omitempty"`
+}
+
+// ExecutionIntent is canonical Planning intent used to classify Project drift
+// during repository reconciliation.
+type ExecutionIntent struct {
+	Artifact      planning.ArtifactRef `json:"artifact"`
+	PublishedWork ExternalReference    `json:"published_work"`
+	Status        ExecutionStatus      `json:"status"`
 }
 
 // ReconciliationPlan is the ordered application decision for bringing
@@ -361,6 +410,7 @@ type ReconciliationPlan struct {
 	SchemaVersion           int                      `json:"schema_version"`
 	Repository              RepositoryEvidence       `json:"repository"`
 	Publication             PublicationPlan          `json:"publication"`
+	Attachments             []ExecutionAttachRequest `json:"attachments,omitempty"`
 	Execution               []ExecutionStatusRequest `json:"execution,omitempty"`
 	ExpectedMappingRevision string                   `json:"expected_mapping_revision"`
 }
@@ -370,6 +420,7 @@ type ReconciliationPlan struct {
 // are loaded from the mapping repository rather than trusted from callers.
 type ReconciliationPreviewInput struct {
 	Publication PublicationPreviewInput `json:"publication"`
+	Execution   []ExecutionIntent       `json:"execution,omitempty"`
 }
 
 // ReconciliationApplyInput requires a confirmed fresh plan before provider or

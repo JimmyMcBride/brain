@@ -52,6 +52,8 @@ func TestPublicPlanningApplicationExportSurface(t *testing.T) {
 		"AdoptionApplyInput", "AdoptionPlan", "AdoptionPreviewInput",
 		"PublicationApplyInput", "PublicationApplyResult", "Service.ApplyPublication", "PermissionPublish", "EventPublicationApplied",
 		"ReconciliationApplyInput", "ReconciliationPreviewInput", "Service.ApplyReconciliation", "Service.PreviewReconciliation", "EventIntegrationReconciled",
+		"ExecutionAttachApplyInput", "ExecutionAttachPlan", "ExecutionIntent", "ExecutionMutationResult", "ExecutionStatusApplyInput", "ExecutionStatusPlan",
+		"Service.ApplyExecutionAttach", "Service.ApplyExecutionStatus", "Service.PreviewExecutionAttach", "Service.PreviewExecutionStatus", "EventExecutionAttached", "EventExecutionStatusUpdated",
 		"PublicationPreviewInput", "Service.PreviewPublication",
 		"CollaborationRepairInput", "CollaborationRepairResult", "EventCollaborationRepaired", "PermissionCollaboration",
 		"Service.AssessCollaboration", "Service.PreviewCollaborationRepair", "Service.RepairCollaboration",

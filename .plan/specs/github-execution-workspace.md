@@ -3,10 +3,10 @@ created_at: "2026-10-26T14:28:47Z"
 initiative: github-adapter-transition
 project: brain
 slug: github-execution-workspace
-status: approved
+status: done
 title: GitHub Execution Workspace
 type: spec
-updated_at: "2026-10-26T15:12:28Z"
+updated_at: "2026-10-26T18:59:15Z"
 ---
 
 # GitHub Execution Workspace
