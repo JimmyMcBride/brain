@@ -5,7 +5,7 @@ args:
       required: false
 description: Use this skill when working with a project-local Brain workspace managed by the `brain` CLI, especially for repo memory, retrieval, compiled task context, session hygiene, and safe markdown updates.
 name: brain
-updated: "2026-10-26T21:58:26Z"
+updated: "2026-10-26T22:20:02Z"
 user-invocable: true
 ---
 # Brain
@@ -209,6 +209,9 @@ performs no provider work, and must not degrade local Planning.
 Visible reconciliation derives `implementing` as `In Progress` and `done` as
 `Done`. For draft or approved specs without a canonical execution transition,
 preserve the current Project status instead of resetting active work to Todo.
+Compute publication readiness from canonical validation and unfinished
+dependencies so blocked specs retain their blocked GitHub label. GitHub has no
+separate clarifying label, so unresolved questions publish as needs refinement.
 
 Native source-mode mutation and legacy GitHub story creation remain standalone
 Plan compatibility-only behavior; do not recreate them in Brain commands.

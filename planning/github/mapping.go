@@ -280,12 +280,14 @@ func mergeExternalMappings(current githubState, desired application.ExternalMapp
 	}
 	repo := current.Repo
 	seenArtifacts := map[planning.ArtifactRef]bool{}
+	seenSlugs := map[planning.ArtifactID]bool{}
 	seenIssues := map[string]bool{}
 	for _, mapping := range desired.ArtifactReferences {
-		if mapping.Artifact.Validate() != nil || (mapping.Artifact.Kind != planning.ArtifactInitiative && mapping.Artifact.Kind != planning.ArtifactSpec) || seenArtifacts[mapping.Artifact] {
+		if mapping.Artifact.Validate() != nil || (mapping.Artifact.Kind != planning.ArtifactInitiative && mapping.Artifact.Kind != planning.ArtifactSpec) || seenArtifacts[mapping.Artifact] || seenSlugs[mapping.Artifact.ID] {
 			return next, mappingError(application.IntegrationAmbiguousIdentity, "mapping.save", "artifact mappings contain an invalid or duplicate identity")
 		}
 		seenArtifacts[mapping.Artifact] = true
+		seenSlugs[mapping.Artifact.ID] = true
 		issueRepo, number, err := mappingIssueLocation(mapping.Reference)
 		if err != nil {
 			return next, err

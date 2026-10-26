@@ -316,6 +316,18 @@ func TestExternalMappingRejectsAmbiguousAndUnsupportedChanges(t *testing.T) {
 		"duplicate issue": func(state *application.ExternalMappingState) {
 			state.ArtifactReferences[1].Reference = state.ArtifactReferences[0].Reference
 		},
+		"cross-kind slug collision": func(state *application.ExternalMappingState) {
+			collision := state.ArtifactReferences[0]
+			if collision.Artifact.Kind == planning.ArtifactSpec {
+				collision.Artifact.Kind = planning.ArtifactInitiative
+			} else {
+				collision.Artifact.Kind = planning.ArtifactSpec
+			}
+			collision.Reference.OpaqueID = "I_999"
+			collision.Reference.DisplayID = "999"
+			collision.Reference.URL = "https://github.com/JimmyMcBride/plan/issues/999"
+			state.ArtifactReferences = append(state.ArtifactReferences, collision)
+		},
 		"multiple sources": func(state *application.ExternalMappingState) {
 			state.SourceReferences = append(state.SourceReferences, application.ExternalReference{Provider: providerName, Kind: "discussion", OpaqueID: "D", DisplayID: "50", URL: "https://github.com/JimmyMcBride/plan/discussions/50"})
 		},
