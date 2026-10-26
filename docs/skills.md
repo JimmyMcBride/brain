@@ -58,7 +58,13 @@ Default roots:
 
 Installed skills include a generated `.brain-skill-manifest.json` file beside `SKILL.md`. Brain uses that manifest to detect stale or legacy installs and repair local project skills before work begins.
 
-`brain update` also applies pending project soft migrations for the current `--project` when that repo already uses Brain. Other Brain repos repair local skills and apply only the auto-safe project migrations lazily the next time Brain runs there.
+After a successful binary update, `brain update` uses the newly installed binary
+to replace every already-installed global Brain skill and every installed local
+Brain skill in the current `--project`. The update reports an error instead of
+silently accepting a partial skill refresh. It then applies pending project soft
+migrations when the current repo already uses Brain. Other Brain repos repair
+local skills and apply only the auto-safe project migrations lazily the next
+time Brain runs there.
 
 Brain treats `.brain/session.json`, `.brain/sessions/`, `.brain/state/`, and `.brain/policy.override.yaml` as local runtime state. Explicit upgrade actions such as `brain update --project .` or `brain context migrate --project .` may refresh `.gitignore` and remove legacy tracked runtime files from the Git index while keeping them on disk.
 

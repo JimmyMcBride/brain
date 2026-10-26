@@ -5,7 +5,7 @@ args:
       required: false
 description: Use this skill when working with a project-local Brain workspace managed by the `brain` CLI, especially for repo memory, retrieval, compiled task context, session hygiene, and safe markdown updates.
 name: brain
-updated: "2026-10-26T20:22:45Z"
+updated: "2026-10-26T21:20:00Z"
 user-invocable: true
 ---
 # Brain
@@ -141,19 +141,67 @@ Use these commands by default:
 - `brain undo`
   - Revert the latest tracked note operation.
 
+## Planning Module
+
 When the optional `official.planning` module is enabled, use `brain plan` as its
-native command namespace. Local brainstorm updates and roadmap edits preview by
-default; pass `--confirm` only after reviewing the proposed mutation. Guided
-session commands live under `brain plan brainstorm`, guide packets under
-`brain plan guide`, and local promotion goes directly from brainstorm to spec
-without an epic intermediate. Canonical spec edit, approval, analysis,
-checklists, initiative metadata, execution, and guided handoff live under
-`brain plan spec`; mutations preview by default and require `--confirm`.
-The optional GitHub adapter lives under `brain plan github`. Enable or disable
-it with a confirmed preview, pass `--discussion` to remote brainstorm and guide
-commands, and use `github adopt`, `github reconcile`, or `github project status`
-for reviewed mapping and execution changes. A disabled adapter must perform no
-provider or GitHub metadata work and must not affect local Planning commands.
+native command namespace. Inspect the module and grant only the permissions the
+task needs:
+
+```bash
+brain modules show --project . official.planning
+brain modules grant --project . official.planning \
+  planning.read planning.brainstorm planning.roadmap planning.spec.edit \
+  planning.spec.approve planning.collaboration planning.publish \
+  planning.execute project.context.read
+brain modules enable --project . official.planning
+```
+
+### Local mode
+
+Compatible schema-v3 `.plan/` workspaces support status and checks, brainstorm
+and guide workflows, roadmap reads/edits, and canonical spec reads, refinement,
+approval, analysis, checklists, initiatives, execution, and handoff. Local
+promotion goes directly from brainstorm to spec without an epic or persisted
+story intermediate. Mutations are preview-first and require `--confirm`; safe
+identical reruns should report `unchanged` without another write or event.
+
+Brain does not initialize or convert Planning workspaces. In `github` or
+`hybrid` source mode, retained local schema-v3 documents are a read-only
+compatibility mirror: native checks and reconciliation may inspect them, but
+the local adapter must reject writes.
+
+### GitHub mode
+
+The optional adapter requires an authenticated `gh` CLI in the target
+repository and is enabled independently from the Planning module:
+
+```bash
+gh auth status
+brain plan github enable --project .
+brain plan github enable --project . --confirm
+brain plan brainstorm assess --project . --discussion <number-or-url>
+brain plan brainstorm repair --project . --discussion <number-or-url> --spec "Title" --confirm
+brain plan brainstorm promote --project . --discussion <number-or-url>
+brain plan brainstorm promote --project . --discussion <number-or-url> --apply --confirm
+brain plan github adopt --project . --discussion <number-or-url> --issues <numbers> --confirm
+brain plan github reconcile --project .
+brain plan github reconcile --project . --update-visible --confirm
+brain plan github project status --project . --issue <number> --set <todo|in-progress|in-review|done> --confirm
+brain plan guide show --project . --discussion <number-or-url> --stage <stage>
+```
+
+Remote reads require `planning.read`; source repair requires
+`planning.collaboration`; publication, adoption, reconciliation, and adapter
+configuration require `planning.publish`; Project status changes require
+`planning.execute`. GitHub mutations are preview-first and require `--confirm`;
+promotion also requires `--apply`. Preserve stable mappings in
+`.plan/.meta/github.json`, fail closed on ambiguous identity or stale revision,
+and never substitute manual `gh` writes unless a typed result explicitly allows
+manual fallback. Disabling the adapter preserves artifacts and mappings,
+performs no provider work, and must not degrade local Planning.
+
+Native source-mode mutation and legacy GitHub story creation remain standalone
+Plan compatibility-only behavior; do not recreate them in Brain commands.
 
 ## Operating Rules
 
@@ -172,7 +220,7 @@ The AI agent should scan repo structure, docs, manifests, entrypoints, tests, CI
 
 ## Upgrade Workflow
 
-- `brain update` refreshes already-installed global Brain skills, already-installed local Brain skills inside the current `--project`, and pending project migrations for the current Brain repo.
+- `brain update` uses the newly installed binary to refresh every already-installed global Brain skill plus every already-installed local Brain skill inside the current `--project`, then applies pending project migrations for that repo. A failed skill refresh is reported as an incomplete update instead of being silently ignored.
 - Other Brain repos repair local Brain skills and apply only auto-safe project migrations lazily the next time app-backed Brain commands run there.
 - Brain treats `.brain/session.json`, `.brain/sessions/`, `.brain/state/`, and `.brain/policy.override.yaml` as local runtime state. The durable shared layer is the markdown/docs surface, not the raw runtime trace.
 - Explicit upgrade actions such as `brain update` and `brain context migrate` may refresh `.gitignore` and remove legacy tracked runtime-state files from the Git index while keeping them on disk. Review and commit that diff after the command reports it.

@@ -1966,16 +1966,20 @@ func TestCLIUpdateRefreshesInstalledSkills(t *testing.T) {
 	newUpdater = func(cfg *config.Config, paths config.Paths) updater {
 		return stubUpdater{result: update.Result{
 			CurrentVersion: "v0.1.0",
-			LatestVersion:  "v0.1.0",
-			Status:         "up_to_date",
-			Message:        "already up to date (v0.1.0)",
-			CurrentPath:    filepath.Join(env.root, "bin", "brain"),
+			LatestVersion:  "v0.1.22",
+			Status:         "updated",
+			Message:        "v0.1.0 -> v0.1.22",
+			Updated:        true,
+			CurrentPath:    filepath.Join(env.root, "bin", "old-brain"),
+			InstalledPath:  filepath.Join(env.root, "bin", "brain"),
 		}}
 	}
 
 	var calls []string
+	var refreshBinaries []string
 	var migrationCalls []string
 	skillInstallRunner = func(binaryPath, configPath, projectPath string, scope skills.Scope, agents []string) ([]skills.InstallResult, error) {
+		refreshBinaries = append(refreshBinaries, binaryPath)
 		calls = append(calls, string(scope)+":"+strings.Join(agents, ","))
 		results := make([]skills.InstallResult, 0, len(agents))
 		for _, agent := range agents {
@@ -2026,7 +2030,11 @@ func TestCLIUpdateRefreshesInstalledSkills(t *testing.T) {
 	if len(calls) != 2 || calls[0] != "global:codex" || calls[1] != "local:copilot" {
 		t.Fatalf("unexpected refresh calls: %v", calls)
 	}
-	if len(migrationCalls) != 1 || migrationCalls[0] != filepath.Join(env.root, "bin", "brain")+":"+env.project {
+	installedBinary := filepath.Join(env.root, "bin", "brain")
+	if len(refreshBinaries) != 2 || refreshBinaries[0] != installedBinary || refreshBinaries[1] != installedBinary {
+		t.Fatalf("skill refresh did not use the updated binary: %v", refreshBinaries)
+	}
+	if len(migrationCalls) != 1 || migrationCalls[0] != installedBinary+":"+env.project {
 		t.Fatalf("unexpected migration calls: %v", migrationCalls)
 	}
 }
