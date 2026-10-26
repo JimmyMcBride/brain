@@ -453,16 +453,17 @@ func localReconciliationIntent(ctx context.Context, service *application.Service
 	if err != nil {
 		return application.ReconciliationPreviewInput{}, err
 	}
+	specs := make([]planning.Spec, 0, len(documents))
+	for _, document := range documents {
+		specs = append(specs, document.Artifact)
+	}
+	readinessByID, err := reconciliationReadiness(specs)
+	if err != nil {
+		return application.ReconciliationPreviewInput{}, err
+	}
 	input := application.ReconciliationPreviewInput{Publication: application.PublicationPreviewInput{Target: status.Repository}}
 	for _, document := range documents {
-		readiness := planning.ReadinessReady
-		switch document.Artifact.Status {
-		case planning.SpecDraft:
-			readiness = planning.ReadinessNeedsRefinement
-		case planning.SpecDone:
-			readiness = planning.ReadinessDone
-		}
-		artifact := application.PublicationArtifact{Artifact: planning.ArtifactRef{Kind: planning.ArtifactSpec, ID: document.Artifact.ID}, Title: document.Artifact.Title, Content: document.Body, Readiness: readiness}
+		artifact := application.PublicationArtifact{Artifact: planning.ArtifactRef{Kind: planning.ArtifactSpec, ID: document.Artifact.ID}, Title: document.Artifact.Title, Content: document.Body, Readiness: readinessByID[document.Artifact.ID]}
 		for _, dependency := range document.Artifact.Dependencies {
 			artifact.Dependencies = append(artifact.Dependencies, planning.ArtifactRef{Kind: planning.ArtifactSpec, ID: dependency})
 		}
@@ -488,6 +489,31 @@ func localReconciliationIntent(ctx context.Context, service *application.Service
 		}
 	}
 	return input, nil
+}
+
+func reconciliationReadiness(specs []planning.Spec) (map[planning.ArtifactID]planning.ReadinessState, error) {
+	if _, err := planning.OrderSpecs(specs); err != nil {
+		return nil, err
+	}
+	byID := make(map[planning.ArtifactID]planning.Spec, len(specs))
+	for _, spec := range specs {
+		byID[spec.ID] = spec
+	}
+	result := make(map[planning.ArtifactID]planning.ReadinessState, len(specs))
+	for _, spec := range specs {
+		var blockers []planning.ArtifactID
+		for _, dependency := range spec.Dependencies {
+			if byID[dependency].Status != planning.SpecDone {
+				blockers = append(blockers, dependency)
+			}
+		}
+		state := planning.EvaluateReadiness(spec, planning.ValidateSpec(spec), blockers).State
+		if state == planning.ReadinessClarifying {
+			state = planning.ReadinessNeedsRefinement
+		}
+		result[spec.ID] = state
+	}
+	return result, nil
 }
 
 func reconciliationExecutionStatus(status planning.SpecStatus) application.ExecutionStatus {

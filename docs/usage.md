@@ -145,7 +145,10 @@ GitHub mappings while preventing provider calls. `brain plan check project`
 adds GitHub Project mapping, membership, and semantic Status checks only while
 the adapter is enabled. Visible reconciliation maps implementing specs to In
 Progress and done specs to Done; it preserves the current Project status for
-draft or approved specs rather than resetting active work to Todo.
+draft or approved specs rather than resetting active work to Todo. Readiness is
+recomputed from canonical validation and unfinished dependencies, so blocked
+specs keep their blocked GitHub label. Since GitHub has no separate clarifying
+label, unresolved questions are represented as needs refinement.
 
 `brainstorm start` previews by default. `--confirm` performs the atomic write;
 repeating the same title returns `unchanged` without another write or event.

@@ -130,6 +130,32 @@ func TestReconciliationExecutionStatusOnlyDerivesCanonicalTransitions(t *testing
 	}
 }
 
+func TestReconciliationReadinessIncludesUnfinishedDependencies(t *testing.T) {
+	done := planning.Spec{ID: "done", Title: "Done", Status: planning.SpecDone, Approval: planning.Approval{State: planning.ApprovalApproved}, Verification: []string{"verified"}}
+	blocked := planning.Spec{
+		ID: "blocked", Title: "Blocked", Status: planning.SpecApproved,
+		Approval:     planning.Approval{State: planning.ApprovalApproved},
+		Dependencies: []planning.ArtifactID{"unfinished"}, Verification: []string{"verify"},
+	}
+	unfinished := planning.Spec{
+		ID: "unfinished", Title: "Unfinished", Status: planning.SpecApproved,
+		Approval:     planning.Approval{State: planning.ApprovalApproved},
+		Dependencies: []planning.ArtifactID{"done"}, Verification: []string{"verify"},
+	}
+	clarifying := planning.Spec{
+		ID: "clarifying", Title: "Clarifying", Status: planning.SpecApproved,
+		Approval: planning.Approval{State: planning.ApprovalApproved}, Verification: []string{"verify"},
+		UnresolvedQuestions: []string{"Which rollout?"},
+	}
+	readiness, err := reconciliationReadiness([]planning.Spec{blocked, clarifying, done, unfinished})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if readiness[blocked.ID] != planning.ReadinessBlocked || readiness[clarifying.ID] != planning.ReadinessNeedsRefinement || readiness[unfinished.ID] != planning.ReadinessReady || readiness[done.ID] != planning.ReadinessDone {
+		t.Fatalf("unexpected readiness: %+v", readiness)
+	}
+}
+
 type planningWorkspaceMappings struct {
 	state application.ExternalMappingState
 }
