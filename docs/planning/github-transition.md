@@ -9,7 +9,8 @@ spec.
 
 ## Current Implementation
 
-Standalone Plan currently supports:
+Standalone Plan currently supports the compatibility surface, while Brain now
+provides the native optional adapter for the retained Phase 5 families:
 
 - GitHub/hybrid source modes in `.plan/.meta/workspace.json`
 - GitHub Discussions as collaboration sources
@@ -20,10 +21,27 @@ Standalone Plan currently supports:
 - issue adoption and local mappings in `.plan/.meta/github.json`
 - story readiness/reconciliation after merged planning changes
 
-Implementation is concentrated in `internal/planning/github_*`,
-`collaboration*`, `cmd/github.go`, `cmd/discuss.go`, and their tests. GitHub types
-currently appear throughout the collaboration/application layer; Phase 5 must
-push them behind adapters.
+Brain configuration is explicit and independently disableable:
+
+```text
+brain plan github enable|disable
+brain plan brainstorm assess|repair|promote --discussion <number-or-url>
+brain plan github adopt|reconcile
+brain plan github project status
+brain plan guide show --discussion <number-or-url> --stage <stage>
+```
+
+The module migrates config v1 to v2 with GitHub disabled. Enabling preflights
+the authenticated `gh` CLI and current repository before initializing adapter
+state. Disabling retains artifacts and mappings and makes every GitHub command
+return a typed adapter-disabled diagnostic without provider work. Local Planning
+health remains independent when GitHub authentication or access degrades.
+
+Standalone implementation remains concentrated in `internal/planning/github_*`,
+`collaboration*`, `cmd/github.go`, and `cmd/discuss.go`. Brain keeps provider
+DTOs and transport in `planning/github`; `planning/application` exposes only
+provider-neutral collaboration, publication, repository-evidence, mapping, and
+execution contracts, and `cmd/plan_github.go` performs host mapping.
 
 ## Transition Roles
 

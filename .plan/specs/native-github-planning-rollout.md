@@ -3,10 +3,10 @@ created_at: "2026-10-26T14:28:47Z"
 initiative: github-adapter-transition
 project: brain
 slug: native-github-planning-rollout
-status: implementing
+status: done
 title: Native GitHub Planning Rollout
 type: spec
-updated_at: "2026-10-26T20:09:53Z"
+updated_at: "2026-10-26T20:24:27Z"
 ---
 
 # Native GitHub Planning Rollout
@@ -126,6 +126,8 @@ in standalone Plan as documented compatibility-only behavior.
 - Application DTOs and adapter ports remain host-neutral; Cobra and Brain
   runtime types stay in host wiring.
 - Registered permission/event names follow the parent Phase 5 contract.
+- Execution status changes emit `planning.execution.status-updated`; the
+  hyphenated segment is required by the module event-name validator.
 
 ## Risks / Open Questions
 
@@ -193,6 +195,7 @@ coordinates cross-host proof and publication.
 ### Recommended Revisions
 
 - None.
+
 ## Checklist
 
 ### general

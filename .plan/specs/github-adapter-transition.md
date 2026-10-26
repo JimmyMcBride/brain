@@ -256,7 +256,8 @@ and managed markers on the next preview.
 - New events: planning.integration.configured,
   planning.collaboration.repaired, planning.publication.applied,
   planning.integration.adopted, planning.integration.reconciled, and
-  planning.execution.status_updated.
+  planning.execution.status-updated. The hyphenated final segment follows the
+  module runtime's registered-event naming contract.
 - Dependency direction: planning <- planning/application <- planning/github;
   Brain module and both CLI hosts wire dependencies from outside.
 
