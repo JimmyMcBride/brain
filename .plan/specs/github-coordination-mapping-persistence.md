@@ -3,10 +3,10 @@ created_at: "2026-10-26T14:28:47Z"
 initiative: github-adapter-transition
 project: brain
 slug: github-coordination-mapping-persistence
-status: draft
+status: approved
 title: GitHub Coordination Mapping Persistence
 type: spec
-updated_at: "2026-10-26T14:32:45Z"
+updated_at: "2026-10-26T15:12:28Z"
 ---
 
 # GitHub Coordination Mapping Persistence
