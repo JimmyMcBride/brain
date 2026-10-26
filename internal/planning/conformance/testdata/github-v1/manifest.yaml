@@ -436,7 +436,6 @@ cases:
       classifications: [unchanged]
     intentional_differences:
       - Plan v0.1.29 reconciles immediately; Brain must preview and require --confirm before issue, Project, or metadata changes.
-      - Project field, item, and status drift remains deferred to the execution-workspace port; repository reconciliation only reports that boundary until the dependent spec lands.
 
   - id: github.project.status.in-progress
     family: github.project.status

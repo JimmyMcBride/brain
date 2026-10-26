@@ -103,7 +103,7 @@ func reconciliationFixture() (*Service, *reconciliationTarget, *reconciliationRe
 func TestReconciliationPreviewAndApplyLifecycle(t *testing.T) {
 	service, target, repository, mappings, input := reconciliationFixture()
 	policy := &collaborationPolicy{}
-	plan, err := service.PreviewReconciliation(context.Background(), target, repository, mappings, input, policy)
+	plan, err := service.PreviewReconciliation(context.Background(), target, repository, mappings, nil, input, policy)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func TestReconciliationPreviewAndApplyLifecycle(t *testing.T) {
 		t.Fatalf("preview mutated state or skipped authorization: policy=%v writes=%d saves=%d", policy.calls, target.writes, mappings.saves)
 	}
 	events := &collaborationEvents{}
-	result, err := service.ApplyReconciliation(context.Background(), target, repository, mappings, ReconciliationApplyInput{Intent: input, ExpectedPlan: plan, Confirmed: true}, policy, events)
+	result, err := service.ApplyReconciliation(context.Background(), target, repository, mappings, nil, ReconciliationApplyInput{Intent: input, ExpectedPlan: plan, Confirmed: true}, policy, events)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,13 +125,46 @@ func TestReconciliationPreviewAndApplyLifecycle(t *testing.T) {
 		t.Fatalf("mapping evidence=%+v", result.Mappings.LastReconciliation)
 	}
 
-	plan, err = service.PreviewReconciliation(context.Background(), target, repository, mappings, input, &collaborationPolicy{})
+	plan, err = service.PreviewReconciliation(context.Background(), target, repository, mappings, nil, input, &collaborationPolicy{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err = service.ApplyReconciliation(context.Background(), target, repository, mappings, ReconciliationApplyInput{Intent: input, ExpectedPlan: plan, Confirmed: true}, &collaborationPolicy{}, events)
+	result, err = service.ApplyReconciliation(context.Background(), target, repository, mappings, nil, ReconciliationApplyInput{Intent: input, ExpectedPlan: plan, Confirmed: true}, &collaborationPolicy{}, events)
 	if err != nil || target.writes != 1 || mappings.saves != 1 || events.calls != 1 || result.Event != nil {
 		t.Fatalf("rerun result=%+v writes=%d saves=%d events=%d err=%v", result, target.writes, mappings.saves, events.calls, err)
+	}
+}
+
+func TestReconciliationRepairsExecutionWorkspaceInReviewedSteps(t *testing.T) {
+	service, target, repository, mappings, input := reconciliationFixture()
+	artifact := input.Publication.Artifacts[0].Artifact
+	issue := *target.snapshot.Artifacts[0].Reference
+	workspaceRef := ExternalReference{Provider: "test", Kind: "project", OpaqueID: "project-1", DisplayID: "1", URL: "https://example.test/projects/1", Revision: "workspace-1"}
+	mappings.state.WorkspaceReferences = []ExternalReference{workspaceRef}
+	execution := &executionMemory{snapshot: ExecutionWorkspaceSnapshot{SchemaVersion: IntegrationContractVersion, Workspace: workspaceRef, Fields: []ExecutionField{{Role: ExecutionFieldRoleStatus, SupportedStatuses: []ExecutionStatus{ExecutionTodo, ExecutionInProgress, ExecutionInReview, ExecutionDone}}}}}
+	input.Execution = []ExecutionIntent{{Artifact: artifact, PublishedWork: issue, Status: ExecutionInProgress}}
+
+	plan, err := service.PreviewReconciliation(context.Background(), target, repository, mappings, execution, input, &collaborationPolicy{})
+	if err != nil || len(plan.Attachments) != 1 || len(plan.Execution) != 0 {
+		t.Fatalf("attach plan=%+v err=%v", plan, err)
+	}
+	result, err := service.ApplyReconciliation(context.Background(), target, repository, mappings, execution, ReconciliationApplyInput{Intent: input, ExpectedPlan: plan, Confirmed: true}, &collaborationPolicy{}, &collaborationEvents{})
+	if err != nil || execution.attaches != 1 || len(result.Execution) != 1 {
+		t.Fatalf("attach result=%+v err=%v", result, err)
+	}
+
+	plan, err = service.PreviewReconciliation(context.Background(), target, repository, mappings, execution, input, &collaborationPolicy{})
+	if err != nil || len(plan.Attachments) != 0 || len(plan.Execution) != 1 {
+		t.Fatalf("status plan=%+v err=%v", plan, err)
+	}
+	result, err = service.ApplyReconciliation(context.Background(), target, repository, mappings, execution, ReconciliationApplyInput{Intent: input, ExpectedPlan: plan, Confirmed: true}, &collaborationPolicy{}, &collaborationEvents{})
+	if err != nil || execution.statuses != 1 || result.Execution[0].Status != ExecutionInProgress {
+		t.Fatalf("status result=%+v err=%v", result, err)
+	}
+
+	plan, err = service.PreviewReconciliation(context.Background(), target, repository, mappings, execution, input, &collaborationPolicy{})
+	if err != nil || len(plan.Attachments) != 0 || len(plan.Execution) != 0 {
+		t.Fatalf("rerun plan=%+v err=%v", plan, err)
 	}
 }
 
@@ -139,7 +172,7 @@ func TestReconciliationGatesAndStaleEvidence(t *testing.T) {
 	for _, test := range []string{"confirmation", "publish", "read", "events", "plan", "repository", "mapping"} {
 		t.Run(test, func(t *testing.T) {
 			service, target, repository, mappings, input := reconciliationFixture()
-			plan, err := service.PreviewReconciliation(context.Background(), target, repository, mappings, input, &collaborationPolicy{})
+			plan, err := service.PreviewReconciliation(context.Background(), target, repository, mappings, nil, input, &collaborationPolicy{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -162,7 +195,7 @@ func TestReconciliationGatesAndStaleEvidence(t *testing.T) {
 			case "mapping":
 				mappings.state.Revision = "changed"
 			}
-			_, err = service.ApplyReconciliation(context.Background(), target, repository, mappings, apply, policy, events)
+			_, err = service.ApplyReconciliation(context.Background(), target, repository, mappings, nil, apply, policy, events)
 			if err == nil || target.writes != 0 || mappings.saves != 0 {
 				t.Fatalf("gate=%s writes=%d saves=%d err=%v", test, target.writes, mappings.saves, err)
 			}
@@ -173,7 +206,7 @@ func TestReconciliationGatesAndStaleEvidence(t *testing.T) {
 func TestReconciliationRequiresMappedCanonicalArtifacts(t *testing.T) {
 	service, target, repository, mappings, input := reconciliationFixture()
 	mappings.state.ArtifactReferences = nil
-	_, err := service.PreviewReconciliation(context.Background(), target, repository, mappings, input, &collaborationPolicy{})
+	_, err := service.PreviewReconciliation(context.Background(), target, repository, mappings, nil, input, &collaborationPolicy{})
 	var integration *IntegrationError
 	if !errors.As(err, &integration) || integration.Class != IntegrationManualRemediationRequired || !integration.ManualFallbackAllowed || target.reads != 0 {
 		t.Fatalf("error=%v reads=%d", err, target.reads)
@@ -184,7 +217,7 @@ func TestReconciliationPartialAndAuditFailuresRetainEvidence(t *testing.T) {
 	for _, fail := range []string{"provider", "mapping", "audit"} {
 		t.Run(fail, func(t *testing.T) {
 			service, target, repository, mappings, input := reconciliationFixture()
-			plan, err := service.PreviewReconciliation(context.Background(), target, repository, mappings, input, &collaborationPolicy{})
+			plan, err := service.PreviewReconciliation(context.Background(), target, repository, mappings, nil, input, &collaborationPolicy{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -196,7 +229,7 @@ func TestReconciliationPartialAndAuditFailuresRetainEvidence(t *testing.T) {
 				mappings.fail = errors.New("mapping failed")
 			}
 			events := &collaborationEvents{fail: fail == "audit"}
-			result, err := service.ApplyReconciliation(context.Background(), target, repository, mappings, ReconciliationApplyInput{Intent: input, ExpectedPlan: plan, Confirmed: true}, &collaborationPolicy{}, events)
+			result, err := service.ApplyReconciliation(context.Background(), target, repository, mappings, nil, ReconciliationApplyInput{Intent: input, ExpectedPlan: plan, Confirmed: true}, &collaborationPolicy{}, events)
 			var integration *IntegrationError
 			if err == nil || !errors.As(err, &integration) || integration.Class != IntegrationPartialFailure || len(result.Publication.Completed) != 1 || result.Event == nil || events.calls != 1 {
 				t.Fatalf("result=%+v events=%d err=%v", result, events.calls, err)

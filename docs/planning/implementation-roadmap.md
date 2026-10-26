@@ -211,11 +211,10 @@ lifecycle, diagnostics, and distribution direction.
 
 Execute the remaining dependency-ordered Phase 5 specs:
 
-1. [GitHub Execution Workspace](../../.plan/specs/github-execution-workspace.md)
-2. [Native GitHub Planning Rollout](../../.plan/specs/native-github-planning-rollout.md)
-3. [GitHub Integration Conformance and Release](../../.plan/specs/github-integration-conformance-release.md)
+1. [Native GitHub Planning Rollout](../../.plan/specs/native-github-planning-rollout.md)
+2. [GitHub Integration Conformance and Release](../../.plan/specs/github-integration-conformance-release.md)
 
-Execution workspace support is the exact next implementation slice. Each later
-spec depends on the preceding provider/application boundary. Preserve structured briefs,
-stable identity, confirmation, idempotency, partial-failure recovery, and local
-Planning independence throughout.
+Native GitHub Planning rollout is the exact next implementation slice. The final
+conformance and release spec depends on that host wiring. Preserve structured
+briefs, stable identity, confirmation, idempotency, partial-failure recovery,
+and local Planning independence throughout.
