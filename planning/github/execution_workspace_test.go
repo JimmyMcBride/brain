@@ -21,6 +21,14 @@ type executionRunner struct {
 
 func (r *executionRunner) Run(_ context.Context, _ string, args ...string) (RunResult, error) {
 	r.reads++
+	if len(args) == 4 && args[0] == "api" && args[1] == "--method" && args[2] == "GET" && strings.HasPrefix(args[3], "repos/owner/repo/issues/") {
+		number := 1
+		if strings.HasSuffix(args[3], "/2") {
+			number = 2
+		}
+		raw, _ := json.Marshal(publicationTestIssue(number, fmt.Sprintf("Issue %d", number), "body"))
+		return RunResult{Stdout: raw}, nil
+	}
 	query := publicationTestArgument(args, "query")
 	if len(args) < 2 || args[0] != "api" || args[1] != "graphql" || !strings.Contains(query, "items(first:100)") || !strings.Contains(query, `status: fieldValueByName(name:"Status")`) {
 		r.t.Fatalf("unexpected execution read: %q", args)
@@ -56,6 +64,9 @@ func (r *executionRunner) RunInput(_ context.Context, _ string, input []byte, ar
 		}
 		value = map[string]any{"data": map[string]any{"updateProjectV2ItemFieldValue": map[string]any{"projectV2Item": map[string]string{"id": payload.Variables["itemId"]}}}}
 	case strings.Contains(payload.Query, "addProjectV2ItemById"):
+		if payload.Variables["contentId"] != "I_2" {
+			r.t.Fatalf("attachment content id = %q, want resolved node id", payload.Variables["contentId"])
+		}
 		item := executionTestItem("PVTI_2", "I_2", 2, "Todo", "todo")
 		r.project.Items.Nodes = append(r.project.Items.Nodes, item)
 		value = map[string]any{"data": map[string]any{"addProjectV2ItemById": map[string]any{"item": map[string]string{"id": item.ID}}}}
@@ -145,7 +156,7 @@ func TestExecutionWorkspaceAttachesAndRejectsStaleRevision(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := application.ExecutionAttachRequest{Workspace: snapshot.Workspace, Artifact: planningRef("two"), PublishedWork: application.ExternalReference{Provider: providerName, Kind: "issue", OpaqueID: "I_2", DisplayID: "2", URL: "https://github.com/owner/repo/issues/2"}}
+	request := application.ExecutionAttachRequest{Workspace: snapshot.Workspace, Artifact: planningRef("two"), PublishedWork: application.ExternalReference{Provider: providerName, Kind: "issue", OpaqueID: "https://github.com/owner/repo/issues/2", DisplayID: "2", URL: "https://github.com/owner/repo/issues/2"}}
 	stale := request
 	stale.Workspace.Revision = "stale"
 	if _, err = adapter.ExecutionWorkspace().Attach(context.Background(), stale); !isProviderClass(err, application.IntegrationRevisionConflict) {

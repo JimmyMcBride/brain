@@ -83,6 +83,7 @@ type executionInspection struct {
 	project  executionProject
 	field    executionFieldNode
 	options  map[application.ExecutionStatus]executionOption
+	repo     string
 }
 
 func (a *Adapter) inspectExecutionWorkspace(ctx context.Context, ref application.ExternalReference) (application.ExecutionWorkspaceSnapshot, error) {
@@ -210,7 +211,7 @@ func (a *Adapter) executionInspection(ctx context.Context, ref application.Exter
 	}{base.Revision, statusField.ID, options, snapshot.Items})
 	base.Revision = fmt.Sprintf("%x", sha256.Sum256(revisionRaw))
 	snapshot.Workspace = base
-	result = executionInspection{snapshot: snapshot, project: project, field: *statusField, options: options}
+	result = executionInspection{snapshot: snapshot, project: project, field: *statusField, options: options, repo: state.Repo}
 	return result, nil
 }
 
@@ -261,18 +262,22 @@ func (a *Adapter) attachExecutionWork(ctx context.Context, request application.E
 	if inspection.snapshot.Workspace != request.Workspace {
 		return empty, providerError(application.IntegrationRevisionConflict, executionAttachOperation, "Project changed since preview")
 	}
+	resolvedIssue, err := a.resolveExecutionIssue(ctx, inspection.repo, request.PublishedWork)
+	if err != nil {
+		return empty, err
+	}
 	for _, item := range inspection.snapshot.Items {
-		if sameExecutionIdentity(item.PublishedWork, request.PublishedWork) {
+		if sameExecutionIdentity(item.PublishedWork, resolvedIssue) {
 			if item.Artifact != request.Artifact {
 				return empty, providerError(application.IntegrationManualRemediationRequired, executionAttachOperation, "published work maps to a different artifact")
 			}
 			return item, nil
 		}
 	}
-	if request.Artifact.Validate() != nil || request.PublishedWork.Provider != providerName || request.PublishedWork.Kind != "issue" || request.PublishedWork.OpaqueID == "" || request.PublishedWork.URL == "" {
+	if request.Artifact.Validate() != nil {
 		return empty, providerError(application.IntegrationAmbiguousIdentity, executionAttachOperation, "attachment request has invalid identity")
 	}
-	payload := map[string]any{"query": `mutation($projectId:ID!, $contentId:ID!) { addProjectV2ItemById(input:{projectId:$projectId, contentId:$contentId}) { item { id } } }`, "variables": map[string]string{"projectId": inspection.project.ID, "contentId": request.PublishedWork.OpaqueID}}
+	payload := map[string]any{"query": `mutation($projectId:ID!, $contentId:ID!) { addProjectV2ItemById(input:{projectId:$projectId, contentId:$contentId}) { item { id } } }`, "variables": map[string]string{"projectId": inspection.project.ID, "contentId": resolvedIssue.OpaqueID}}
 	raw, err := a.executionRequest(ctx, executionAttachOperation, payload)
 	if err != nil {
 		return empty, err
@@ -295,11 +300,28 @@ func (a *Adapter) attachExecutionWork(ctx context.Context, request application.E
 		return empty, executionPartial(executionAttachOperation, err)
 	}
 	for _, item := range fresh.snapshot.Items {
-		if sameExecutionIdentity(item.PublishedWork, request.PublishedWork) && item.Artifact == request.Artifact && item.Reference.OpaqueID == response.Data.Add.Item.ID {
+		if sameExecutionIdentity(item.PublishedWork, resolvedIssue) && item.Artifact == request.Artifact && item.Reference.OpaqueID == response.Data.Add.Item.ID {
 			return item, nil
 		}
 	}
 	return empty, providerError(application.IntegrationPartialFailure, executionAttachOperation, "Project attachment could not be verified; inspect before retrying")
+}
+
+func (a *Adapter) resolveExecutionIssue(ctx context.Context, repo string, ref application.ExternalReference) (application.ExternalReference, error) {
+	number, err := strconv.Atoi(ref.DisplayID)
+	wantURL := fmt.Sprintf("https://github.com/%s/issues/%d", repo, number)
+	if err != nil || number < 1 || ref.Provider != providerName || ref.Kind != "issue" || ref.URL != wantURL || ref.OpaqueID == "" {
+		return application.ExternalReference{}, providerError(application.IntegrationAmbiguousIdentity, executionAttachOperation, "published issue reference is invalid")
+	}
+	raw, err := a.runProvider(ctx, executionAttachOperation, "api", "--method", "GET", fmt.Sprintf("repos/%s/issues/%d", repo, number))
+	if err != nil {
+		return application.ExternalReference{}, err
+	}
+	var issue publicationIssue
+	if json.Unmarshal(raw, &issue) != nil || validatePublicationIssue(&issue, repo) != nil || issue.Number != number || issue.URL != wantURL || ref.OpaqueID != wantURL && ref.OpaqueID != issue.ID {
+		return application.ExternalReference{}, providerError(application.IntegrationAmbiguousIdentity, executionAttachOperation, "published issue identity disagrees with provider")
+	}
+	return application.ExternalReference{Provider: providerName, Kind: "issue", OpaqueID: issue.ID, DisplayID: strconv.Itoa(number), URL: issue.URL}, nil
 }
 
 func (a *Adapter) applyExecutionStatus(ctx context.Context, request application.ExecutionStatusRequest) (application.ExecutionWorkItem, error) {
