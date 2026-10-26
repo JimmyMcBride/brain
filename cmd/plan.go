@@ -878,6 +878,7 @@ func addPlanningPromotionCommands(brainstormCmd *cobra.Command, loadApp appLoade
 	var confirmPromote bool
 	var promoteDiscussion string
 	var applyPromote bool
+	var promoteWorkspace string
 	promoteCmd := &cobra.Command{
 		Use: "promote [brainstorm-slug]", Short: "Preview or apply local or GitHub Discussion promotion", Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -885,7 +886,7 @@ func addPlanningPromotionCommands(brainstormCmd *cobra.Command, loadApp appLoade
 				if len(args) != 0 {
 					return fmt.Errorf("promote accepts either a brainstorm slug or --discussion")
 				}
-				return runPlanningDiscussionPromote(cmd, loadApp, promoteDiscussion, applyPromote, confirmPromote)
+				return runPlanningDiscussionPromote(cmd, loadApp, promoteDiscussion, promoteWorkspace, applyPromote, confirmPromote)
 			}
 			if len(args) != 1 {
 				return fmt.Errorf("promote requires a brainstorm slug or --discussion")
@@ -916,6 +917,7 @@ func addPlanningPromotionCommands(brainstormCmd *cobra.Command, loadApp appLoade
 	promoteCmd.Flags().BoolVar(&confirmPromote, "confirm", false, "confirm direct local spec writes")
 	promoteCmd.Flags().BoolVar(&applyPromote, "apply", false, "apply a GitHub publication preview")
 	promoteCmd.Flags().StringVar(&promoteDiscussion, "discussion", "", "GitHub Discussion number or URL")
+	promoteCmd.Flags().StringVar(&promoteWorkspace, "workspace", "", "GitHub workspace decision: create, connect, or skip")
 
 	var repairSpecs []string
 	var confirmRepair bool

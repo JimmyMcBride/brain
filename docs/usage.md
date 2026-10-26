@@ -135,11 +135,17 @@ brain plan github project status --project . --issue 101 --set in-progress --con
 brain plan guide show --project . --discussion 49 --stage refinement
 ```
 
+When a Discussion produces five or more specs, pass an explicit workspace
+decision to promotion or adoption: `--workspace create`, `--workspace connect`
+for the single configured GitHub Project, or `--workspace skip`.
+
 GitHub mutations are preview-first and require `--confirm`; promotion also
 requires `--apply`. Disabling the adapter preserves Planning artifacts and
 GitHub mappings while preventing provider calls. `brain plan check project`
 adds GitHub Project mapping, membership, and semantic Status checks only while
-the adapter is enabled.
+the adapter is enabled. Visible reconciliation maps implementing specs to In
+Progress and done specs to Done; it preserves the current Project status for
+draft or approved specs rather than resetting active work to Todo.
 
 `brainstorm start` previews by default. `--confirm` performs the atomic write;
 repeating the same title returns `unchanged` without another write or event.
