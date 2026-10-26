@@ -118,7 +118,7 @@ func publicationPlanFromSnapshot(input PublicationPreviewInput, snapshot Publica
 	for _, desired := range artifacts {
 		current, found := existing[desired.Artifact]
 		action := MutationCreate
-		if desired.Reference != nil && (!found || !sameExternalIdentity(*desired.Reference, *current.Reference)) {
+		if desired.Reference != nil && (!found || !reconcilesExternalIdentity(*desired.Reference, *current.Reference)) {
 			return empty, publicationConflict("known artifact reference could not be reconciled")
 		}
 		if found {
@@ -335,6 +335,11 @@ func publicationConflict(message string) error {
 
 func sameExternalIdentity(a, b ExternalReference) bool {
 	return a.Provider == b.Provider && a.Kind == b.Kind && a.OpaqueID == b.OpaqueID
+}
+
+func reconcilesExternalIdentity(expected, observed ExternalReference) bool {
+	return sameExternalIdentity(expected, observed) ||
+		expected.OpaqueID == expected.URL && expected.URL != "" && sameExternalLocation(expected, observed)
 }
 
 func artifactLess(a, b planning.ArtifactRef) int {

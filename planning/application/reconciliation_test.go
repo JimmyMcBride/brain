@@ -89,10 +89,13 @@ func reconciliationFixture() (*Service, *reconciliationTarget, *reconciliationRe
 	repo := ExternalReference{Provider: "test", Kind: "repository", OpaqueID: "owner/repo", DisplayID: "owner/repo", URL: "https://example.test/owner/repo"}
 	artifact := planning.ArtifactRef{Kind: planning.ArtifactSpec, ID: "reconcile"}
 	issue := ExternalReference{Provider: "test", Kind: "issue", OpaqueID: "issue-1", DisplayID: "1", URL: "https://example.test/owner/repo/issues/1", Revision: "issue-1"}
+	issueSelector := issue
+	issueSelector.OpaqueID = issue.URL
+	issueSelector.Revision = ""
 	input := ReconciliationPreviewInput{Publication: PublicationPreviewInput{Target: repo, Artifacts: []PublicationArtifact{{Artifact: artifact, Title: "Reconcile", Content: "canonical", Readiness: planning.ReadinessReady}}}}
 	target := &reconciliationTarget{snapshot: PublicationSnapshot{SchemaVersion: IntegrationContractVersion, Target: repo, Artifacts: []PublicationArtifact{{Artifact: artifact, Title: "Reconcile", Content: "stale", Readiness: planning.ReadinessNeedsRefinement, Reference: &issue}}}}
 	repository := &reconciliationRepositorySource{evidence: RepositoryEvidence{SchemaVersion: IntegrationContractVersion, Repository: repo, DefaultRef: "develop", CurrentRef: "codex/reconcile", Commit: "0123456789abcdef0123456789abcdef01234567"}}
-	mappings := &reconciliationMappings{state: ExternalMappingState{SchemaVersion: IntegrationContractVersion, Revision: "mapping-1", ArtifactReferences: []ArtifactExternalReference{{Artifact: artifact, Reference: issue}}}}
+	mappings := &reconciliationMappings{state: ExternalMappingState{SchemaVersion: IntegrationContractVersion, Revision: "mapping-1", ArtifactReferences: []ArtifactExternalReference{{Artifact: artifact, Reference: issueSelector}}}}
 	service := New(nil, Options{ModuleID: "test", Now: func() time.Time { return time.Unix(5, 0) }})
 	return service, target, repository, mappings, input
 }
