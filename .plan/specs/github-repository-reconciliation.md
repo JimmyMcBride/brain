@@ -3,10 +3,10 @@ created_at: "2026-10-26T14:28:47Z"
 initiative: github-adapter-transition
 project: brain
 slug: github-repository-reconciliation
-status: approved
+status: done
 title: GitHub Repository Reconciliation
 type: spec
-updated_at: "2026-10-26T15:12:28Z"
+updated_at: "2026-10-26T17:40:53Z"
 ---
 
 # GitHub Repository Reconciliation

@@ -134,13 +134,30 @@ func externalMappingsFromGitHub(state githubState) (application.ExternalMappingS
 		return result, mappingError(application.IntegrationAmbiguousIdentity, "mapping.load", "mapping metadata contains multiple workspace identities")
 	}
 	slices.SortFunc(result.WorkspaceReferences, externalReferenceLess)
+	if state.Reconciliation != nil && state.LastReconciledAt == "" {
+		return result, mappingError(application.IntegrationAmbiguousIdentity, "mapping.load", "reconciliation evidence has no completion time")
+	}
 	if state.LastReconciledAt != "" {
 		completed, err := time.Parse(time.RFC3339, state.LastReconciledAt)
 		if err != nil || state.Repo == "" {
 			return result, mappingError(application.IntegrationAmbiguousIdentity, "mapping.load", "reconciliation evidence is invalid")
 		}
 		repoURL := "https://github.com/" + state.Repo
-		result.LastReconciliation = &application.ReconciliationEvidence{Repository: application.RepositoryEvidence{SchemaVersion: application.IntegrationContractVersion, Repository: application.ExternalReference{Provider: providerName, Kind: "repository", OpaqueID: state.Repo, URL: repoURL}, DefaultRef: state.DefaultBranch}, CompletedAt: completed}
+		repository := application.RepositoryEvidence{SchemaVersion: application.IntegrationContractVersion, Repository: application.ExternalReference{Provider: providerName, Kind: "repository", OpaqueID: state.Repo, DisplayID: state.Repo, URL: repoURL}, DefaultRef: state.DefaultBranch}
+		if state.Reconciliation != nil {
+			repository.CurrentRef = state.Reconciliation.CurrentRef
+			repository.Commit = state.Reconciliation.Commit
+			if change := state.Reconciliation.PlanningChangeRequest; change != nil {
+				repository.PlanningChangeRequest = &application.PlanningChangeRequestEvidence{
+					Reference: application.ExternalReference{Provider: providerName, Kind: "pull_request", OpaqueID: change.OpaqueID, DisplayID: fmt.Sprintf("#%d", change.Number), URL: change.URL, Revision: state.Reconciliation.Commit},
+					State:     application.ChangeRequestState(change.State), HeadRef: change.HeadRef, BaseRef: change.BaseRef, Draft: change.Draft,
+				}
+			}
+			if err := validateStoredRepositoryEvidence(repository, "mapping.load"); err != nil {
+				return result, err
+			}
+		}
+		result.LastReconciliation = &application.ReconciliationEvidence{Repository: repository, CompletedAt: completed}
 	}
 	return result, nil
 }
@@ -355,6 +372,7 @@ func mergeExternalMappings(current githubState, desired application.ExternalMapp
 	}
 	if desired.LastReconciliation == nil {
 		next.LastReconciledAt = ""
+		next.Reconciliation = nil
 	} else {
 		evidence := desired.LastReconciliation
 		repository := evidence.Repository.Repository
@@ -362,8 +380,50 @@ func mergeExternalMappings(current githubState, desired application.ExternalMapp
 			return next, mappingError(application.IntegrationAmbiguousIdentity, "mapping.save", "reconciliation evidence disagrees with repository")
 		}
 		next.LastReconciledAt = desired.LastReconciliation.CompletedAt.UTC().Format(time.RFC3339)
+		if evidence.Repository.CurrentRef != "" || evidence.Repository.Commit != "" || evidence.Repository.PlanningChangeRequest != nil {
+			if err := validateStoredRepositoryEvidence(evidence.Repository, "mapping.save"); err != nil {
+				return next, err
+			}
+			next.DefaultBranch = evidence.Repository.DefaultRef
+			next.Reconciliation = reconciliationRecord(evidence.Repository)
+		}
 	}
 	return next, nil
+}
+
+func validateStoredRepositoryEvidence(evidence application.RepositoryEvidence, operation string) error {
+	repository := evidence.Repository
+	if evidence.SchemaVersion != application.IntegrationContractVersion || repository.Provider != providerName || repository.Kind != "repository" ||
+		repository.OpaqueID == "" || repository.DisplayID != repository.OpaqueID || repository.URL != "https://github.com/"+repository.OpaqueID ||
+		evidence.DefaultRef == "" || strings.TrimSpace(evidence.DefaultRef) != evidence.DefaultRef || evidence.CurrentRef == "" || strings.TrimSpace(evidence.CurrentRef) != evidence.CurrentRef || !isCommitOID(evidence.Commit) {
+		return mappingError(application.IntegrationAmbiguousIdentity, operation, "reconciliation evidence is invalid")
+	}
+	if change := evidence.PlanningChangeRequest; change != nil {
+		number, err := strconv.Atoi(strings.TrimPrefix(change.Reference.DisplayID, "#"))
+		if err != nil || number < 1 || change.Reference.Provider != providerName || change.Reference.Kind != "pull_request" || change.Reference.OpaqueID == "" ||
+			change.Reference.DisplayID != fmt.Sprintf("#%d", number) || change.Reference.URL != fmt.Sprintf("https://github.com/%s/pull/%d", repository.OpaqueID, number) ||
+			change.Reference.Revision != evidence.Commit || change.HeadRef != evidence.CurrentRef || change.BaseRef != evidence.DefaultRef {
+			return mappingError(application.IntegrationAmbiguousIdentity, operation, "reconciliation change-request evidence is invalid")
+		}
+		switch change.State {
+		case application.ChangeRequestOpen, application.ChangeRequestClosed, application.ChangeRequestMerged:
+		default:
+			return mappingError(application.IntegrationAmbiguousIdentity, operation, "reconciliation change-request state is invalid")
+		}
+	}
+	return nil
+}
+
+func reconciliationRecord(evidence application.RepositoryEvidence) *githubReconciliationRecord {
+	record := &githubReconciliationRecord{CurrentRef: evidence.CurrentRef, Commit: evidence.Commit}
+	if change := evidence.PlanningChangeRequest; change != nil {
+		number, _ := strconv.Atoi(strings.TrimPrefix(change.Reference.DisplayID, "#"))
+		record.PlanningChangeRequest = &githubChangeRequestRecord{
+			OpaqueID: change.Reference.OpaqueID, Number: number, URL: change.Reference.URL, State: string(change.State),
+			HeadRef: change.HeadRef, BaseRef: change.BaseRef, Draft: change.Draft,
+		}
+	}
+	return record
 }
 
 func mergeWorkspaceMappings(next *githubState, current githubState, desired []application.ExternalReference) error {

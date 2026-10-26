@@ -18,10 +18,27 @@ type githubState struct {
 	LastEnabledAt    string                           `json:"last_enabled_at,omitempty"`
 	LastUpdatedAt    string                           `json:"last_updated_at,omitempty"`
 	LastReconciledAt string                           `json:"last_reconciled_at,omitempty"`
+	Reconciliation   *githubReconciliationRecord      `json:"reconciliation,omitempty"`
 	Stories          map[string]githubStoryRecord     `json:"stories"`
 	Planning         map[string]githubPlanningRecord  `json:"planning"`
 	ProjectDecisions map[string]githubProjectDecision `json:"project_decisions"`
 	Extra            map[string]json.RawMessage       `json:"-"`
+}
+
+type githubReconciliationRecord struct {
+	CurrentRef            string                     `json:"current_ref"`
+	Commit                string                     `json:"commit"`
+	PlanningChangeRequest *githubChangeRequestRecord `json:"planning_change_request,omitempty"`
+}
+
+type githubChangeRequestRecord struct {
+	OpaqueID string `json:"opaque_id"`
+	Number   int    `json:"number"`
+	URL      string `json:"url"`
+	State    string `json:"state"`
+	HeadRef  string `json:"head_ref"`
+	BaseRef  string `json:"base_ref"`
+	Draft    bool   `json:"draft"`
 }
 
 type githubPlanningRecord struct {
@@ -105,7 +122,7 @@ func (state *githubState) UnmarshalJSON(raw []byte) error {
 		return err
 	}
 	*state = githubState(value)
-	state.Extra = unknownJSONFields(raw, "repo", "repo_url", "default_branch", "last_enabled_at", "last_updated_at", "last_reconciled_at", "stories", "planning", "project_decisions")
+	state.Extra = unknownJSONFields(raw, "repo", "repo_url", "default_branch", "last_enabled_at", "last_updated_at", "last_reconciled_at", "reconciliation", "stories", "planning", "project_decisions")
 	return nil
 }
 

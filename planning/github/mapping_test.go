@@ -243,6 +243,43 @@ func TestExternalMappingRevisionConflictAndConcurrentWriters(t *testing.T) {
 	}
 }
 
+func TestExternalMappingReconciliationEvidenceRoundTripsExactly(t *testing.T) {
+	adapter, _, store := mappingAdapter(t, "promoted.github.json")
+	loaded, err := adapter.ExternalMappingRepository().Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidence := application.RepositoryEvidence{
+		SchemaVersion: 1,
+		Repository:    application.ExternalReference{Provider: providerName, Kind: "repository", OpaqueID: "JimmyMcBride/plan", DisplayID: "JimmyMcBride/plan", URL: "https://github.com/JimmyMcBride/plan"},
+		DefaultRef:    "develop", CurrentRef: "codex/github-adapter", Commit: "0123456789abcdef0123456789abcdef01234567",
+		PlanningChangeRequest: &application.PlanningChangeRequestEvidence{
+			Reference: application.ExternalReference{Provider: providerName, Kind: "pull_request", OpaqueID: "PR_node", DisplayID: "#41", URL: "https://github.com/JimmyMcBride/plan/pull/41", Revision: "0123456789abcdef0123456789abcdef01234567"},
+			State:     application.ChangeRequestOpen, HeadRef: "codex/github-adapter", BaseRef: "develop", Draft: true,
+		},
+	}
+	completed := time.Unix(5, 0).UTC()
+	loaded.LastReconciliation = &application.ReconciliationEvidence{Repository: evidence, CompletedAt: completed}
+	saved, err := adapter.ExternalMappingRepository().Save(context.Background(), loaded, loaded.Revision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := adapter.ExternalMappingRepository().Load(context.Background())
+	if err != nil || !reflect.DeepEqual(saved, reloaded) || reloaded.LastReconciliation == nil || !reflect.DeepEqual(reloaded.LastReconciliation.Repository, evidence) || !reloaded.LastReconciliation.CompletedAt.Equal(completed) {
+		t.Fatalf("saved=%+v reloaded=%+v err=%v", saved.LastReconciliation, reloaded.LastReconciliation, err)
+	}
+	state, err := store.read()
+	if err != nil || state.Reconciliation == nil || state.Reconciliation.PlanningChangeRequest == nil || state.DefaultBranch != evidence.DefaultRef {
+		t.Fatalf("state=%+v err=%v", state, err)
+	}
+	before, _ := os.ReadFile(store.path)
+	unchanged, err := adapter.ExternalMappingRepository().Save(context.Background(), reloaded, reloaded.Revision)
+	after, _ := os.ReadFile(store.path)
+	if err != nil || unchanged.Revision != reloaded.Revision || !bytes.Equal(before, after) {
+		t.Fatal("unchanged exact evidence rewrote metadata", err)
+	}
+}
+
 func TestExternalMappingLockCancellationAndCleanup(t *testing.T) {
 	adapter, _, store := mappingAdapter(t, "promoted.github.json")
 	loaded, err := adapter.ExternalMappingRepository().Load(context.Background())

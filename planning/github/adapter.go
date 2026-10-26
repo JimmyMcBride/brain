@@ -41,6 +41,7 @@ type InputRunner interface {
 type Options struct {
 	ProjectRoot string
 	Runner      Runner
+	GitRunner   Runner
 }
 
 // Adapter implements provider-neutral Planning ports through GitHub.
@@ -48,6 +49,7 @@ type Adapter struct {
 	enabled     bool
 	projectRoot string
 	runner      Runner
+	gitRunner   Runner
 	state       stateStore
 }
 
@@ -62,10 +64,15 @@ func New(config Config, options Options) *Adapter {
 	if runner == nil {
 		runner = commandRunner{}
 	}
+	gitRunner := options.GitRunner
+	if gitRunner == nil {
+		gitRunner = commandRunnerWithExecutable{executable: "git"}
+	}
 	return &Adapter{
 		enabled:     config.Enabled,
 		projectRoot: root,
 		runner:      runner,
+		gitRunner:   gitRunner,
 		state:       newFileStateStore(root),
 	}
 }
@@ -137,8 +144,8 @@ func (p publicationTarget) Apply(ctx context.Context, plan application.Publicati
 
 type repositoryEvidenceSource struct{ adapter *Adapter }
 
-func (p repositoryEvidenceSource) Current(context.Context) (application.RepositoryEvidence, error) {
-	return application.RepositoryEvidence{}, p.adapter.unavailable("repository.current")
+func (p repositoryEvidenceSource) Current(ctx context.Context) (application.RepositoryEvidence, error) {
+	return p.adapter.currentRepositoryEvidence(ctx)
 }
 
 type externalMappingRepository struct{ adapter *Adapter }

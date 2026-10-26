@@ -51,6 +51,7 @@ func TestPublicPlanningApplicationExportSurface(t *testing.T) {
 	want := []string{
 		"AdoptionApplyInput", "AdoptionPlan", "AdoptionPreviewInput",
 		"PublicationApplyInput", "PublicationApplyResult", "Service.ApplyPublication", "PermissionPublish", "EventPublicationApplied",
+		"ReconciliationApplyInput", "ReconciliationPreviewInput", "Service.ApplyReconciliation", "Service.PreviewReconciliation", "EventIntegrationReconciled",
 		"PublicationPreviewInput", "Service.PreviewPublication",
 		"CollaborationRepairInput", "CollaborationRepairResult", "EventCollaborationRepaired", "PermissionCollaboration",
 		"Service.AssessCollaboration", "Service.PreviewCollaborationRepair", "Service.RepairCollaboration",
