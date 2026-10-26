@@ -171,7 +171,11 @@ func (a *Adapter) executionInspection(ctx context.Context, ref application.Exter
 			statuses = append(statuses, status)
 		}
 	}
-	snapshot := application.ExecutionWorkspaceSnapshot{SchemaVersion: application.IntegrationContractVersion, Fields: []application.ExecutionField{{Role: application.ExecutionFieldRoleStatus, SupportedStatuses: statuses}}}
+	configurationRaw, _ := json.Marshal(struct {
+		FieldID string
+		Options map[application.ExecutionStatus]executionOption
+	}{statusField.ID, options})
+	snapshot := application.ExecutionWorkspaceSnapshot{SchemaVersion: application.IntegrationContractVersion, ConfigurationRevision: fmt.Sprintf("%x", sha256.Sum256(configurationRaw)), Fields: []application.ExecutionField{{Role: application.ExecutionFieldRoleStatus, SupportedStatuses: statuses}}}
 	mappings, err := executionArtifactMappings(state)
 	if err != nil {
 		return result, err
@@ -363,6 +367,9 @@ func (a *Adapter) applyExecutionStatus(ctx context.Context, request application.
 	}
 	if inspection.snapshot.Workspace != request.Workspace {
 		return empty, providerError(application.IntegrationRevisionConflict, executionStatusOperation, "Project changed since preview")
+	}
+	if request.ConfigurationRevision == "" || inspection.snapshot.ConfigurationRevision != request.ConfigurationRevision {
+		return empty, providerError(application.IntegrationRevisionConflict, executionStatusOperation, "Project Status configuration changed since preview")
 	}
 	var current *application.ExecutionWorkItem
 	for i := range inspection.snapshot.Items {

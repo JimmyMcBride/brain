@@ -144,7 +144,7 @@ func TestReconciliationRepairsExecutionWorkspaceInReviewedSteps(t *testing.T) {
 	issueSelector.Revision = ""
 	workspaceRef := ExternalReference{Provider: "test", Kind: "project", OpaqueID: "project-1", DisplayID: "1", URL: "https://example.test/projects/1", Revision: "workspace-1"}
 	mappings.state.WorkspaceReferences = []ExternalReference{workspaceRef}
-	execution := &executionMemory{snapshot: ExecutionWorkspaceSnapshot{SchemaVersion: IntegrationContractVersion, Workspace: workspaceRef, Fields: []ExecutionField{{Role: ExecutionFieldRoleStatus, SupportedStatuses: []ExecutionStatus{ExecutionTodo, ExecutionInProgress, ExecutionInReview, ExecutionDone}}}}}
+	execution := &executionMemory{snapshot: ExecutionWorkspaceSnapshot{SchemaVersion: IntegrationContractVersion, Workspace: workspaceRef, ConfigurationRevision: "configuration-1", Fields: []ExecutionField{{Role: ExecutionFieldRoleStatus, SupportedStatuses: []ExecutionStatus{ExecutionTodo, ExecutionInProgress, ExecutionInReview, ExecutionDone}}}}}
 	input.Execution = []ExecutionIntent{{Artifact: artifact, PublishedWork: issueSelector, Status: ExecutionInProgress}}
 
 	plan, err := service.PreviewReconciliation(context.Background(), target, repository, mappings, execution, input, &collaborationPolicy{})

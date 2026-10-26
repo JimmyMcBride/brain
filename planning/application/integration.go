@@ -333,10 +333,11 @@ type ExecutionWorkItem struct {
 // ExecutionWorkspaceSnapshot is the supported field and tracked-item state of
 // one execution workspace.
 type ExecutionWorkspaceSnapshot struct {
-	SchemaVersion int                 `json:"schema_version"`
-	Workspace     ExternalReference   `json:"workspace"`
-	Fields        []ExecutionField    `json:"fields,omitempty"`
-	Items         []ExecutionWorkItem `json:"items,omitempty"`
+	SchemaVersion         int                 `json:"schema_version"`
+	Workspace             ExternalReference   `json:"workspace"`
+	ConfigurationRevision string              `json:"configuration_revision"`
+	Fields                []ExecutionField    `json:"fields,omitempty"`
+	Items                 []ExecutionWorkItem `json:"items,omitempty"`
 }
 
 // ExecutionAttachRequest attaches published Planning work to an execution
@@ -350,9 +351,10 @@ type ExecutionAttachRequest struct {
 // ExecutionStatusRequest applies one Planning execution status to a tracked
 // work item.
 type ExecutionStatusRequest struct {
-	Workspace ExternalReference `json:"workspace"`
-	WorkItem  ExternalReference `json:"work_item"`
-	Status    ExecutionStatus   `json:"status"`
+	Workspace             ExternalReference `json:"workspace"`
+	WorkItem              ExternalReference `json:"work_item"`
+	ConfigurationRevision string            `json:"configuration_revision"`
+	Status                ExecutionStatus   `json:"status"`
 }
 
 // ExecutionAttachPlan is the reviewed decision to reuse or create one tracked

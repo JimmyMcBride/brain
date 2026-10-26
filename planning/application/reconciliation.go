@@ -119,7 +119,7 @@ func (s *Service) previewReconciliation(ctx context.Context, target PublicationT
 			if !executionStatusSupported(snapshot.Fields, intent.Status) {
 				return empty, base, reconciliationManual("required semantic Status option is unavailable")
 			}
-			plan.Execution = append(plan.Execution, ExecutionStatusRequest{Workspace: snapshot.Workspace, WorkItem: item.Reference, Status: intent.Status})
+			plan.Execution = append(plan.Execution, ExecutionStatusRequest{Workspace: snapshot.Workspace, WorkItem: item.Reference, ConfigurationRevision: snapshot.ConfigurationRevision, Status: intent.Status})
 		}
 	}
 	slices.SortFunc(plan.Attachments, func(a, b ExecutionAttachRequest) int {

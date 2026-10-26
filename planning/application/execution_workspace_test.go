@@ -50,7 +50,7 @@ func executionFixture() (*Service, *executionMemory, planning.ArtifactRef, Exter
 	workspace := ExternalReference{Provider: "test", Kind: "project", OpaqueID: "project-1", DisplayID: "1", URL: "https://example.test/projects/1", Revision: "workspace-1"}
 	artifact := planning.ArtifactRef{Kind: planning.ArtifactSpec, ID: "work"}
 	issue := ExternalReference{Provider: "test", Kind: "issue", OpaqueID: "issue-1", DisplayID: "1", URL: "https://example.test/issues/1"}
-	memory := &executionMemory{snapshot: ExecutionWorkspaceSnapshot{SchemaVersion: IntegrationContractVersion, Workspace: workspace, Fields: []ExecutionField{{Role: ExecutionFieldRoleStatus, SupportedStatuses: []ExecutionStatus{ExecutionTodo, ExecutionInProgress, ExecutionInReview, ExecutionDone}}}}}
+	memory := &executionMemory{snapshot: ExecutionWorkspaceSnapshot{SchemaVersion: IntegrationContractVersion, Workspace: workspace, ConfigurationRevision: "configuration-1", Fields: []ExecutionField{{Role: ExecutionFieldRoleStatus, SupportedStatuses: []ExecutionStatus{ExecutionTodo, ExecutionInProgress, ExecutionInReview, ExecutionDone}}}}}
 	return New(nil, Options{ModuleID: "test"}), memory, artifact, issue
 }
 

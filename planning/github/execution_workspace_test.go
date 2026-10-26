@@ -134,7 +134,7 @@ func TestExecutionWorkspaceInspectsAndUpdatesStatusIdempotently(t *testing.T) {
 	if err != nil || len(snapshot.Fields) != 1 || len(snapshot.Fields[0].SupportedStatuses) != 4 || len(snapshot.Items) != 1 || snapshot.Items[0].Status != application.ExecutionTodo {
 		t.Fatalf("snapshot=%+v err=%v", snapshot, err)
 	}
-	request := application.ExecutionStatusRequest{Workspace: snapshot.Workspace, WorkItem: snapshot.Items[0].Reference, Status: application.ExecutionInReview}
+	request := application.ExecutionStatusRequest{Workspace: snapshot.Workspace, WorkItem: snapshot.Items[0].Reference, ConfigurationRevision: snapshot.ConfigurationRevision, Status: application.ExecutionInReview}
 	item, err := adapter.ExecutionWorkspace().ApplyStatus(context.Background(), request)
 	if err != nil || item.Status != application.ExecutionInReview || runner.writes != 1 {
 		t.Fatalf("item=%+v writes=%d err=%v", item, runner.writes, err)
@@ -143,7 +143,7 @@ func TestExecutionWorkspaceInspectsAndUpdatesStatusIdempotently(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request.Workspace, request.WorkItem = fresh.Workspace, fresh.Items[0].Reference
+	request.Workspace, request.WorkItem, request.ConfigurationRevision = fresh.Workspace, fresh.Items[0].Reference, fresh.ConfigurationRevision
 	if _, err = adapter.ExecutionWorkspace().ApplyStatus(context.Background(), request); err != nil || runner.writes != 1 {
 		t.Fatalf("idempotent writes=%d err=%v", runner.writes, err)
 	}
@@ -186,6 +186,28 @@ func TestExecutionWorkspaceAttachesAndRejectsStaleRevision(t *testing.T) {
 	item, err := adapter.ExecutionWorkspace().Attach(context.Background(), request)
 	if err != nil || item.Artifact.ID != "two" || runner.writes != 1 {
 		t.Fatalf("item=%+v writes=%d err=%v", item, runner.writes, err)
+	}
+}
+
+func TestExecutionWorkspaceRejectsRefreshedUnreviewedStatusOptions(t *testing.T) {
+	adapter, runner := executionTestAdapter(t)
+	ref := publicationProjectReference(runner.project.publicationProject)
+	reviewed, err := adapter.ExecutionWorkspace().Inspect(context.Background(), ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range runner.project.Fields.Nodes[0].Options {
+		if runner.project.Fields.Nodes[0].Options[i].Name == "Done" {
+			runner.project.Fields.Nodes[0].Options[i].ID = "regenerated-done"
+		}
+	}
+	fresh, err := adapter.ExecutionWorkspace().Inspect(context.Background(), ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := application.ExecutionStatusRequest{Workspace: fresh.Workspace, WorkItem: fresh.Items[0].Reference, ConfigurationRevision: reviewed.ConfigurationRevision, Status: application.ExecutionDone}
+	if _, err := adapter.ExecutionWorkspace().ApplyStatus(context.Background(), request); !isProviderClass(err, application.IntegrationRevisionConflict) || runner.writes != 0 {
+		t.Fatalf("option drift error=%v writes=%d", err, runner.writes)
 	}
 }
 

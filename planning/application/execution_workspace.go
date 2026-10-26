@@ -130,6 +130,7 @@ func (s *Service) PreviewExecutionStatus(ctx context.Context, workspace Executio
 	}
 	request.Workspace = snapshot.Workspace
 	request.WorkItem = found.Reference
+	request.ConfigurationRevision = snapshot.ConfigurationRevision
 	return ExecutionStatusPlan{SchemaVersion: IntegrationContractVersion, Action: action, Request: request, Item: *found}, nil
 }
 
@@ -208,7 +209,7 @@ func validateExecutionAttachRequest(request ExecutionAttachRequest) error {
 }
 
 func validateExecutionSnapshot(snapshot ExecutionWorkspaceSnapshot, requested ExternalReference) error {
-	if snapshot.SchemaVersion != IntegrationContractVersion || !validExecutionReference(snapshot.Workspace, "project") || !sameExternalIdentity(snapshot.Workspace, requested) || snapshot.Workspace.Revision == "" {
+	if snapshot.SchemaVersion != IntegrationContractVersion || !validExecutionReference(snapshot.Workspace, "project") || !sameExternalIdentity(snapshot.Workspace, requested) || snapshot.Workspace.Revision == "" || snapshot.ConfigurationRevision == "" {
 		return executionConflict("execution.inspect", "Project workspace identity or revision changed")
 	}
 	seenItems := map[[4]string]bool{}
