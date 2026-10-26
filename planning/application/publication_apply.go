@@ -14,6 +14,9 @@ const PermissionPublish = "planning.publish"
 // EventPublicationApplied records publication changes, including partial apply.
 const EventPublicationApplied = "planning.publication.applied"
 
+// EventIntegrationConfigured records an enabled or disabled provider adapter.
+const EventIntegrationConfigured = "planning.integration.configured"
+
 // PublicationApplyInput binds confirmation to the complete reviewed plan and
 // canonical intent. A fresh preview must agree before the provider can apply it.
 type PublicationApplyInput struct {

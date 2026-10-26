@@ -72,6 +72,7 @@ func RegistrationWithOptions(options Options) modules.Registration {
 				application.EventCollaborationRepaired,
 				application.EventPublicationApplied,
 				application.EventIntegrationAdopted,
+				application.EventIntegrationConfigured,
 				application.EventIntegrationReconciled,
 				application.EventExecutionAttached,
 				application.EventExecutionStatusUpdated,
@@ -89,6 +90,7 @@ type Module struct {
 	service       *application.Service
 	github        *planninggithub.Adapter
 	githubEnabled bool
+	projectRoot   string
 }
 
 func (m *Module) Validate(_ context.Context, _ modules.ModuleContext, config modules.Config) error {
@@ -116,6 +118,7 @@ func (m *Module) Initialize(_ context.Context, moduleContext modules.ModuleConte
 	m.service = service
 	m.github = adapter
 	m.githubEnabled = enabled
+	m.projectRoot = moduleContext.Project.Root
 	m.mu.Unlock()
 	return nil
 }
@@ -164,6 +167,21 @@ func (m *Module) GitHubAdapter() (*planninggithub.Adapter, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.github, m.githubEnabled
+}
+
+func (m *Module) GitHubPreflight(ctx context.Context) (planninggithub.RepositoryStatus, error) {
+	if m == nil {
+		return planninggithub.RepositoryStatus{}, fmt.Errorf("Planning is not initialized")
+	}
+	m.mu.RLock()
+	root, options := m.projectRoot, m.options
+	m.mu.RUnlock()
+	adapter := planninggithub.New(planninggithub.Config{Enabled: true}, planninggithub.Options{ProjectRoot: root, Runner: options.GitHubRunner, GitRunner: options.GitRunner, Now: options.Now})
+	return adapter.Preflight(ctx)
+}
+
+func (m *Module) GitHubConfig(enabled bool) modules.Config {
+	return modules.Config{"github": modules.Config{"enabled": enabled}}
 }
 
 func defaultConfig() modules.Config {
