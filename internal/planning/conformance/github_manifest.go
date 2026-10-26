@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -176,6 +177,59 @@ func ReadProviderTranscript(name string) (ProviderTranscript, error) {
 		}
 	}
 	return transcript, nil
+}
+
+// NativeArgs maps one captured standalone CLI invocation onto Brain's native
+// command surface. Confirmation hardening is explicit so replay callers can
+// exercise either the preview or confirmed path without inventing flags.
+func (m GitHubManifest) NativeArgs(testCase GitHubCase, confirmed bool) ([]string, error) {
+	var family *GitHubFamily
+	for i := range m.Families {
+		if m.Families[i].ID == testCase.Family {
+			family = &m.Families[i]
+			break
+		}
+	}
+	if family == nil {
+		return nil, fmt.Errorf("GitHub conformance case %s references unknown family %s", testCase.ID, testCase.Family)
+	}
+	if family.Retention != "migrate" || len(family.Native) == 0 || testCase.Invocation.Kind != "cli" {
+		return nil, fmt.Errorf("GitHub conformance case %s has no native CLI mapping", testCase.ID)
+	}
+	if len(testCase.Invocation.Args) < len(family.Standalone) || !slices.Equal(testCase.Invocation.Args[:len(family.Standalone)], family.Standalone) {
+		return nil, fmt.Errorf("GitHub conformance case %s does not start with its standalone family mapping", testCase.ID)
+	}
+	remaining := append([]string(nil), testCase.Invocation.Args[len(family.Standalone):]...)
+	args := append([]string(nil), family.Native...)
+	jsonOutput := false
+	for i := 0; i < len(remaining); i++ {
+		switch remaining[i] {
+		case "--format":
+			if i+1 >= len(remaining) || remaining[i+1] != "json" {
+				return nil, fmt.Errorf("GitHub conformance case %s has unsupported output format", testCase.ID)
+			}
+			jsonOutput = true
+			i++
+		case "--target":
+			if i+1 >= len(remaining) || remaining[i+1] != "github" {
+				return nil, fmt.Errorf("GitHub conformance case %s has unsupported publication target", testCase.ID)
+			}
+			i++
+		case "--confirm":
+			if confirmed {
+				args = append(args, remaining[i])
+			}
+		default:
+			args = append(args, remaining[i])
+		}
+	}
+	if confirmed && testCase.Safety.Mutation && !slices.Contains(args, "--confirm") {
+		args = append(args, "--confirm")
+	}
+	if jsonOutput {
+		args = append([]string{"--json"}, args...)
+	}
+	return args, nil
 }
 
 func (m GitHubManifest) validate() error {

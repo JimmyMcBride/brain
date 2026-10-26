@@ -3,6 +3,7 @@ package local
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -77,6 +78,36 @@ func TestAdapterReadsSchemaV3BrainstormsAndSpecs(t *testing.T) {
 	}
 	if findings := planning.ValidateSpec(specs[0].Artifact); hasErrorFindings(findings) {
 		t.Fatalf("spec did not map into valid domain value: %#v", findings)
+	}
+}
+
+func TestAdapterReadsProviderOwnedCompatibilityMirrorWithoutAllowingWrites(t *testing.T) {
+	for _, sourceMode := range []string{"github", "hybrid"} {
+		t.Run(sourceMode, func(t *testing.T) {
+			root := t.TempDir()
+			copyFixture(t, "compatible", root)
+			metaPath := filepath.Join(root, ".plan", ".meta", "workspace.json")
+			meta := fmt.Sprintf("{\n  \"schema_version\": 3,\n  \"planning_model\": \"spec_first_v1\",\n  \"source_mode\": %q\n}\n", sourceMode)
+			if err := os.WriteFile(metaPath, []byte(meta), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			adapter := New(root)
+			status, err := adapter.Status(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if status.State != application.WorkspaceCompatible || status.Writable || string(status.Ownership) != sourceMode {
+				t.Fatalf("unexpected provider-owned status: %#v", status)
+			}
+			if specs, err := adapter.ListSpecs(context.Background()); err != nil || len(specs) != 1 {
+				t.Fatalf("read compatibility mirror: specs=%#v error=%v", specs, err)
+			}
+			_, _, err = adapter.CreateBrainstorm(context.Background(), planning.Brainstorm{ID: "blocked", Title: "Blocked"}, time.Now())
+			if !errors.Is(err, application.ErrWorkspaceNotWritable) {
+				t.Fatalf("expected provider-owned write gate, got %v", err)
+			}
+		})
 	}
 }
 
