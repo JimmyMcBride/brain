@@ -365,6 +365,21 @@ type ReconciliationPlan struct {
 	ExpectedMappingRevision string                   `json:"expected_mapping_revision"`
 }
 
+// ReconciliationPreviewInput binds canonical publication intent to the exact
+// checked-out repository change being reconciled. Stable provider identities
+// are loaded from the mapping repository rather than trusted from callers.
+type ReconciliationPreviewInput struct {
+	Publication PublicationPreviewInput `json:"publication"`
+}
+
+// ReconciliationApplyInput requires a confirmed fresh plan before provider or
+// mapping mutation can occur.
+type ReconciliationApplyInput struct {
+	Intent       ReconciliationPreviewInput `json:"intent"`
+	ExpectedPlan ReconciliationPlan         `json:"expected_plan"`
+	Confirmed    bool                       `json:"confirmed"`
+}
+
 // ReconciliationResult retains applied evidence and the atomically saved
 // mapping state needed for safe reruns.
 type ReconciliationResult struct {
@@ -373,6 +388,7 @@ type ReconciliationResult struct {
 	Execution     []ExecutionWorkItem    `json:"execution,omitempty"`
 	Mappings      ExternalMappingState   `json:"mappings"`
 	Evidence      ReconciliationEvidence `json:"evidence"`
+	Event         *Event                 `json:"event,omitempty"`
 }
 
 // ExecutionWorkspace is the provider boundary for execution tracking.

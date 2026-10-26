@@ -1,5 +1,5 @@
 ---
-updated: "2026-10-26T15:25:35Z"
+updated: "2026-10-26T17:41:23Z"
 ---
 # Planning Module Implementation Roadmap
 
@@ -146,7 +146,15 @@ persists completed milestone identity for every reviewed group member and one ca
 metadata shape. Provider success followed by local-save failure retains recovery
 evidence; lost save responses and identical reruns do not duplicate provider
 objects or audit events. Unknown and legacy-private metadata survive changed
-mapping writes. Repository reconciliation is the next bounded slice.
+mapping writes. Repository reconciliation now implements the provider-neutral
+preview/apply service and GitHub repository-evidence port. The adapter resolves
+canonical repository, branch, commit, and optional pull-request evidence;
+detached, forked, stale, cross-repository, and ambiguous states fail closed.
+Reconciliation loads durable mappings, classifies publication drift without
+mutation, requires publish permission and explicit confirmation, revision-guards
+provider and mapping writes, retains partial evidence, audits changed outcomes,
+and makes an identical rerun write-free. Project field, item, and status drift
+remains behind the execution-workspace boundary.
 
 Move retained GitHub collaboration/publication/repository/execution behavior
 behind generic Planning ports. Support planning PRs and retained Discussion,
@@ -203,13 +211,11 @@ lifecycle, diagnostics, and distribution direction.
 
 Execute the remaining dependency-ordered Phase 5 specs:
 
-1. [GitHub Repository Reconciliation](../../.plan/specs/github-repository-reconciliation.md)
-2. [GitHub Execution Workspace](../../.plan/specs/github-execution-workspace.md)
-3. [Native GitHub Planning Rollout](../../.plan/specs/native-github-planning-rollout.md)
-4. [GitHub Integration Conformance and Release](../../.plan/specs/github-integration-conformance-release.md)
+1. [GitHub Execution Workspace](../../.plan/specs/github-execution-workspace.md)
+2. [Native GitHub Planning Rollout](../../.plan/specs/native-github-planning-rollout.md)
+3. [GitHub Integration Conformance and Release](../../.plan/specs/github-integration-conformance-release.md)
 
-Repository reconciliation is the exact next implementation slice. Each later spec
-depends
-on the preceding provider/application boundary. Preserve structured briefs,
+Execution workspace support is the exact next implementation slice. Each later
+spec depends on the preceding provider/application boundary. Preserve structured briefs,
 stable identity, confirmation, idempotency, partial-failure recovery, and local
 Planning independence throughout.

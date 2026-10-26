@@ -32,6 +32,11 @@ func (s *Service) PreviewPublication(ctx context.Context, target PublicationTarg
 	if err := authorizer.Require(ctx, PermissionRead); err != nil {
 		return empty, err
 	}
+	return s.previewPublication(ctx, target, input)
+}
+
+func (s *Service) previewPublication(ctx context.Context, target PublicationTarget, input PublicationPreviewInput) (PublicationPlan, error) {
+	var empty PublicationPlan
 	if target == nil {
 		return empty, fmt.Errorf("publication target is unavailable")
 	}

@@ -97,13 +97,13 @@ func TestDisabledAdapterPerformsNoProviderOrMetadataWork(t *testing.T) {
 	}
 }
 
-func TestEnabledSkeletonReportsUnsupportedCapability(t *testing.T) {
+func TestEnabledRepositoryEvidenceReportsProviderFailure(t *testing.T) {
 	t.Parallel()
 	adapter := New(Config{Enabled: true}, Options{ProjectRoot: t.TempDir(), Runner: &failingRunner{}})
 	_, err := adapter.RepositoryEvidenceSource().Current(context.Background())
 	var integrationError *application.IntegrationError
-	if !errors.As(err, &integrationError) || integrationError.Class != application.IntegrationUnsupportedCapability {
-		t.Fatalf("enabled skeleton error = %#v", err)
+	if !errors.As(err, &integrationError) || integrationError.Class != application.IntegrationProviderUnavailable {
+		t.Fatalf("repository evidence error = %#v", err)
 	}
 }
 
