@@ -1,5 +1,5 @@
 ---
-updated: "2026-09-01T14:33:36Z"
+updated: "2026-10-26T20:22:45Z"
 ---
 # Planning Module Implementation Roadmap
 
@@ -45,7 +45,7 @@ and local tests.
 
 ## Phase 4 — Plan CLI Compatibility
 
-Status: In progress from `.plan/specs/plan-cli-compatibility.md`. PR #46
+Status: Complete from `.plan/specs/plan-cli-compatibility.md`. PR #46
 pinned standalone Plan revision `53ebd96`, recorded the complete command
 disposition, and captured initial black-box `status` cases. PR #47 normalized
 Brain's Go module path. PR #48 exposed the stdlib-only domain at
@@ -71,18 +71,107 @@ The seventh slice landed through standalone Plan PR
 `c2c71279030f` without a local replacement, routes compatible schema-v3 local
 families through the shared packages, preserves standalone host and fallback
 behavior, and enables the interactive-only warning policy. Linux and Windows CI
-are green. Final rollout replaces the pseudo-version with the next published
-Brain tag before publishing the corresponding standalone Plan release.
+are green. Final rollout published the shared Brain boundary in
+[`v0.1.21`](https://github.com/JimmyMcBride/brain/releases/tag/v0.1.21), replaced
+the temporary pseudo-version through standalone Plan PR
+[`#88`](https://github.com/JimmyMcBride/plan/pull/88), and published the verified
+compatibility wrapper in
+[`v0.1.29`](https://github.com/JimmyMcBride/plan/releases/tag/v0.1.29). Both
+releases include checksums and Linux, macOS, and Windows archives for amd64 and
+arm64.
 
 Deliver wrapper/shared implementation, command mapping, warning policy, docs, and
 script/exit/JSON compatibility tests.
 
 ## Phase 5 — GitHub Adapter Transition
 
+Status: Implementing from `.plan/specs/github-adapter-transition.md`. The
+first three slices capture the standalone Plan `v0.1.29` GitHub baseline,
+establish provider-neutral application DTOs and capability-sized ports, and add
+the injected `planning/github` transport plus exact current metadata
+compatibility behind disabled configuration. Export, dependency, typed-error,
+atomic-write, and zero-provider-work guards protect the boundary.
+The collaboration portion of slice 4 adds provider-neutral remote assessment,
+revision-bound repair previews, read and collaboration authorization, mutation
+evidence, and audit handling. The GitHub adapter reads paginated Discussions and
+performs a fresh revision check before repair. GitHub does not offer an atomic
+conditional Discussion update: an edit between that check and mutation remains
+a provider limitation. Native command wiring and full standalone wrapper parity
+remain later rollout gates.
+The next publication increment adds application-owned deterministic previews:
+canonical artifact intent and provider evidence yield ordered create, update,
+reuse, or unchanged actions. Stable identity checks use composite provider/kind/ID keys to reject ambiguous candidates without delimiter collisions;
+dependency and grouping validation rejects cycles and missing endpoints. Provider
+apply implementation and adoption remain pending.
+GitHub publication inspection now feeds the planner with canonical issue content,
+references, and live grouping/dependency evidence. It recovers renamed or
+unlabelled mapped issues and exact source-linked slugs, rejects ambiguous
+identities and incomplete listings, and performs no remote or metadata writes.
+The shared confirmed-publication service now requires read/publish grants,
+explicit confirmation, an audit sink, and a fresh plan matching the reviewed
+intent and provider revisions. Reuse/unchanged-only plans skip provider writes.
+Partial apply and audit failures retain completed identities without rollback;
+invalid completion evidence cannot become success. This service does not save
+mappings or enable native commands. The GitHub adapter now applies those exact
+issue and relationship actions, creates missing managed labels only, preserves
+full briefs through stdin, guards fresh issue revisions, and returns partial
+identity evidence. Source-linked creates and unmapped updates retain recoverable
+slugs; existing mappings support renamed issues without being rewritten.
+Recoverable mapping persistence now reads and atomically replaces the complete
+provider-neutral mapping view through the existing GitHub metadata shape. It
+preserves legacy-private fields, performs no provider work, rejects stale
+writers by raw-file revision, and keeps semantic no-op saves byte-stable.
+Adoption now resolves explicit unmanaged issues by stable identity, classifies
+canonical updates, revalidates confirmation and revisions, applies provider
+changes before saving mappings, and retains partial evidence without rollback.
+Identical reruns skip provider and audit mutations. Reviewed publication plans
+now include a provider-neutral shared group plus an explicit create, connect, or
+skip workspace decision; direct five-or-more-spec publication previews require
+that workspace choice before provider inspection. Existing identities classify
+as reuse or unchanged, and no-op apply evidence retains group/workspace
+references. GitHub milestone inspection/apply now resolves shared groups from
+known mappings, issue membership, or an exact bounded title match; creates and
+renames milestones with revision guards; attaches every publication issue; and
+recovers partial or lost-response runs without duplicate milestones. Group
+membership is part of the reviewed snapshot, so drift classifies as update and
+identical reruns make no provider writes. GitHub Project inspection/apply now
+implements the reviewed create/connect/skip workspace decision. Inspection uses
+canonical node/URL identity or a unique exact-title Project already linked to
+the target repository; create performs a final bounded recovery check, records
+revisioned identity evidence, and makes recovered or identical reruns
+write-free. This slice deliberately owns Project identity only: field schema,
+item attachment, status, and drift remain with the execution-workspace port so
+they cannot occur as hidden publication side effects. Confirmed adoption now
+persists completed milestone identity for every reviewed group member and one canonical GitHub Project identity through the existing
+metadata shape. Provider success followed by local-save failure retains recovery
+evidence; lost save responses and identical reruns do not duplicate provider
+objects or audit events. Unknown and legacy-private metadata survive changed
+mapping writes. Repository reconciliation now implements the provider-neutral
+preview/apply service and GitHub repository-evidence port. The adapter resolves
+canonical repository, branch, commit, and optional pull-request evidence;
+detached, forked, stale, cross-repository, and ambiguous states fail closed.
+Reconciliation loads durable mappings, classifies publication drift without
+mutation, requires publish permission and explicit confirmation, revision-guards
+provider and mapping writes, retains partial evidence, audits changed outcomes,
+and makes an identical rerun write-free. Project field, item, and status drift
+remains behind the execution-workspace boundary.
+The native rollout now advances the official Planning module to config v2,
+migrates existing empty config with GitHub disabled, injects the optional
+adapter and independent health, and exposes the reviewed remote collaboration,
+publication/adoption, reconciliation, Project status, guide, and project-check
+families through `brain plan`. Confirmed mutations enforce module permissions,
+audit events, revision-bound previews, and idempotency; disabled mode performs
+no provider or GitHub metadata work and leaves local Planning healthy. The
+remaining Phase 5 gate is coordinated Brain/standalone conformance and release.
+
 Move retained GitHub collaboration/publication/repository/execution behavior
 behind generic Planning ports. Support planning PRs and retained Discussion,
 issue, milestone, Project, and reconciliation behavior. No GitHub type remains in
-Planning domain.
+Planning domain or provider-neutral application/local packages. The approved
+shape uses a conformance-first Plan `v0.1.29` baseline, capability-sized ports,
+an optional importable `planning/github` adapter, explicit enablement and
+permissions, current metadata compatibility, and coordinated Brain-then-Plan
+release gates.
 
 ## Phase 6 — Standalone Plan Linear Cleanup
 
@@ -128,7 +217,9 @@ lifecycle, diagnostics, and distribution direction.
 
 ## Exact Next Slice
 
-> Publish the merged Brain Planning boundary as the next stable Brain tag,
-> replace standalone Plan's temporary pseudo-version with that tag, repeat the
-> cross-repository verification matrix, and publish the corresponding Plan
-> release. Then mark Phase 4 complete and advance to Phase 5.
+Execute [GitHub Integration Conformance and Release](../../.plan/specs/github-integration-conformance-release.md).
+Replay every retained native and standalone manifest family against the shared
+implementation, resolve intentional host-policy differences, then publish the
+coordinated Brain-first/Plan-pin release. Preserve structured briefs, stable
+identity, confirmation, idempotency, partial-failure recovery, and local
+Planning independence throughout.

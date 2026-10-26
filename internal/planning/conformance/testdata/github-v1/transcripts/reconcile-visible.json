@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "calls": [
+    {"operation":"repository.current_context","input":{"project_dir":"<PROJECT>"},"output":{"repo":"JimmyMcBride/plan","default_branch":"develop","current_branch":"codex/github-adapter","current_sha":"abc123","planning_pr":{"number":41,"state":"OPEN","merged":false}}},
+    {"operation":"issue.get","input":{"repo":"JimmyMcBride/plan","number":68},"output":{"opaque_id":"I_kwDOPlan68","number":68,"state":"open","labels":["plan:spec"]}},
+    {"operation":"issue.update","input":{"repo":"JimmyMcBride/plan","number":68,"labels":["plan:spec","plan:ready"],"managed_body":true},"output":{"opaque_id":"I_kwDOPlan68","number":68,"state":"open"}},
+    {"operation":"project.get","input":{"repo":"JimmyMcBride/plan","owner":"JimmyMcBride","number":12},"output":{"opaque_id":"PVT_workspace","number":12}},
+    {"operation":"project.item.get","input":{"project_id":"PVT_workspace","issue":68},"output":{"opaque_id":"PVTI_68","values":{"Status":"Todo","Area":"stale-area"}}},
+    {"operation":"project.item.set","input":{"project_id":"PVT_workspace","item_id":"PVTI_68","field":"Area","value":"github-adapter"},"output":{"action":"update"}}
+  ]
+}

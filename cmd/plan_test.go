@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -11,8 +12,181 @@ import (
 
 	"github.com/JimmyMcBride/brain/internal/modules"
 	officialplanning "github.com/JimmyMcBride/brain/internal/official/planning"
+	"github.com/JimmyMcBride/brain/planning"
 	"github.com/JimmyMcBride/brain/planning/application"
+	planninggithub "github.com/JimmyMcBride/brain/planning/github"
 )
+
+type planningGitHubCLIRunner struct{ calls int }
+
+func (r *planningGitHubCLIRunner) Run(_ context.Context, _ string, args ...string) (planninggithub.RunResult, error) {
+	r.calls++
+	joined := strings.Join(args, " ")
+	if strings.Contains(joined, "repo view") {
+		return planninggithub.RunResult{Stdout: []byte(`{"nameWithOwner":"owner/repo","url":"https://github.com/owner/repo","defaultBranchRef":{"name":"develop"},"hasIssuesEnabled":true}`)}, nil
+	}
+	if strings.Contains(joined, "api graphql") {
+		return planninggithub.RunResult{Stdout: []byte(`{"data":{"repository":{"discussion":{"id":"D_49","number":49,"url":"https://github.com/owner/repo/discussions/49","title":"GitHub rollout","body":"## Problem\nNeed native GitHub planning.\n\n## Goals\nExpose the adapter.\n\n## Non-Goals\nNo source mutation.\n\n## Constraints\nKeep local planning available.\n\n## Proposed Shape\nUse shared services.\n\n## Specs\n- Native rollout","updatedAt":"2026-01-01T00:00:00Z","comments":{"nodes":[],"pageInfo":{"hasNextPage":false,"endCursor":""}}}}}}`)}, nil
+	}
+	return planninggithub.RunResult{}, errors.New("unexpected provider call")
+}
+
+func TestCLIPlanningGitHubConfigurationAndRemoteAssessment(t *testing.T) {
+	env := newCLIEnv(t)
+	fixture := filepath.Join(env.moduleRoot, "planning", "local", "testdata", "compatible")
+	if err := os.CopyFS(env.project, os.DirFS(fixture)); err != nil {
+		t.Fatal(err)
+	}
+	runner := &planningGitHubCLIRunner{}
+	registration := officialplanning.RegistrationWithOptions(officialplanning.Options{GitHubRunner: runner})
+	grant := []string{"--project", env.project, "modules", "grant", officialplanning.ID}
+	grant = append(grant, registration.Descriptor.Permissions...)
+	requireOK(t, runPlanningCLIWithRegistration(t, env, registration, grant...))
+	requireOK(t, runPlanningCLIWithRegistration(t, env, registration, "--project", env.project, "modules", "enable", officialplanning.ID))
+
+	preview := requireOK(t, runPlanningCLIWithRegistration(t, env, registration, "--project", env.project, "plan", "github", "enable"))
+	if runner.calls != 0 || !strings.Contains(preview, "Preview only") {
+		t.Fatalf("preview=%q calls=%d", preview, runner.calls)
+	}
+	enabled := requireOK(t, runPlanningCLIWithRegistration(t, env, registration, "--project", env.project, "plan", "github", "enable", "--confirm"))
+	if !strings.Contains(enabled, "repo: owner/repo") || runner.calls != 2 {
+		t.Fatalf("enabled=%q calls=%d", enabled, runner.calls)
+	}
+	reenabled := requireOK(t, runPlanningCLIWithRegistration(t, env, registration, "--project", env.project, "plan", "github", "enable", "--confirm"))
+	if !strings.Contains(reenabled, "unchanged") || runner.calls != 3 {
+		t.Fatalf("reenabled=%q calls=%d", reenabled, runner.calls)
+	}
+	assessmentJSON := requireOK(t, runPlanningCLIWithRegistration(t, env, registration, "--json", "--project", env.project, "plan", "brainstorm", "assess", "--discussion", "https://github.com/owner/repo/discussions/49"))
+	var assessment application.CollaborationAssessment
+	if err := json.Unmarshal([]byte(assessmentJSON), &assessment); err != nil || assessment.Decision.State != "ready_single_spec" {
+		t.Fatalf("assessment=%+v err=%v", assessment, err)
+	}
+	beforeDisable := runner.calls
+	disabled := requireOK(t, runPlanningCLIWithRegistration(t, env, registration, "--project", env.project, "plan", "github", "disable", "--confirm"))
+	if !strings.Contains(disabled, "github enabled=false") || runner.calls != beforeDisable {
+		t.Fatalf("disabled=%q calls=%d before=%d", disabled, runner.calls, beforeDisable)
+	}
+	result := runPlanningCLIWithRegistration(t, env, registration, "--project", env.project, "plan", "brainstorm", "assess", "--discussion", "49")
+	if result.err != nil && !strings.Contains(result.err.Error(), string(application.IntegrationAdapterDisabled)) {
+		t.Fatalf("disabled assessment=%+v", result)
+	}
+	if result.err == nil || runner.calls != beforeDisable {
+		t.Fatalf("disabled assessment performed work: result=%+v calls=%d", result, runner.calls)
+	}
+	_ = runPlanningCLIWithRegistration(t, env, registration, "--project", env.project, "plan", "check", "project")
+	if runner.calls != beforeDisable {
+		t.Fatalf("disabled project check performed GitHub work: calls=%d before=%d", runner.calls, beforeDisable)
+	}
+}
+
+func TestPlanningGitHubCheckFinding(t *testing.T) {
+	finding := planningGitHubCheckFinding("error", "github.project.missing_item", "missing", "reconcile")
+	if finding.ArtifactType != "integration" || finding.ArtifactPath != ".plan/.meta/github.json" || finding.Section != "GitHub Project" {
+		t.Fatalf("unexpected finding: %#v", finding)
+	}
+}
+
+func TestPublicationCandidatesSelectIssueReference(t *testing.T) {
+	artifact := application.PublicationArtifact{Artifact: planning.ArtifactRef{Kind: planning.ArtifactSpec, ID: "native-github"}}
+	action := application.PublicationApplyAction{Kind: application.PublicationArtifactAction, Artifact: &artifact}
+	plan := application.PublicationPlan{Actions: []application.PublicationApplyAction{action}}
+	issue := application.ExternalReference{Provider: "github", Kind: "issue", OpaqueID: "issue-42", DisplayID: "42", URL: "https://github.com/owner/repo/issues/42"}
+	result := application.PublicationApplyResult{Evidence: application.PublicationResult{Completed: []application.PublicationActionEvidence{{
+		Action: action,
+		References: []application.ExternalReference{
+			{Provider: "github", Kind: "label", OpaqueID: "label-spec", DisplayID: "plan:spec", URL: "https://github.com/owner/repo/labels/plan%3Aspec"},
+			{Provider: "github", Kind: "label", OpaqueID: "label-ready", DisplayID: "plan:ready", URL: "https://github.com/owner/repo/labels/plan%3Aready"},
+			issue,
+		},
+	}}}}
+
+	candidates, err := publicationCandidates(plan, result)
+	if err != nil || len(candidates) != 1 || candidates[0].Reference != issue {
+		t.Fatalf("candidates=%+v err=%v", candidates, err)
+	}
+
+	result.Evidence.Completed[0].References = append(result.Evidence.Completed[0].References, application.ExternalReference{Provider: "github", Kind: "issue", OpaqueID: "issue-43", DisplayID: "43", URL: "https://github.com/owner/repo/issues/43"})
+	if _, err := publicationCandidates(plan, result); err == nil || !strings.Contains(err.Error(), "multiple issue identities") {
+		t.Fatalf("expected ambiguous issue identities, got %v", err)
+	}
+}
+
+func TestReconciliationExecutionStatusOnlyDerivesCanonicalTransitions(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		status planning.SpecStatus
+		want   application.ExecutionStatus
+	}{
+		{name: "implementing", status: planning.SpecImplementing, want: application.ExecutionInProgress},
+		{name: "done", status: planning.SpecDone, want: application.ExecutionDone},
+		{name: "approved preserves provider status", status: planning.SpecApproved},
+		{name: "draft preserves provider status", status: planning.SpecDraft},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := reconciliationExecutionStatus(test.status); got != test.want {
+				t.Fatalf("got %q want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestReconciliationReadinessIncludesUnfinishedDependencies(t *testing.T) {
+	done := planning.Spec{ID: "done", Title: "Done", Status: planning.SpecDone, Approval: planning.Approval{State: planning.ApprovalApproved}, Verification: []string{"verified"}}
+	blocked := planning.Spec{
+		ID: "blocked", Title: "Blocked", Status: planning.SpecApproved,
+		Approval:     planning.Approval{State: planning.ApprovalApproved},
+		Dependencies: []planning.ArtifactID{"unfinished"}, Verification: []string{"verify"},
+	}
+	unfinished := planning.Spec{
+		ID: "unfinished", Title: "Unfinished", Status: planning.SpecApproved,
+		Approval:     planning.Approval{State: planning.ApprovalApproved},
+		Dependencies: []planning.ArtifactID{"done"}, Verification: []string{"verify"},
+	}
+	clarifying := planning.Spec{
+		ID: "clarifying", Title: "Clarifying", Status: planning.SpecApproved,
+		Approval: planning.Approval{State: planning.ApprovalApproved}, Verification: []string{"verify"},
+		UnresolvedQuestions: []string{"Which rollout?"},
+	}
+	readiness, err := reconciliationReadiness([]planning.Spec{blocked, clarifying, done, unfinished})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if readiness[blocked.ID] != planning.ReadinessBlocked || readiness[clarifying.ID] != planning.ReadinessNeedsRefinement || readiness[unfinished.ID] != planning.ReadinessReady || readiness[done.ID] != planning.ReadinessDone {
+		t.Fatalf("unexpected readiness: %+v", readiness)
+	}
+}
+
+type planningWorkspaceMappings struct {
+	state application.ExternalMappingState
+}
+
+func (m planningWorkspaceMappings) Load(context.Context) (application.ExternalMappingState, error) {
+	return m.state, nil
+}
+
+func (planningWorkspaceMappings) Save(context.Context, application.ExternalMappingState, string) (application.ExternalMappingState, error) {
+	return application.ExternalMappingState{}, errors.New("unexpected save")
+}
+
+func TestPlanningPublicationWorkspaceDecision(t *testing.T) {
+	ref := application.ExternalReference{Provider: "github", Kind: "project", OpaqueID: "project-7", DisplayID: "7", URL: "https://github.com/users/owner/projects/7"}
+	mappings := planningWorkspaceMappings{state: application.ExternalMappingState{WorkspaceReferences: []application.ExternalReference{ref}}}
+	connected, err := planningPublicationWorkspaceDecision(context.Background(), mappings, "connect", "Delivery")
+	if err != nil || connected.Choice != application.PublicationWorkspaceConnect || connected.Reference == nil || *connected.Reference != ref {
+		t.Fatalf("connected=%+v err=%v", connected, err)
+	}
+	created, err := planningPublicationWorkspaceDecision(context.Background(), mappings, "create", " Delivery ")
+	if err != nil || created.Choice != application.PublicationWorkspaceCreate || created.Title != "Delivery" {
+		t.Fatalf("created=%+v err=%v", created, err)
+	}
+	skipped, err := planningPublicationWorkspaceDecision(context.Background(), mappings, "skip", "Delivery")
+	if err != nil || skipped.Choice != application.PublicationWorkspaceSkip {
+		t.Fatalf("skipped=%+v err=%v", skipped, err)
+	}
+	if _, err := planningPublicationWorkspaceDecision(context.Background(), mappings, "other", "Delivery"); err == nil || !strings.Contains(err.Error(), "create, connect, or skip") {
+		t.Fatalf("expected invalid choice, got %v", err)
+	}
+}
 
 func TestCLIPlanningLocalWorkflowAndIdempotentAudit(t *testing.T) {
 	env := newCLIEnv(t)
@@ -419,6 +593,14 @@ func TestSplitEditorCommandPreservesQuotedPaths(t *testing.T) {
 }
 
 func runPlanningCLI(t *testing.T, env *cliEnv, stdin string, args ...string) cliResult {
+	return runPlanningCLIWithInput(t, env, officialplanning.Registration(), stdin, args...)
+}
+
+func runPlanningCLIWithRegistration(t *testing.T, env *cliEnv, registration modules.Registration, args ...string) cliResult {
+	return runPlanningCLIWithInput(t, env, registration, "", args...)
+}
+
+func runPlanningCLIWithInput(t *testing.T, env *cliEnv, registration modules.Registration, stdin string, args ...string) cliResult {
 	t.Helper()
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -435,7 +617,7 @@ func runPlanningCLI(t *testing.T, env *cliEnv, stdin string, args ...string) cli
 		in:                  strings.NewReader(stdin),
 		out:                 &stdout,
 		errOut:              &stderr,
-		moduleRegistrations: []modules.Registration{officialplanning.Registration()},
+		moduleRegistrations: []modules.Registration{registration},
 	})
 	command.SetArgs(args)
 	err = command.Execute()

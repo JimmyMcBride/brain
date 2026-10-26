@@ -1,5 +1,5 @@
 ---
-updated: "2026-04-16T22:00:00Z"
+updated: "2026-10-26T20:22:45Z"
 ---
 # Usage
 
@@ -96,7 +96,8 @@ workspaces. Grant its exact permissions, then enable it:
 ```bash
 brain modules grant --project . official.planning \
   planning.read planning.brainstorm planning.roadmap planning.spec.edit \
-  planning.spec.approve planning.execute project.context.read
+  planning.spec.approve planning.collaboration planning.publish \
+  planning.execute project.context.read
 brain modules enable --project . official.planning
 ```
 
@@ -116,6 +117,38 @@ brain plan spec status --project . <slug> --set approved --confirm
 brain plan spec execute --project . <slug> --confirm
 brain plan spec handoff --project . <slug> --confirm
 ```
+
+Enable the optional GitHub adapter only after `gh auth status` succeeds in the
+target repository:
+
+```bash
+brain plan github enable --project .
+brain plan github enable --project . --confirm
+brain plan brainstorm assess --project . --discussion 49
+brain plan brainstorm repair --project . --discussion 49 --spec "First spec" --confirm
+brain plan brainstorm promote --project . --discussion 49
+brain plan brainstorm promote --project . --discussion 49 --apply --confirm
+brain plan github adopt --project . --discussion 49 --issues 101,102 --confirm
+brain plan github reconcile --project .
+brain plan github reconcile --project . --update-visible --confirm
+brain plan github project status --project . --issue 101 --set in-progress --confirm
+brain plan guide show --project . --discussion 49 --stage refinement
+```
+
+When a Discussion produces five or more specs, pass an explicit workspace
+decision to promotion or adoption: `--workspace create`, `--workspace connect`
+for the single configured GitHub Project, or `--workspace skip`.
+
+GitHub mutations are preview-first and require `--confirm`; promotion also
+requires `--apply`. Disabling the adapter preserves Planning artifacts and
+GitHub mappings while preventing provider calls. `brain plan check project`
+adds GitHub Project mapping, membership, and semantic Status checks only while
+the adapter is enabled. Visible reconciliation maps implementing specs to In
+Progress and done specs to Done; it preserves the current Project status for
+draft or approved specs rather than resetting active work to Todo. Readiness is
+recomputed from canonical validation and unfinished dependencies, so blocked
+specs keep their blocked GitHub label. Since GitHub has no separate clarifying
+label, unresolved questions are represented as needs refinement.
 
 `brainstorm start` previews by default. `--confirm` performs the atomic write;
 repeating the same title returns `unchanged` without another write or event.

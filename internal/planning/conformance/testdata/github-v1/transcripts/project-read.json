@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "calls": [
+    {"operation":"repository.preflight","input":{"project_dir":"<PROJECT>"},"output":{"repo":"JimmyMcBride/plan","default_branch":"develop"}},
+    {"operation":"project.get","input":{"repo":"JimmyMcBride/plan","owner":"JimmyMcBride","number":12},"output":{"opaque_id":"PVT_workspace","number":12}},
+    {"operation":"project.item.get","input":{"project_id":"PVT_workspace","issue":67},"output":{"opaque_id":"","values":{}}},
+    {"operation":"project.item.get","input":{"project_id":"PVT_workspace","issue":68},"output":{"opaque_id":"PVTI_68","values":{"Status":"Todo","Area":"stale-area"}}}
+  ]
+}

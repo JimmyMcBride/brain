@@ -53,6 +53,9 @@ controlled migration.
   [Planning Domain Extraction](./specs/planning-domain-extraction.md) was merged
   by PR #38. Phase 3's
   [Local Planning Module](./specs/local-planning-module.md) was merged by PR #39.
-- Phase 4's approved
-  [Plan CLI Compatibility](./specs/plan-cli-compatibility.md) spec is the next
-  execution contract.
+- Phase 4's [Plan CLI Compatibility](./specs/plan-cli-compatibility.md) is
+  complete. Phase 5's approved
+  [GitHub Adapter Transition](./specs/github-adapter-transition.md) is the
+  current execution contract. Its remaining work is split into five child
+  specs covering coordination mappings, repository reconciliation, execution
+  workspaces, native rollout, and coordinated conformance/release.

@@ -122,10 +122,10 @@ func (a *Adapter) Status(context.Context) (application.WorkspaceStatus, error) {
 		status.Writable = true
 		status.Message = "local Planning workspace is compatible"
 	case string(planning.OwnershipGitHub), string(planning.OwnershipHybrid):
-		status.State = application.WorkspaceUnsupportedSource
+		status.State = application.WorkspaceCompatible
 		status.Ownership = planning.OwnershipMode(meta.SourceMode)
-		status.Message = fmt.Sprintf("Planning source mode %q is not supported by the local module", meta.SourceMode)
-		status.Guidance = []string{"continue with standalone Plan until the matching Brain adapter ships"}
+		status.Message = fmt.Sprintf("Planning source mode %q is readable through the local compatibility mirror", meta.SourceMode)
+		status.Guidance = []string{"use the enabled provider adapter for mutations"}
 	default:
 		status.State = application.WorkspaceUnsupportedLegacy
 		status.Message = "Planning workspace uses an unsupported legacy integration"
@@ -136,7 +136,7 @@ func (a *Adapter) Status(context.Context) (application.WorkspaceStatus, error) {
 
 // ListBrainstorms returns local brainstorm documents in deterministic order.
 func (a *Adapter) ListBrainstorms(ctx context.Context) ([]application.BrainstormDocument, error) {
-	if err := a.requireCompatible(ctx); err != nil {
+	if err := a.requireReadable(ctx); err != nil {
 		return nil, err
 	}
 	paths, err := markdownFiles(filepath.Join(a.projectRoot, ".plan", "brainstorms"))
@@ -162,7 +162,7 @@ func (a *Adapter) ListBrainstorms(ctx context.Context) ([]application.Brainstorm
 
 // GetBrainstorm returns one local brainstorm document.
 func (a *Adapter) GetBrainstorm(ctx context.Context, id planning.ArtifactID) (application.BrainstormDocument, error) {
-	if err := a.requireCompatible(ctx); err != nil {
+	if err := a.requireReadable(ctx); err != nil {
 		return application.BrainstormDocument{}, err
 	}
 	if err := id.Validate(); err != nil {
@@ -189,7 +189,7 @@ func (a *Adapter) CreateBrainstorm(
 	artifact planning.Brainstorm,
 	createdAt time.Time,
 ) (application.BrainstormDocument, application.MutationAction, error) {
-	if err := a.requireCompatible(ctx); err != nil {
+	if err := a.requireWritable(ctx); err != nil {
 		return application.BrainstormDocument{}, "", err
 	}
 	if findings := planning.ValidateBrainstorm(artifact); hasErrorFindings(findings) {
@@ -240,7 +240,7 @@ func (a *Adapter) CreateBrainstorm(
 
 // RollbackBrainstormCreation removes only the exact brainstorm created by a failed application mutation.
 func (a *Adapter) RollbackBrainstormCreation(ctx context.Context, artifact planning.Brainstorm, createdAt time.Time) error {
-	if err := a.requireCompatible(ctx); err != nil {
+	if err := a.requireWritable(ctx); err != nil {
 		return err
 	}
 	if findings := planning.ValidateBrainstorm(artifact); hasErrorFindings(findings) {
@@ -282,7 +282,7 @@ func (a *Adapter) ReplaceBrainstorm(
 	body string,
 	updatedAt time.Time,
 ) (application.BrainstormDocument, application.MutationAction, error) {
-	if err := a.requireCompatible(ctx); err != nil {
+	if err := a.requireWritable(ctx); err != nil {
 		return application.BrainstormDocument{}, "", err
 	}
 	if err := id.Validate(); err != nil {
@@ -320,7 +320,7 @@ func (a *Adapter) ReplaceBrainstorm(
 
 // ReadGuidedSessions returns schema-v3 local guided-session state without creating it.
 func (a *Adapter) ReadGuidedSessions(ctx context.Context) (application.GuidedSessionState, error) {
-	if err := a.requireCompatible(ctx); err != nil {
+	if err := a.requireReadable(ctx); err != nil {
 		return application.GuidedSessionState{}, err
 	}
 	path := filepath.Join(a.projectRoot, ".plan", ".meta", "guided_sessions.json")
@@ -349,7 +349,7 @@ func (a *Adapter) ReadGuidedSessions(ctx context.Context) (application.GuidedSes
 
 // ReplaceGuidedSessions atomically replaces guided-session state or reports it unchanged.
 func (a *Adapter) ReplaceGuidedSessions(ctx context.Context, state application.GuidedSessionState) (application.GuidedSessionState, application.MutationAction, error) {
-	if err := a.requireCompatible(ctx); err != nil {
+	if err := a.requireWritable(ctx); err != nil {
 		return application.GuidedSessionState{}, "", err
 	}
 	state.SchemaVersion = currentSchemaVersion
@@ -386,7 +386,7 @@ func (a *Adapter) ReplaceGuidedSessions(ctx context.Context, state application.G
 
 // ListSpecs returns validated local spec documents in deterministic order.
 func (a *Adapter) ListSpecs(ctx context.Context) ([]application.SpecDocument, error) {
-	if err := a.requireCompatible(ctx); err != nil {
+	if err := a.requireReadable(ctx); err != nil {
 		return nil, err
 	}
 	paths, err := markdownFiles(filepath.Join(a.projectRoot, ".plan", "specs"))
@@ -412,7 +412,7 @@ func (a *Adapter) ListSpecs(ctx context.Context) ([]application.SpecDocument, er
 
 // GetSpec returns one validated local spec document.
 func (a *Adapter) GetSpec(ctx context.Context, id planning.ArtifactID) (application.SpecDocument, error) {
-	if err := a.requireCompatible(ctx); err != nil {
+	if err := a.requireReadable(ctx); err != nil {
 		return application.SpecDocument{}, err
 	}
 	if err := id.Validate(); err != nil {
@@ -439,7 +439,7 @@ func (a *Adapter) WritePromotionSpecs(
 	writes []application.PromotionSpecWrite,
 	updatedAt time.Time,
 ) ([]application.SpecDocument, application.MutationAction, error) {
-	if err := a.requireCompatible(ctx); err != nil {
+	if err := a.requireWritable(ctx); err != nil {
 		return nil, "", err
 	}
 	release, err := acquireMutationLock(ctx, filepath.Join(a.projectRoot, ".plan", ".promotion.lock"))
@@ -528,7 +528,7 @@ func (a *Adapter) WritePromotionSpecs(
 
 // ReplaceSpec atomically replaces one canonical spec document or reports it unchanged.
 func (a *Adapter) ReplaceSpec(ctx context.Context, document application.SpecDocument, updatedAt time.Time) (application.SpecDocument, application.MutationAction, error) {
-	if err := a.requireCompatible(ctx); err != nil {
+	if err := a.requireWritable(ctx); err != nil {
 		return application.SpecDocument{}, "", err
 	}
 	if err := document.Artifact.ID.Validate(); err != nil {
@@ -588,7 +588,7 @@ func (a *Adapter) ReplaceSpec(ctx context.Context, document application.SpecDocu
 // RollbackSpecReplacement restores a prior document when the current document exactly matches the failed mutation.
 // It succeeds without writing when the prior document has already been restored.
 func (a *Adapter) RollbackSpecReplacement(ctx context.Context, expected, previous application.SpecDocument) error {
-	if err := a.requireCompatible(ctx); err != nil {
+	if err := a.requireWritable(ctx); err != nil {
 		return err
 	}
 	path := filepath.Join(a.projectRoot, ".plan", "specs", string(expected.Artifact.ID)+".md")
@@ -623,7 +623,7 @@ func (a *Adapter) RollbackSpecReplacement(ctx context.Context, expected, previou
 
 // QuerySpecs returns minimally parsed specs for aggregate status and quality checks.
 func (a *Adapter) QuerySpecs(ctx context.Context, id *planning.ArtifactID) ([]application.SpecQueryDocument, error) {
-	if err := a.requireCompatible(ctx); err != nil {
+	if err := a.requireReadable(ctx); err != nil {
 		return nil, err
 	}
 	var paths []string
@@ -664,7 +664,7 @@ func (a *Adapter) QuerySpecs(ctx context.Context, id *planning.ArtifactID) ([]ap
 
 // ReadRoadmap returns complete local roadmap Markdown.
 func (a *Adapter) ReadRoadmap(ctx context.Context) (application.RoadmapDocument, error) {
-	if err := a.requireCompatible(ctx); err != nil {
+	if err := a.requireReadable(ctx); err != nil {
 		return application.RoadmapDocument{}, err
 	}
 	path := filepath.Join(a.projectRoot, ".plan", "ROADMAP.md")
@@ -677,7 +677,7 @@ func (a *Adapter) ReadRoadmap(ctx context.Context) (application.RoadmapDocument,
 
 // ReplaceRoadmap atomically replaces roadmap Markdown or reports it unchanged.
 func (a *Adapter) ReplaceRoadmap(ctx context.Context, body string) (application.RoadmapDocument, application.MutationAction, error) {
-	if err := a.requireCompatible(ctx); err != nil {
+	if err := a.requireWritable(ctx); err != nil {
 		return application.RoadmapDocument{}, "", err
 	}
 	path := filepath.Join(a.projectRoot, ".plan", "ROADMAP.md")
@@ -704,12 +704,23 @@ func (a *Adapter) ReplaceRoadmap(ctx context.Context, body string) (application.
 	return document, application.MutationUpdate, nil
 }
 
-func (a *Adapter) requireCompatible(ctx context.Context) error {
+func (a *Adapter) requireReadable(ctx context.Context) error {
 	status, err := a.Status(ctx)
 	if err != nil {
 		return err
 	}
 	if status.State != application.WorkspaceCompatible {
+		return fmt.Errorf("%w: %s", application.ErrWorkspaceNotReadable, status.Message)
+	}
+	return nil
+}
+
+func (a *Adapter) requireWritable(ctx context.Context) error {
+	status, err := a.Status(ctx)
+	if err != nil {
+		return err
+	}
+	if status.State != application.WorkspaceCompatible || !status.Writable {
 		return fmt.Errorf("%w: %s", application.ErrWorkspaceNotWritable, status.Message)
 	}
 	return nil

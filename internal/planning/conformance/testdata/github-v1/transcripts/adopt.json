@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "calls": [
+    {"operation":"repository.current_context","input":{"project_dir":"<PROJECT>"},"output":{"repo":"JimmyMcBride/plan","default_branch":"develop","current_branch":"develop","current_sha":"abc123"}},
+    {"operation":"discussion.get","input":{"repo":"JimmyMcBride/plan","number":49},"output":{"opaque_id":"D_kwDOPlan49","number":49}},
+    {"operation":"issue.get","input":{"repo":"JimmyMcBride/plan","number":201},"output":{"opaque_id":"I_kwDOPlan201","number":201,"title":"GitHub collaboration foundation"}},
+    {"operation":"issue.get","input":{"repo":"JimmyMcBride/plan","number":202},"output":{"opaque_id":"I_kwDOPlan202","number":202,"title":"Collaboration source"}},
+    {"operation":"issue.get","input":{"repo":"JimmyMcBride/plan","number":203},"output":{"opaque_id":"I_kwDOPlan203","number":203,"title":"Publication target"}},
+    {"operation":"issue.update","input":{"repo":"JimmyMcBride/plan","number":201,"kind":"initiative"},"output":{"opaque_id":"I_kwDOPlan201","number":201}},
+    {"operation":"issue.update","input":{"repo":"JimmyMcBride/plan","number":202,"kind":"spec"},"output":{"opaque_id":"I_kwDOPlan202","number":202}},
+    {"operation":"issue.update","input":{"repo":"JimmyMcBride/plan","number":203,"kind":"spec"},"output":{"opaque_id":"I_kwDOPlan203","number":203}},
+    {"operation":"relationship.add_sub_issue","input":{"repo":"JimmyMcBride/plan","parent":201,"child":202},"output":{"action":"create"}},
+    {"operation":"relationship.add_sub_issue","input":{"repo":"JimmyMcBride/plan","parent":201,"child":203},"output":{"action":"create"}},
+    {"operation":"relationship.add_blocked_by","input":{"repo":"JimmyMcBride/plan","issue":203,"blocking_issue":202},"output":{"action":"create"}}
+  ]
+}

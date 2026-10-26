@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/JimmyMcBride/brain/internal/app"
 	"github.com/JimmyMcBride/brain/internal/history"
@@ -84,6 +85,12 @@ func addPlanningCommand(root *cobra.Command, _ *rootFlagsState, loadApp appLoade
 				report, err := service.Check(cmd.Context(), input)
 				if err != nil {
 					return err
+				}
+				if input.SpecID == nil {
+					report, err = extendPlanningGitHubCheck(cmd.Context(), appCtx, report)
+					if err != nil {
+						return err
+					}
 				}
 				if err := appCtx.Output.Print(report, func(w io.Writer) error { return printPlanningCheckReport(w, report) }); err != nil {
 					return err
@@ -334,6 +341,7 @@ func addPlanningCommand(root *cobra.Command, _ *rootFlagsState, loadApp appLoade
 
 	guideCmd := newPlanningGuideCommand(loadApp)
 	planCmd.AddCommand(statusCmd, checkCmd, roadmapCmd, brainstormCmd, guideCmd, specCmd)
+	addPlanningGitHubCommands(planCmd, loadApp)
 	root.AddCommand(planCmd)
 }
 
@@ -841,9 +849,19 @@ func addPlanningGuidedMutationCommands(brainstormCmd *cobra.Command, loadApp app
 }
 
 func addPlanningPromotionCommands(brainstormCmd *cobra.Command, loadApp appLoader) {
+	var assessDiscussion string
 	assessCmd := &cobra.Command{
-		Use: "assess <brainstorm-slug>", Short: "Assess local brainstorm promotion maturity", Args: cobra.ExactArgs(1),
+		Use: "assess [brainstorm-slug]", Short: "Assess local or GitHub Discussion promotion maturity", Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if assessDiscussion != "" {
+				if len(args) != 0 {
+					return fmt.Errorf("assess accepts either a brainstorm slug or --discussion")
+				}
+				return runPlanningDiscussionAssess(cmd, loadApp, assessDiscussion)
+			}
+			if len(args) != 1 {
+				return fmt.Errorf("assess requires a brainstorm slug or --discussion")
+			}
 			return withPlanningService(cmd, loadApp, application.PermissionRead, func(appCtx *app.App, service *application.Service, _ planningAuthorizer, _ string) error {
 				assessment, err := service.AssessLocalBrainstorm(cmd.Context(), planning.ArtifactID(args[0]))
 				if err != nil {
@@ -856,10 +874,23 @@ func addPlanningPromotionCommands(brainstormCmd *cobra.Command, loadApp appLoade
 			})
 		},
 	}
+	assessCmd.Flags().StringVar(&assessDiscussion, "discussion", "", "GitHub Discussion number or URL")
 	var confirmPromote bool
+	var promoteDiscussion string
+	var applyPromote bool
+	var promoteWorkspace string
 	promoteCmd := &cobra.Command{
-		Use: "promote <brainstorm-slug>", Short: "Preview or apply direct local spec promotion", Args: cobra.ExactArgs(1),
+		Use: "promote [brainstorm-slug]", Short: "Preview or apply local or GitHub Discussion promotion", Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if promoteDiscussion != "" {
+				if len(args) != 0 {
+					return fmt.Errorf("promote accepts either a brainstorm slug or --discussion")
+				}
+				return runPlanningDiscussionPromote(cmd, loadApp, promoteDiscussion, promoteWorkspace, applyPromote, confirmPromote)
+			}
+			if len(args) != 1 {
+				return fmt.Errorf("promote requires a brainstorm slug or --discussion")
+			}
 			id := planning.ArtifactID(args[0])
 			return withPlanningService(cmd, loadApp, application.PermissionRead, func(appCtx *app.App, service *application.Service, authorizer planningAuthorizer, _ string) error {
 				if !confirmPromote {
@@ -884,12 +915,25 @@ func addPlanningPromotionCommands(brainstormCmd *cobra.Command, loadApp appLoade
 		},
 	}
 	promoteCmd.Flags().BoolVar(&confirmPromote, "confirm", false, "confirm direct local spec writes")
+	promoteCmd.Flags().BoolVar(&applyPromote, "apply", false, "apply a GitHub publication preview")
+	promoteCmd.Flags().StringVar(&promoteDiscussion, "discussion", "", "GitHub Discussion number or URL")
+	promoteCmd.Flags().StringVar(&promoteWorkspace, "workspace", "", "GitHub workspace decision: create, connect, or skip")
 
 	var repairSpecs []string
 	var confirmRepair bool
+	var repairDiscussion string
 	repairCmd := &cobra.Command{
-		Use: "repair <brainstorm-slug>", Short: "Preview or repair the local spec split", Args: cobra.ExactArgs(1),
+		Use: "repair [brainstorm-slug]", Short: "Preview or repair a local or GitHub Discussion spec split", Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if repairDiscussion != "" {
+				if len(args) != 0 {
+					return fmt.Errorf("repair accepts either a brainstorm slug or --discussion")
+				}
+				return runPlanningDiscussionRepair(cmd, loadApp, repairDiscussion, repairSpecs, confirmRepair)
+			}
+			if len(args) != 1 {
+				return fmt.Errorf("repair requires a brainstorm slug or --discussion")
+			}
 			return withPlanningService(cmd, loadApp, application.PermissionRead, func(appCtx *app.App, service *application.Service, authorizer planningAuthorizer, _ string) error {
 				input := application.LocalPromotionRepairInput{BrainstormID: planning.ArtifactID(args[0]), Specs: repairSpecs, Confirmed: confirmRepair}
 				if !confirmRepair {
@@ -921,6 +965,7 @@ func addPlanningPromotionCommands(brainstormCmd *cobra.Command, loadApp appLoade
 	}
 	repairCmd.Flags().StringArrayVar(&repairSpecs, "spec", nil, "spec title; repeat for each spec")
 	repairCmd.Flags().BoolVar(&confirmRepair, "confirm", false, "confirm the brainstorm write")
+	repairCmd.Flags().StringVar(&repairDiscussion, "discussion", "", "GitHub Discussion number or URL")
 	brainstormCmd.AddCommand(assessCmd, promoteCmd, repairCmd)
 }
 
@@ -938,10 +983,13 @@ func newPlanningGuideCommand(loadApp appLoader) *cobra.Command {
 			})
 		},
 	}
-	var chainID, checkpoint string
+	var chainID, checkpoint, discussion, stage string
 	showCmd := &cobra.Command{
 		Use: "show", Short: "Render one local guide packet", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if discussion != "" {
+				return runPlanningDiscussionGuide(cmd, loadApp, discussion, stage)
+			}
 			if strings.TrimSpace(chainID) == "" {
 				return fmt.Errorf("guide show requires --chain")
 			}
@@ -956,6 +1004,8 @@ func newPlanningGuideCommand(loadApp appLoader) *cobra.Command {
 	}
 	showCmd.Flags().StringVar(&chainID, "chain", "", "guided session chain id")
 	showCmd.Flags().StringVar(&checkpoint, "checkpoint", "", "guide checkpoint override")
+	showCmd.Flags().StringVar(&discussion, "discussion", "", "GitHub Discussion number or URL")
+	showCmd.Flags().StringVar(&stage, "stage", "", "remote collaboration guide stage")
 	guideCmd.AddCommand(currentCmd, showCmd)
 	return guideCmd
 }
@@ -1211,6 +1261,12 @@ func (s planningEventSink) Publish(_ context.Context, event application.Event) e
 	target := string(event.Artifact.ID)
 	file := ".plan/brainstorms/" + target + ".md"
 	summary := "Planning brainstorm created"
+	if event.Source != nil && target == "" {
+		target = event.Source.DisplayID
+		if target == "" {
+			target = event.Source.OpaqueID
+		}
+	}
 	switch event.Name {
 	case application.EventRoadmapUpdated:
 		file = ".plan/ROADMAP.md"
@@ -1228,6 +1284,30 @@ func (s planningEventSink) Publish(_ context.Context, event application.Event) e
 	case application.EventSpecExecutionStarted:
 		file = ".plan/specs/" + target + ".md"
 		summary = "Planning spec execution started"
+	case application.EventCollaborationRepaired:
+		file = ".plan/.meta/github.json"
+		summary = "Planning collaboration source repaired"
+	case application.EventPublicationApplied:
+		file = ".plan/.meta/github.json"
+		summary = "Planning publication applied"
+	case application.EventIntegrationConfigured:
+		file = ".brain/modules.yaml"
+		summary = "Planning integration configured"
+	case application.EventIntegrationAdopted:
+		file = ".plan/.meta/github.json"
+		summary = "Planning integration mappings adopted"
+	case application.EventIntegrationReconciled:
+		file = ".plan/.meta/github.json"
+		summary = "Planning integration reconciled"
+	case application.EventExecutionAttached:
+		file = ".plan/.meta/github.json"
+		summary = "Planning execution work attached"
+	case application.EventExecutionStatusUpdated:
+		file = ".plan/.meta/github.json"
+		summary = "Planning execution status updated"
+	}
+	if event.OccurredAt.IsZero() {
+		event.OccurredAt = time.Now().UTC()
 	}
 	return s.history.Append(history.Entry{
 		ID:        strings.Join([]string{event.ModuleID, event.Name, target, fmt.Sprintf("%d", event.OccurredAt.UnixNano())}, ":"),

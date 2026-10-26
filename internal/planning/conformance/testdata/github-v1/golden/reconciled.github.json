@@ -1,0 +1,35 @@
+{
+  "repo": "JimmyMcBride/plan",
+  "repo_url": "https://github.com/JimmyMcBride/plan",
+  "default_branch": "develop",
+  "last_enabled_at": "2026-05-17T00:00:00Z",
+  "last_updated_at": "<TIMESTAMP>",
+  "last_reconciled_at": "<TIMESTAMP>",
+  "stories": {
+    "repository-evidence": {
+      "slug": "repository-evidence",
+      "title": "Repository evidence",
+      "epic": "github-adapter",
+      "spec": "github-adapter",
+      "status": "todo",
+      "description": "Preserve planning pull request and document reference evidence.",
+      "issue_number": 68,
+      "issue_url": "https://github.com/JimmyMcBride/plan/issues/68",
+      "remote_state": "open",
+      "planning_pr_number": 41,
+      "planning_pr_url": "https://github.com/JimmyMcBride/plan/pull/41",
+      "planning_pr_merged": false,
+      "doc_ref_mode": "sha",
+      "doc_ref": "abc123",
+      "ready": true,
+      "updated_at": "<TIMESTAMP>"
+    }
+  },
+  "planning": {
+    "github-adapter": {"slug": "github-adapter", "kind": "initiative", "title": "GitHub adapter", "issue_number": 67, "issue_url": "https://github.com/JimmyMcBride/plan/issues/67", "remote_state": "open", "readiness": "ready", "ownership_mode": "github", "entry_mode": "github_discussion", "source_mode": "github", "discussion_number": 49, "discussion_url": "https://github.com/JimmyMcBride/plan/discussions/49", "milestone_number": 7, "milestone_title": "GitHub adapter", "updated_at": "2026-05-17T00:00:00Z"},
+    "repository-evidence": {"slug": "repository-evidence", "kind": "spec", "title": "Repository evidence", "issue_number": 68, "issue_url": "https://github.com/JimmyMcBride/plan/issues/68", "remote_state": "open", "readiness": "ready", "ownership_mode": "github", "entry_mode": "github_discussion", "source_mode": "github", "discussion_number": 49, "discussion_url": "https://github.com/JimmyMcBride/plan/discussions/49", "parent_issue_number": 67, "milestone_number": 7, "milestone_title": "GitHub adapter", "updated_at": "2026-05-17T00:00:00Z"}
+  },
+  "project_decisions": {
+    "github-adapter": {"slug": "github-adapter", "decision": "connect", "initiative_slug": "github-adapter", "spec_count": 1, "milestone_number": 7, "milestone_title": "GitHub adapter", "project_owner": "JimmyMcBride", "project_number": 12, "project_id": "PVT_workspace", "project_url": "https://github.com/users/JimmyMcBride/projects/12", "field_ids": {"Type": "PVTF_type", "Stage": "PVTF_stage", "Ready": "PVTF_ready", "Status": "PVTF_status", "Area": "PVTF_area"}, "source_mode": "github", "entry_mode": "github_discussion", "discussion_number": 49, "discussion_url": "https://github.com/JimmyMcBride/plan/discussions/49", "updated_at": "2026-05-17T00:00:00Z"}
+  }
+}

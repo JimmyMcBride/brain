@@ -38,7 +38,7 @@ the `plan` command as a shared compatibility wrapper.
 - [x] [Planning domain extraction](./specs/planning-domain-extraction.md)
 - [x] [Local Planning module](./specs/local-planning-module.md): `.plan/`
   adapter/fixtures plus native commands, permissions, and events
-- [ ] [Plan CLI compatibility](./specs/plan-cli-compatibility.md): shared local
+- [x] [Plan CLI compatibility](./specs/plan-cli-compatibility.md): shared local
   behavior, full command disposition, wrapper policy, and compatibility tests
 
 ## Phase 5–7: Integrations and Knowledge Loop
@@ -46,7 +46,12 @@ the `plan` command as a shared compatibility wrapper.
 Goal: Move GitHub behind adapters, keep Linear outside Brain Planning, and connect
 Planning outcomes to review-first Brain memory proposals.
 
-- [ ] GitHub adapter transition
+- [ ] [GitHub adapter transition](./specs/github-adapter-transition.md)
+  - [x] [Coordination mapping persistence](./specs/github-coordination-mapping-persistence.md)
+  - [x] [Repository reconciliation](./specs/github-repository-reconciliation.md)
+  - [x] [Execution workspace](./specs/github-execution-workspace.md)
+  - [x] [Native GitHub Planning rollout](./specs/native-github-planning-rollout.md)
+  - [ ] [Integration conformance and release](./specs/github-integration-conformance-release.md)
 - [ ] Reject legacy Linear workspaces with standalone Plan migration guidance
 - [ ] Brain context sources and Planning context packets
 - [ ] Completion-to-memory proposals

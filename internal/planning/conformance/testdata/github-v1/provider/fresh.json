@@ -1,0 +1,14 @@
+{
+  "repository": {
+    "name_with_owner": "JimmyMcBride/plan",
+    "url": "https://github.com/JimmyMcBride/plan",
+    "default_branch": "develop",
+    "issues_enabled": true
+  },
+  "current_branch": "codex/github-adapter",
+  "current_sha": "abc123",
+  "discussions": {},
+  "issues": {},
+  "milestones": {},
+  "projects": {}
+}

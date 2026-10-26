@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "calls": [
+    {"operation":"repository.current_context","input":{"project_dir":"<PROJECT>"},"output":{"repo":"JimmyMcBride/plan","default_branch":"develop","current_branch":"develop","current_sha":"abc123"}},
+    {"operation":"discussion.get","input":{"repo":"JimmyMcBride/plan","number":49},"output":{"opaque_id":"D_kwDOPlan49","number":49,"revision":"discussion-revision-1"}},
+    {"operation":"issue.list","input":{"repo":"JimmyMcBride/plan","labels":["plan:initiative","plan:spec"],"limit":1000},"output":{"issues":[]}},
+    {"operation":"milestone.find","input":{"repo":"JimmyMcBride/plan","title":"GitHub collaboration foundation"},"output":{"found":false}},
+    {"operation":"label.ensure","input":{"repo":"JimmyMcBride/plan","name":"plan:initiative"},"output":{"action":"create"}},
+    {"operation":"label.ensure","input":{"repo":"JimmyMcBride/plan","name":"plan:spec"},"output":{"action":"create"}},
+    {"operation":"milestone.create","input":{"repo":"JimmyMcBride/plan","title":"GitHub collaboration foundation"},"output":{"opaque_id":"MI_kwDOPlan1","number":1}},
+    {"operation":"issue.create","input":{"repo":"JimmyMcBride/plan","kind":"initiative","title":"GitHub collaboration foundation","milestone":1},"output":{"opaque_id":"I_kwDOPlan101","number":101,"url":"https://github.com/JimmyMcBride/plan/issues/101"}},
+    {"operation":"issue.create","input":{"repo":"JimmyMcBride/plan","kind":"spec","title":"Collaboration source","milestone":1},"output":{"opaque_id":"I_kwDOPlan102","number":102,"url":"https://github.com/JimmyMcBride/plan/issues/102"}},
+    {"operation":"issue.create","input":{"repo":"JimmyMcBride/plan","kind":"spec","title":"Publication target","milestone":1},"output":{"opaque_id":"I_kwDOPlan103","number":103,"url":"https://github.com/JimmyMcBride/plan/issues/103"}},
+    {"operation":"relationship.add_sub_issue","input":{"repo":"JimmyMcBride/plan","parent":101,"child":102},"output":{"action":"create"}},
+    {"operation":"relationship.add_sub_issue","input":{"repo":"JimmyMcBride/plan","parent":101,"child":103},"output":{"action":"create"}},
+    {"operation":"relationship.add_blocked_by","input":{"repo":"JimmyMcBride/plan","issue":103,"blocking_issue":102},"output":{"action":"create"}}
+  ]
+}

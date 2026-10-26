@@ -226,6 +226,7 @@ type Event struct {
 	Artifact   planning.ArtifactRef `json:"artifact"`
 	Outcome    MutationAction       `json:"outcome"`
 	OccurredAt time.Time            `json:"occurred_at"`
+	Source     *ExternalReference   `json:"source,omitempty"`
 }
 
 // Repository is the persistence boundary required by shared Planning use cases.

@@ -1,5 +1,5 @@
 ---
-updated: "2026-08-09T21:58:01Z"
+updated: "2026-10-26T20:24:19Z"
 ---
 # Workflows
 
@@ -57,6 +57,7 @@ After `brain adopt` creates starter context, the AI agent must scan the repo bef
 
 ## Local Notes
 
+- 2026-10-26: Native GitHub Planning commands are preview-first and require the existing exact module grants. Enablement preflights authenticated `gh` and repository identity before config/state mutation; failure rolls config back to disabled. Discussion repair requires `planning.collaboration`; publication, adoption, reconciliation, and adapter configuration require `planning.publish`; Project status requires `planning.execute`; reads require `planning.read`. Disabled-mode tests must prove zero provider calls, GitHub metadata writes, and GitHub events. Verification for host changes includes config migration/health, CLI JSON/human output, provider fake transcripts, full test/race/vet/build, Windows build, and standalone `plan check`.
 - 2026-04-20: Gitflow source of truth is `develop` for ongoing integration, `release/vX.Y.Z` for protected release stabilization, and `main` for protected production releases.
 - 2026-04-20: Never push directly to `develop`, `release/*`, or `main`; use pull requests for all protected-branch changes.
 - 2026-04-20: Release fixes go into `develop` first, then the exact commit is cherry-picked into the active `release/vX.Y.Z` branch.

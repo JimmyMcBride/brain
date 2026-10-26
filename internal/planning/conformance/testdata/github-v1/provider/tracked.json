@@ -1,0 +1,44 @@
+{
+  "repository": {
+    "name_with_owner": "JimmyMcBride/plan",
+    "url": "https://github.com/JimmyMcBride/plan",
+    "default_branch": "develop",
+    "issues_enabled": true
+  },
+  "current_branch": "codex/github-adapter",
+  "current_sha": "abc123",
+  "planning_pull_request": {
+    "node_id": "PR_kwDOPlan41",
+    "number": 41,
+    "url": "https://github.com/JimmyMcBride/plan/pull/41",
+    "state": "OPEN",
+    "head_ref": "codex/github-adapter",
+    "base_ref": "develop",
+    "is_draft": false,
+    "is_merged": false,
+    "head_sha": "abc123"
+  },
+  "issues": {
+    "67": {"node_id": "I_kwDOPlan67", "number": 67, "url": "https://github.com/JimmyMcBride/plan/issues/67", "title": "GitHub adapter", "state": "open", "labels": ["plan:initiative"]},
+    "68": {"node_id": "I_kwDOPlan68", "number": 68, "url": "https://github.com/JimmyMcBride/plan/issues/68", "title": "Repository evidence", "state": "open", "labels": ["plan:spec"]}
+  },
+  "projects": {
+    "12": {
+      "owner": "JimmyMcBride",
+      "number": 12,
+      "node_id": "PVT_workspace",
+      "url": "https://github.com/users/JimmyMcBride/projects/12",
+      "title": "GitHub adapter",
+      "fields": {
+        "Type": {"node_id": "PVTF_type", "type": "SINGLE_SELECT", "options": {"Tracking": "type_tracking", "Spec": "type_spec"}},
+        "Stage": {"node_id": "PVTF_stage", "type": "SINGLE_SELECT", "options": {"Approved": "stage_approved"}},
+        "Ready": {"node_id": "PVTF_ready", "type": "SINGLE_SELECT", "options": {"Yes": "ready_yes", "No": "ready_no"}},
+        "Status": {"node_id": "PVTF_status", "type": "SINGLE_SELECT", "options": {"Todo": "todo", "In Progress": "progress", "Done": "done"}},
+        "Area": {"node_id": "PVTF_area", "type": "TEXT"}
+      },
+      "items": {
+        "68": {"node_id": "PVTI_68", "issue_number": 68, "values": {"Type": "Spec", "Stage": "Approved", "Ready": "Yes", "Status": "Todo", "Area": "stale-area"}}
+      }
+    }
+  }
+}

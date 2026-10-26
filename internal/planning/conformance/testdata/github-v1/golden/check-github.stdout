@@ -1,0 +1,6 @@
+check_scope: project
+findings: 3 total, 3 blocking, 0 guidance
+- github_project.missing_item: Issue #67 is missing from GitHub Project GitHub adapter.
+- github_project.stale_item_field: Issue #68 Project field "Area" is "stale-area"; expected "github-adapter".
+- github_project.missing_field_option: GitHub Project field "Status" is missing option "In Review".
+status: blocked

@@ -1,0 +1,28 @@
+{
+  "repository": {
+    "name_with_owner": "JimmyMcBride/plan",
+    "url": "https://github.com/JimmyMcBride/plan",
+    "default_branch": "develop",
+    "issues_enabled": true
+  },
+  "current_branch": "develop",
+  "current_sha": "abc123",
+  "discussions": {
+    "49": {
+      "node_id": "D_kwDOPlan49",
+      "number": 49,
+      "url": "https://github.com/JimmyMcBride/plan/discussions/49",
+      "title": "GitHub collaboration foundation",
+      "body": "## Problem\nGitHub-native collaboration needs a disciplined promotion flow.\n\n## Goals\nCreate initiative/spec issues from mature discussions.\n\n## Non-Goals\nDo not build a custom UI.\n\n## Constraints\nKeep issue bodies canonical after promotion.\n\n## Proposed Shape\nUse discussions for brainstorming and issues for distilled planning artifacts.\n\n## Spec Split\n- Collaboration source\n- Publication target\n\nPublication target depends on Collaboration source.",
+      "revision": "discussion-revision-1",
+      "comments": []
+    }
+  },
+  "issues": {
+    "201": {"node_id": "I_kwDOPlan201", "number": 201, "url": "https://github.com/JimmyMcBride/plan/issues/201", "title": "GitHub collaboration foundation", "state": "open", "labels": []},
+    "202": {"node_id": "I_kwDOPlan202", "number": 202, "url": "https://github.com/JimmyMcBride/plan/issues/202", "title": "Collaboration source", "state": "open", "labels": []},
+    "203": {"node_id": "I_kwDOPlan203", "number": 203, "url": "https://github.com/JimmyMcBride/plan/issues/203", "title": "Publication target", "state": "open", "labels": []}
+  },
+  "milestones": {},
+  "projects": {}
+}

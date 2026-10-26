@@ -1,0 +1,13 @@
+{
+  "repo": "JimmyMcBride/plan",
+  "repo_url": "https://github.com/JimmyMcBride/plan",
+  "default_branch": "develop",
+  "last_updated_at": "<TIMESTAMP>",
+  "stories": {},
+  "planning": {
+    "github-collaboration-foundation": {"slug": "github-collaboration-foundation", "kind": "initiative", "title": "GitHub collaboration foundation", "issue_number": 201, "issue_url": "https://github.com/JimmyMcBride/plan/issues/201", "remote_state": "open", "readiness": "ready", "ownership_mode": "github", "entry_mode": "github_discussion", "source_mode": "github", "discussion_number": 49, "discussion_url": "https://github.com/JimmyMcBride/plan/discussions/49", "milestone_number": 1, "milestone_title": "GitHub collaboration foundation", "updated_at": "<TIMESTAMP>"},
+    "collaboration-source": {"slug": "collaboration-source", "kind": "spec", "title": "Collaboration source", "issue_number": 202, "issue_url": "https://github.com/JimmyMcBride/plan/issues/202", "remote_state": "open", "readiness": "ready", "ownership_mode": "github", "entry_mode": "github_discussion", "source_mode": "github", "discussion_number": 49, "discussion_url": "https://github.com/JimmyMcBride/plan/discussions/49", "parent_issue_number": 201, "milestone_number": 1, "milestone_title": "GitHub collaboration foundation", "updated_at": "<TIMESTAMP>"},
+    "publication-target": {"slug": "publication-target", "kind": "spec", "title": "Publication target", "issue_number": 203, "issue_url": "https://github.com/JimmyMcBride/plan/issues/203", "remote_state": "open", "readiness": "blocked", "ownership_mode": "github", "entry_mode": "github_discussion", "source_mode": "github", "discussion_number": 49, "discussion_url": "https://github.com/JimmyMcBride/plan/discussions/49", "parent_issue_number": 201, "milestone_number": 1, "milestone_title": "GitHub collaboration foundation", "blocked_by": ["collaboration-source"], "updated_at": "<TIMESTAMP>"}
+  },
+  "project_decisions": {}
+}

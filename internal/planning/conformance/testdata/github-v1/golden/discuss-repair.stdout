@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "kind": "source_repair",
+  "generated_at": "<TIMESTAMP>",
+  "source": {
+    "mode": "github_discussion",
+    "discussion": "https://github.com/JimmyMcBride/plan/discussions/49"
+  },
+  "specs": ["Collaboration source", "Publication target"],
+  "updated_url": "https://github.com/JimmyMcBride/plan/discussions/49",
+  "next_commands": [
+    "plan discuss assess --discussion 49 --format json",
+    "plan discuss promote --discussion 49 --format json"
+  ]
+}

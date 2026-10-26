@@ -1,0 +1,4 @@
+github_backend: github
+repo: JimmyMcBride/plan
+default_branch: develop
+state: <PROJECT>/.plan/.meta/github.json
