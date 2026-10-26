@@ -153,6 +153,10 @@ Preview the target paths first:
 brain skills targets --scope both --agent codex --agent claude --agent copilot --agent pi --project .
 ```
 
+`brain update --project .` refreshes every already-installed global Brain skill
+and every installed local Brain skill in the current project from the newly
+installed binary, so agent guidance advances with the release.
+
 ## Quick Start
 
 In any project directory:
@@ -214,9 +218,11 @@ brain plan github enable --project . --confirm
 brain plan brainstorm assess --project . --discussion 49
 ```
 
-Planning opens a compatible local workspace in place. Missing, older, future,
-remote-owned, or retired-integration workspaces receive diagnostics and remain
-read-only; use standalone Plan for migration. The optional GitHub adapter uses
+Planning opens a compatible local workspace in place. Schema-v3 `github` and
+`hybrid` workspaces expose retained local documents as a read-only compatibility
+mirror for native checks and reconciliation. Missing, older, future, or
+retired-integration workspaces receive diagnostics and remain read-only; use
+standalone Plan for migration. The optional GitHub adapter uses
 the authenticated `gh` CLI, preserves `.plan/.meta/github.json`, previews every
 mutation, and can be disabled independently without affecting local Planning.
 
