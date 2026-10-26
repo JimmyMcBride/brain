@@ -5,7 +5,7 @@ args:
       required: false
 description: Use this skill when working with a project-local Brain workspace managed by the `brain` CLI, especially for repo memory, retrieval, compiled task context, session hygiene, and safe markdown updates.
 name: brain
-updated: "2026-10-26T21:20:00Z"
+updated: "2026-10-26T21:58:26Z"
 user-invocable: true
 ---
 # Brain
@@ -190,6 +190,12 @@ brain plan github project status --project . --issue <number> --set <todo|in-pro
 brain plan guide show --project . --discussion <number-or-url> --stage <stage>
 ```
 
+GitHub publication with five or more specs requires an explicit workspace
+decision. Add `--workspace create` to create a Project named for the source
+Discussion, `--workspace connect` to use the single durable Project mapping, or
+`--workspace skip` to publish without execution tracking. The same flag is
+available on `github adopt` for multi-spec adoption.
+
 Remote reads require `planning.read`; source repair requires
 `planning.collaboration`; publication, adoption, reconciliation, and adapter
 configuration require `planning.publish`; Project status changes require
@@ -199,6 +205,10 @@ promotion also requires `--apply`. Preserve stable mappings in
 and never substitute manual `gh` writes unless a typed result explicitly allows
 manual fallback. Disabling the adapter preserves artifacts and mappings,
 performs no provider work, and must not degrade local Planning.
+
+Visible reconciliation derives `implementing` as `In Progress` and `done` as
+`Done`. For draft or approved specs without a canonical execution transition,
+preserve the current Project status instead of resetting active work to Todo.
 
 Native source-mode mutation and legacy GitHub story creation remain standalone
 Plan compatibility-only behavior; do not recreate them in Brain commands.
