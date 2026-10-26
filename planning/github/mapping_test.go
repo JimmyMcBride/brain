@@ -151,6 +151,67 @@ func TestExternalMappingCreateRoundTripAndCompleteReplacement(t *testing.T) {
 	}
 }
 
+func TestExternalMappingPersistsCanonicalWorkspaceAndPreservesPrivateDecisionFields(t *testing.T) {
+	adapter, _, store := mappingAdapter(t, "promoted.github.json")
+	loaded, err := adapter.ExternalMappingRepository().Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	project := application.ExternalReference{Provider: providerName, Kind: "project", OpaqueID: "PVT_new", DisplayID: "12", URL: "https://github.com/users/JimmyMcBride/projects/12"}
+	loaded.WorkspaceReferences = []application.ExternalReference{project}
+	saved, err := adapter.ExternalMappingRepository().Save(context.Background(), loaded, loaded.Revision)
+	if err != nil || len(saved.WorkspaceReferences) != 1 || saved.WorkspaceReferences[0] != project {
+		t.Fatalf("saved=%+v err=%v", saved, err)
+	}
+	state, err := store.read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := state.ProjectDecisions["github-collaboration-foundation"]
+	if record.Slug != "github-collaboration-foundation" || record.Decision != "connect" || record.InitiativeSlug != "github-collaboration-foundation" || record.ProjectOwner != "JimmyMcBride" || record.ProjectNumber != 12 || record.ProjectID != "PVT_new" || record.ProjectURL != project.URL {
+		t.Fatalf("project decision=%+v", record)
+	}
+
+	adapter, _, store = mappingAdapter(t, "reconciled.github.json")
+	raw, err := os.ReadFile(store.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document map[string]any
+	if json.Unmarshal(raw, &document) != nil {
+		t.Fatal("invalid fixture")
+	}
+	document["private_extension"] = map[string]any{"keep": true}
+	decision := document["project_decisions"].(map[string]any)["github-adapter"].(map[string]any)
+	decision["private_note"] = "keep me"
+	raw, _ = json.MarshalIndent(document, "", "  ")
+	if err := os.WriteFile(store.path, append(raw, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err = adapter.ExternalMappingRepository().Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, _ := store.read()
+	replacement := application.ExternalReference{Provider: providerName, Kind: "project", OpaqueID: "PVT_replacement", DisplayID: "13", URL: "https://github.com/users/JimmyMcBride/projects/13"}
+	loaded.WorkspaceReferences = []application.ExternalReference{replacement}
+	if _, err := adapter.ExternalMappingRepository().Save(context.Background(), loaded, loaded.Revision); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := store.read()
+	want, got := before.ProjectDecisions["github-adapter"], after.ProjectDecisions["github-adapter"]
+	got.ProjectOwner, got.ProjectNumber, got.ProjectID, got.ProjectURL = want.ProjectOwner, want.ProjectNumber, want.ProjectID, want.ProjectURL
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("private decision fields changed\nbefore=%+v\nafter=%+v", want, after.ProjectDecisions["github-adapter"])
+	}
+	afterRaw, _ := os.ReadFile(store.path)
+	var afterDocument map[string]any
+	_ = json.Unmarshal(afterRaw, &afterDocument)
+	if afterDocument["private_extension"].(map[string]any)["keep"] != true || afterDocument["project_decisions"].(map[string]any)["github-adapter"].(map[string]any)["private_note"] != "keep me" {
+		t.Fatal("unknown metadata was not preserved")
+	}
+}
+
 func TestExternalMappingRevisionConflictAndConcurrentWriters(t *testing.T) {
 	adapterA, _, store := mappingAdapter(t, "promoted.github.json")
 	adapterB := New(Config{Enabled: true}, Options{ProjectRoot: adapterA.projectRoot, Runner: &failingRunner{}})
@@ -228,8 +289,13 @@ func TestExternalMappingRejectsAmbiguousAndUnsupportedChanges(t *testing.T) {
 		"noncanonical milestone display ID": func(state *application.ExternalMappingState) {
 			state.GroupReferences[0].Reference.DisplayID = "07"
 		},
-		"new workspace": func(state *application.ExternalMappingState) {
-			state.WorkspaceReferences = append(state.WorkspaceReferences, application.ExternalReference{Provider: providerName, Kind: "project", OpaqueID: "P", DisplayID: "1", URL: "https://github.com/users/JimmyMcBride/projects/1"})
+		"multiple workspaces": func(state *application.ExternalMappingState) {
+			state.WorkspaceReferences = append(state.WorkspaceReferences,
+				application.ExternalReference{Provider: providerName, Kind: "project", OpaqueID: "P1", DisplayID: "1", URL: "https://github.com/users/JimmyMcBride/projects/1"},
+				application.ExternalReference{Provider: providerName, Kind: "project", OpaqueID: "P2", DisplayID: "2", URL: "https://github.com/users/JimmyMcBride/projects/2"})
+		},
+		"foreign workspace": func(state *application.ExternalMappingState) {
+			state.WorkspaceReferences = []application.ExternalReference{{Provider: providerName, Kind: "project", OpaqueID: "P", DisplayID: "1", URL: "https://github.com/users/other/projects/1"}}
 		},
 	}
 	for name, mutate := range cases {

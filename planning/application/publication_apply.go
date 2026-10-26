@@ -142,9 +142,10 @@ func validatePublicationCompletion(plan PublicationPlan, evidence PublicationRes
 		if publicationActionNeedsReference(completed.Action) {
 			expected := publicationActionReference(completed.Action)
 			matched := false
-			for _, ref := range completed.References {
+			for index, ref := range completed.References {
 				if ref.Provider == plan.Target.Provider && ref.Kind != "" && ref.OpaqueID != "" &&
-					(expected == nil || sameExternalIdentity(ref, *expected)) {
+					(expected == nil || sameExternalIdentity(ref, *expected)) &&
+					(expected != nil || completed.Action.Artifact != nil || index == 0) {
 					matched = true
 				}
 			}
